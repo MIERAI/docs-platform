@@ -21,6 +21,11 @@ func TestParse(t *testing.T) {
 		{"ignore without selector", "version: 1\nignore:\n  - reason: r\n", "needs at least one"},
 		{"bad glob", "version: 1\ndocs: ['[']\n", "bad glob"},
 		{"rule without docs", "version: 1\nimpact:\n  rules:\n    - name: x\n      code: [a]\n", "code and docs are required"},
+		{"audit ollama", "version: 1\naudit:\n  stale_commits: 3\n  ai:\n    provider: ollama\n    endpoint: http://127.0.0.1:11434\n    model: m\n    max_concurrency: 2\n", ""},
+		{"audit ollama without endpoint", "version: 1\naudit:\n  ai:\n    provider: ollama\n    model: m\n", "needs endpoint and model"},
+		{"audit cloud provider", "version: 1\naudit:\n  ai:\n    provider: openai\n", "only local models"},
+		{"audit stale_commits", "version: 1\naudit:\n  stale_commits: 0\n", "stale_commits"},
+		{"audit negative limits", "version: 1\naudit:\n  ai:\n    max_requests: -1\n", "must not be negative"},
 		{"relative external command", "version: 1\nextractors:\n  external:\n    - name: x\n      command: [rel/bin]\n", "absolute command path"},
 	}
 	for _, c := range cases {

@@ -1,6 +1,6 @@
 # docs-platform 设计书
 
-状态：v0.1（第一轮迭代：层③ 引用检查 + 层④a PR 影响分析已实现；其余为设计）
+状态：v0.2（层③ 引用检查 + 层④a PR 影响分析 + 层④c 语义审计已实现；其余为设计）
 读者：产品负责人（本人）。面向用户的说明见 [README](../README.md)，契约细节见 [contracts.md](contracts.md)。
 
 ---
@@ -35,7 +35,7 @@
 | ① 生成的参考文档 | CLI 帮助、配置项表、指标表、环境变量表由代码生成，CI 比对 | 确定性（diff） | 每个 PR | 设计 |
 | ② 可执行文档 | 文档里的 shell 代码块在 CI 沙箱里真跑 | 确定性（退出码/输出） | 每个 PR / 每夜 | 设计 |
 | ③ 引用检查 | 文档提到的标识符必须存在；公开符号必须有文档 | 确定性（符号表对账）+ 置信度 | 每个 PR + 定期 | **已实现** |
-| ④ 语义 | (a) PR 影响分析 (b) 合并后 AI 提议文档 PR (c) 定期 AI 审计 → findings | (a) 确定性映射；(b)(c) AI 提议 + 人审 | PR / 合并后 / 每周 | **(a) 已实现**；(b)(c) 接口 |
+| ④ 语义 | (a) PR 影响分析 (b) 合并后 AI 提议文档 PR (c) 定期语义审计 → findings | (a) 确定性映射；(b) AI 提议 + 人审；(c) 确定性语义检查 + 本地弱模型的可验证小问题 + 人审 | PR / 合并后 / 每周 | **(a)(c) 已实现**；(b) 接口 |
 
 分层的理由：①②③④a 是确定性的，可以做 CI 闸门；④b/④c 只能产出"提议"，进台账但不阻断。基准结果（§9）显示 ~85% 的人工审出问题属于语义层，这正是为什么 ④ 不能省，也是为什么 ③ 必须把误报压低——否则闸门会被关掉。
 
@@ -100,12 +100,22 @@
 4. 提议本身再跑一遍层③：若引入新的 unresolved 引用，直接丢弃，不打扰人。
 5. 永不自动合并；台账里 AI 不能把任何 finding 标为 fixed/accepted。
 
-### 3.6 层④c 定期 AI 审计（设计）
+### 3.6 层④c 语义审计（已实现：`docsp audit`）
 
-- 每周对每份文档：确定性地切段 → 对每段取证据（段落提到的符号所在代码、相关配置）→ AI 判断"陈述是否与证据一致"，输出 finding 候选：`check = docs.semantic.<wrong|obsolete|missing>`、`attributes.docs.detector_layer = ai_audit`、`needs_human = true`、severity 最高 low。
-- 每个候选必须引用证据位置（`locations[]` 中 role=code），没有证据的候选丢弃——这是"AI 只提议"在审计里的形态。
-- 人在台账里确认（→ open 计入 SLO）或标 false_positive（反馈给提示/阈值）。未确认的 AI 候选**不计入** SLO，避免 AI 噪声污染指标。
-- 基准（§9）就是这一层的评测集：人工 ground truth 147 条，其中语义类 ~124 条。
+产品负责人的硬约束：**只用弱的本地模型**（不用强模型/云端）。理由：基准 ground truth 本身就是强 AI 对照代码读文档产出的，用强 AI 复现它什么也证明不了；产品也不能依赖强 AI；代码和文档不得离开负责人的机器。所以设计原则是**确定性部分干重活，模型只回答小而可验证的问题**。
+
+流水线（`internal/semantic`）：
+
+1. **断言抽取**（确定性，`semantic/claim`，fuzz）：从 Markdown 和代码注释里切句（表格行算一句），只保留带可检查内容的句子：带单位的数（时长/大小/百分比/个数）、调度（cron、"daily at 09:00 JST"、"每 5 分钟"）、版本、名字的枚举（代码段并列、`a|b|c`、`a/b/c/d`、以名字开头的列表项）、状态词（planned / not yet / in progress / TODO / 实现中 / 还没有 / 以后 / `状态:` 行）、文件角色（"人写 X" / "generated"），以及句中的标识符。
+2. **证据检索**（确定性，`semantic/evidence`）：层③ 符号表；配置值索引（YAML 全部标量、HCL、Go 常量与 flag 默认值、shell/Make 默认值、Dockerfile 镜像、chart 版本）；集合索引（目录的子项、YAML 同级键、同一个键的不同取值、程序的子命令、make 目标、按文档所在目录算的"生成物路径"）；生成标记；按 IDF 的关键词检索（无标识符的句子靠它找文件）。给模型的片段 ≤3 段、每段 ≤2.4KB。
+3. **确定性语义检查**（模型之前）：
+   - value：`value_mismatch`（只认句中代码段点名的键，单位归一后比较；同名键散在 3 个以上文件且无一相等 → 交给模型）、`schedule_mismatch` / `schedule_disabled`（时区换算；cron 被注释掉 = 停用）、`version_unreleased`（HEAD 可达的 tag 之间不存在的版本；之前/之后的版本不报）、`version_mismatch`、`list_incomplete`（列表 ≥60% 是某集合的成员且覆盖集合 ≥50% 才比较；带"例如/等/such as"的列表不比）。
+   - state：`state_contradiction`（句子说"还没有/计划"，而句中标识符**在所有定义处**都是这句话写下之后才加进代码的）、`status_stale`（状态行之后，文档引用的代码有 N 次提交且有新文件，或状态行与实现同一个提交合入）、`role_contradiction`（"人写 X" 而 X 下 ≥80% 文件带生成标记）。
+   - staleness：`stale_claim`（句子最后一次修改之后，它点名的代码又被改了 ≥N 次；`git log -L` / `git log A..HEAD`，经白名单 git 包装器）。弱信号，只给 low。
+4. **模型**（`ai.Provider` `ollama`，可选）：只问一个问题"证据是否直接与断言矛盾？yes/no/unknown"，结构化输出（JSON schema），必须附上从证据里**逐字复制**的一行；引用在片段里找不到（或只是抄了断言本身）→ 丢弃。自洽：最多 3 次、片段顺序不同，2 票 yes 才算（全票 → medium，2/3 → low），其余为 unknown，不报。temperature 0、固定 seed、think 关、每次运行请求预算、并发上限（实例配置，默认 2）、重试、超时。HTTP 客户端在拨号时检查解析后的地址，只允许 loopback / 私网 / CGNAT（tailnet）/ link-local——配错端点也不会把仓库内容发到公网。
+5. **findings**：collector `docs-audit`，check `docs.semantic.<rule>`，`attributes.docs.detector_layer = semantic`，带 rule / sub_layer / claim / quote（模型：model + prompt_hash + votes）和证据位置；`needs_human = true`，severity 最高 low。
+
+问题优先级（预算有限时先问哪些）：陈旧且带状态词或数值的句子 → 状态词 → 其他陈旧句子 → 数值与列表。
 
 ## 4. 架构
 
@@ -160,6 +170,7 @@ type Extractor interface {
 |---|---|---|
 | `docsp check` | 层③ → findings/v1 + 摘要 | 0；`--fail-on` 命中 → 1；用法/运行错误 → 2 |
 | `docsp impact` | 层④a → impact/v1 | 通过/豁免/不适用 → 0；缺文档 → 1 |
+| `docsp audit` | 层④c → findings/v1（提议） | 0（不因 finding 失败）；用法/运行错误 → 2 |
 | `docsp extract` | 输出 extract/v1（调试、写插件） | 0 |
 | `docsp validate` | 校验 findings 文档 | 0 / 1 |
 
@@ -249,6 +260,34 @@ type Extractor interface {
 - 不带实例配置时 medium 阈值多 4 条跨仓库路径误报，召回不变。
 - 结论：层③ 作为 CI 闸门只启用 `wrong_or_obsolete` 的 medium 以上；`undocumented` 先作为台账里的 info/low 观察指标，等每个仓库配好 `reverse.kinds` 与 ignore 再升级为闸门。
 
+### 9.1 层④c 语义审计（2026-11-25）
+
+纪律：api-factory 是开发集（设计时只看它的 ground truth），gitops-manifests + infrastructure-live 是留出的测试集（规则冻结后才跑、才看）；没有逐条规则、没有仓库特判。语义 finding 与 ground truth 的匹配 = 同一文件、行号 ±1。模型 = 本地 gemma4:12b（Ollama，think 关，temperature 0，固定 seed，并发 2，每仓库最多 150 个问题）。
+
+测试集（73 条，主结论）：
+
+| 组 | findings | precision 下界 | recall | wrong | obsolete | missing |
+|---|---|---|---|---|---|---|
+| value（值/调度/版本/列表） | 8 | 2/8 | 3/73 | 1/13 | 0/34 | 2/26 |
+| state（状态词/状态行/角色） | 0 | – | 0/73 | | | |
+| staleness（`stale_claim`，low） | 35 | 7/35 | 8/73 | 3/13 | 2/34 | 3/26 |
+| model（ollama） | 8 | 0/8 | 0/73 | | | |
+| 语义合计 none / ollama | 43 / 51 | 9/43 / 9/51 | 11/73（15%） | | | |
+| 层③ 单独 → 层③ + 语义（low） | 178 → 221 | | 9/73（12%）→ 19/73（26%） | | | |
+
+开发集（74 条）：value 3/12（recall 3）、state 3/4（recall 3：两条"状态: 实现中"、一条"还不是内"）、staleness 11/170、model 1/5；语义合计 recall 18/74（24%），medium 以上 4/7 命中；层③ + 语义（low）recall 16% → 39%。
+
+成本：每仓库 148–149 个问题 ≈ 300 次请求、约 5–5.5 分钟（≈1 req/s；真实提示词以 prefill 为主，并发 1 → 0.92 req/s，并发 2 → 0.96 req/s，显存恒定 8.86 GB）；无模型时整个审计 1–16 秒。引用核验丢弃：开发 5、测试 18 次 yes 回答（引用不在证据里、或只是抄了断言、或与断言无共同词）。
+
+解读：
+
+- 确定性部分可靠但覆盖窄：命中的都是"可算的"——不存在的发布版本、按提交历史已过时的状态行、"还没有"的东西其实已在之后加入、枚举少了成员。测试集上 ground truth 以叙述性"过时/遗漏"为主（obsolete 34 条），确定性规则几乎够不到。
+- 弱模型保守：绝大多数回答是 no；人工复核模型的 13 条 yes（开发 5 + 测试 8），真实漂移约 3 条（itest.go 注释漏了 `RUNTIME_HELPER*`、quiet-traffic-day 时长 4.5h→2h、adding-a-primitive 闸门列表）、2 条可商榷、其余为误判。模型层在测试集上没有命中 ground truth：**弱本地模型 + 引用核验能压住幻觉，但不能替代对叙述的理解**。
+- staleness 是最大的召回来源，但精度只有 6–20%，只能当"该重读这句了"的低优先级信号。
+- 已知误报（测试集发现，未改以免对答案调参）：`version_mismatch` 把 Helm chart 版本（9.2.2）与注释里的应用版本（Falco 0.45.2）相比；`list_incomplete` 的"同一键的取值"集合跨文件混用（`owner`）。
+
+Ground truth 质量抽查（15 条分歧：10 条工具漏掉的 GT + 5 条 GT 未收录的工具 finding，逐条对照代码）：GT 明显错误 1 条（`loadtest/README.md:21` 的项目名在固定版本 25db814 已被删除），可商榷 3 条（hardening.md:153 与 bottlenecks.md:15 是历史记录而非现状陈述；infrastructure-live README.md:39 的"遗漏"属主观完整性），其余 6 条 GT 正确；5 条工具 finding 中 2 条是 GT 漏收的真实漂移（itest.go 注释、storefront 示例 README 的生成物列表漏了 `Dockerfile`），3 条是工具误报。
+
 ## 10. 路线图
 
 | 阶段 | 内容 | 退出条件 |
@@ -257,7 +296,7 @@ type Extractor interface {
 | P1 | security-platform 合并 findings 1.3 扩展；docs findings 进同一 ledger 与看板；SLO 规则由 slo-platform 生成 | 3 个仓库每日检查 ≥ 2 周，新鲜度 SLO 达标 |
 | P2 | 层① 生成器（CLI flag 表、环境变量表、指标表）；PR 评论适配器（GitHub/Gitea） | 至少 1 个仓库的参考表由生成器维护 |
 | P3 | 层② 可执行文档（一次性容器执行器） | 标注块在 CI 中稳定运行 |
-| P4 | ④b 合并后 AI 提议（草稿 PR）；④c 周期审计 findings（带证据，人确认才计入 SLO） | 在 ground truth 上语义类召回 ≥ 50%，被人采纳率 ≥ 60% |
+| P4 | ④b 合并后 AI 提议（草稿 PR）；④c 周期审计 findings（带证据，人确认才计入 SLO）——④c 第一版已实现（§3.6、§9.1） | 在 ground truth 上语义类召回 ≥ 50%，被人采纳率 ≥ 60%（当前测试集 15%，未达到） |
 | P5 | 更多抽取器（Java/Kotlin、Rust、OpenAPI、Helm 模板引用、Ansible tag）；外部抽取器样例仓库 | 每个新抽取器自带 fixture + fuzz |
 
 ## 11. 待产品负责人决定的事项
@@ -268,5 +307,6 @@ type Extractor interface {
 4. **注释算不算文档**：现在注释里的路径/标识符会被检查（基准里 1/3 的问题在注释里），但也引入了更多 low 置信度噪声。是否保持默认开启？
 5. **闸门阈值**：CI 默认 `fail-on medium`（只挡高置信度的 wrong/obsolete）是否合适？
 6. **残留词 denylist 的存放位置**：放在私有数据仓库（与 findings 同级，0600），由实例配置指向；是否接受？
-7. **AI provider**：④b/④c 第一家用哪个（本地模型 vs 云端），以及预算上限与数据外发边界（私有仓库内容能否发往云端）。
+7. **AI provider**：已决定——只用本地弱模型（Ollama），产品里没有云端 provider，客户端拒绝非本地地址。待定：每周审计的请求预算（现默认 300 次/仓库）与是否把 `stale_claim` 放进台账（精度 6–20%，建议只做看板信号，不进 SLO）。
+9. **④c 的下一步**：P4 退出条件（语义召回 ≥ 50%）用弱模型 + 当前问题形式达不到。可选：(a) 增加确定性规则覆盖（叙述性"过时"大多是"文档描述的计划已合入"——可以用提交信息/PR 标题与文档标题的对应来判定）；(b) 换问题形式（"证据里有没有断言没提到的成员"之类的补全问题，同样要求逐字引用）；(c) 接受 ④c 只是"低成本的提示器"，召回目标下调。
 8. **发布**：仓库何时公开、许可证 Apache-2.0 是否最终确定、模块路径 `github.com/MIERAI/docs-platform` 是否沿用。

@@ -1,6 +1,7 @@
-// Package ai defines the provider interface for layer ④(b)/(c): AI proposes documentation
-// changes and audit findings, a human decides. Providers only ever return proposals; nothing in
-// docs-platform applies a proposal automatically. The default provider is "none".
+// Package ai defines the provider interfaces for layer ④(b)/(c): AI proposes documentation
+// changes and answers small audit questions, a human decides. Providers only ever return
+// proposals or answers; nothing in docs-platform applies them automatically. The default
+// provider is "none"; the only built-in model provider is a local Ollama server.
 package ai
 
 import (
@@ -53,4 +54,20 @@ func New(name string) (Provider, error) {
 		return None{}, nil
 	}
 	return nil, fmt.Errorf("unknown AI provider %q (built in: none)", name)
+}
+
+// NewAsker returns the judge for a provider name: nil for "none" (deterministic checks only),
+// an Ollama client for "ollama". There is deliberately no cloud provider.
+func NewAsker(name string, cfg OllamaConfig) (Asker, error) {
+	switch name {
+	case "", "none":
+		return nil, nil
+	case "ollama":
+		o, err := NewOllama(cfg)
+		if err != nil {
+			return nil, err
+		}
+		return o, nil
+	}
+	return nil, fmt.Errorf("unknown AI provider %q (built in: none, ollama)", name)
 }

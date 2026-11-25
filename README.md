@@ -18,7 +18,8 @@ state visible; AI may *propose* fixes, humans decide.
 | ② executable docs | shell blocks run in CI | design |
 | ③ reference check | every identifier a document mentions exists in code; every public symbol is documented | **implemented** |
 | ④a PR impact | a change to mapped code must touch the mapped docs, or carry a reason | **implemented** |
-| ④b/④c AI proposals and audits | AI proposes a docs PR after merge; periodic AI audit → findings | design (provider interface only, default `none`) |
+| ④c semantic audit | claims in the docs (values, schedules, versions, lists, state words, file roles) checked against the code: deterministic rules first, then an optional **local** judge model for small yes/no questions | **implemented** (`docsp audit`) |
+| ④b AI proposals | AI proposes a docs PR after merge | design |
 
 The design (in Chinese) is [docs/design.md](docs/design.md); the data contracts are described in
 [docs/contracts.md](docs/contracts.md).
@@ -30,6 +31,7 @@ go build -o bin/docsp ./cmd/docsp
 bin/docsp check -format text /path/to/repo          # human summary
 bin/docsp check -out findings.json /path/to/repo    # findings/v1 JSON (mode 0600)
 bin/docsp impact -base origin/main /path/to/repo    # PR impact check
+bin/docsp audit -format text /path/to/repo          # semantic audit (deterministic checks only)
 ```
 
 `docsp` never writes into the repository it inspects, never runs code from it, and only calls
@@ -81,6 +83,43 @@ configurable). A trailer without a reason is not a waiver. The result is an impa
 | `--pr-body-file FILE` | the PR description, searched for the waiver trailer |
 | `--out FILE` | write the impact JSON to FILE (mode 0600) |
 
+### `docsp audit [flags] [repo]`
+
+Layer ④c, meant to run periodically (not as a CI gate). It extracts **claims** from Markdown and
+code comments - sentences carrying a number with a unit (`3 days`, `512Mi`, `2%`), a schedule
+(`daily at 09:00 UTC`, `every 2 minutes`, a cron expression), a version, an enumeration of
+names, a state word ("planned", "not yet", "in progress", "TODO", a `Status:` line) or a file
+role ("humans write `docs/`") - and checks them:
+
+| Sub-layer | Rule (`docs.semantic.<rule>`) | Evidence |
+|---|---|---|
+| value | `value_mismatch` | the configuration key named next to the value (YAML, HCL, Go constants and flag defaults, shell/Make defaults), unit-normalized |
+| value | `schedule_mismatch`, `schedule_disabled` | the cron of the workflow / CronJob the sentence names (time zones converted; a commented-out cron is a disabled schedule) |
+| value | `version_unreleased`, `version_mismatch` | git tags reachable from HEAD; image tags, chart versions |
+| value | `list_incomplete` | the code set the list enumerates: commands of a program, make targets, children of a directory, sibling keys, values of a key, generated paths |
+| state | `state_contradiction`, `status_stale`, `role_contradiction` | git: the thing called "not yet" was added after the sentence; a status line older than the code it describes; "written by people" vs generated-file markers |
+| staleness | `stale_claim` | git: the code a sentence names changed in N commits after the sentence last changed (weak signal, low) |
+| model | `model_contradiction` | a local judge answers "does this evidence contradict the claim?" |
+
+The judge is optional and **local only** (provider `ollama`; there is no cloud provider). It
+gets the claim and at most three small code snippets retrieved deterministically, must answer
+with a quote copied from the snippets (an answer whose quote is not found verbatim is
+discarded), and is asked up to three times with the snippets in different orders (majority
+wins; anything else is "unknown" and not reported). Requests use temperature 0 and a fixed
+seed, a per-run budget and bounded concurrency; the client refuses to connect to any address
+that is not loopback, private, CGNAT (tailnet) or link-local.
+
+Every audit finding is a proposal: `needs_human: true`, severity `low` (medium confidence) or
+`info`, collector `docs-audit`, `attributes.docs.detector_layer: semantic` with the rule, the
+claim, the quote and, for the judge, the model and the prompt hash.
+
+| Flag | Meaning |
+|---|---|
+| `--config FILE` | configuration file; the judge endpoint belongs in an instance configuration |
+| `--ai none\|ollama` | override `audit.ai.provider` (`none` = deterministic checks only) |
+| `--max-questions N` | claims put to the judge per run (default 150) |
+| `--out`, `--format`, `--repo-name`, `--instance` | as for `check` |
+
 ### `docsp extract [--config FILE] [repo]`, `docsp validate FILE`, `docsp version`
 
 `extract` prints what the extractors found (contract extract/v1) - useful when tuning a
@@ -112,6 +151,17 @@ impact:
       docs: ["README.md", "docs/cli.md"]
 reverse:
   kinds: [cli_flag, env_var, metric]   # which public symbols must be documented
+audit:                            # docsp audit (layer ④c)
+  stale_commits: 2                # later commits to a claim's code that make it stale
+  ai:                             # judge model: local only, set in an instance config
+    provider: none                # none (default) or ollama
+    endpoint: http://127.0.0.1:11434
+    model: <local model>
+    max_concurrency: 2            # requests in flight (a shared GPU queues them anyway)
+    max_requests: 300             # per-run budget
+    timeout_seconds: 60
+    retries: 2
+    seed: 42
 extractors:
   disable: [terraform]
   external:
@@ -184,13 +234,16 @@ Metrics carried in every document: `docs_references{kind,status}`,
 `repo, file, line, claim, actual, type, fix, evidence_paths`):
 
 ```sh
-go run ./bench -gt <dir of *.jsonl> -work <scratch dir> [-pin name=rev] [-config-dir <instance configs>] -md report.md [-json report.json] [-denylist FILE]
+go run ./bench -gt <dir of *.jsonl> -work <scratch dir> [-pin name=rev] [-config-dir <instance configs>] -md report.md [-json report.json] [-denylist FILE] [-audit [-ai none|ollama] [-max-questions N]]
 ```
 
 It clones each public repository read-only into the scratch directory, runs the check
 in-process, and reports per finding type, per ground-truth type, per estimated detector layer
 (reference vs semantic) and per confidence threshold. Ground truth is never exhaustive, so
-precision is a lower bound; unmatched findings are listed for triage.
+precision is a lower bound; unmatched findings are listed for triage. With `-audit` it also runs
+the semantic audit and scores it per sub-layer and per rule (a semantic finding matches a
+ground-truth item on the same file and line ±1), with the judge's cost (requests, rejected
+quotes, time).
 
 ## Development
 
@@ -212,7 +265,9 @@ Requirements: Go (see `go.mod`), git. One third-party dependency: `go.yaml.in/ya
 - Secrets and private instance files are read only from mode-0600 files or the environment and
   never logged.
 - Findings may describe private systems: output files are written with mode 0600.
-- AI is never allowed to change state; the default AI provider is `none`.
+- AI is never allowed to change state; the default AI provider is `none`. The only model
+  provider is a local Ollama server, and the client refuses non-local addresses: repository
+  content never leaves the operator's machines.
 
 ## License
 

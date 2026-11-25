@@ -25,8 +25,10 @@ docs-platform emits the findings contract defined by security-platform (unmodifi
 
 1. `findings[].layer` gains the value `docs`.
 2. `metrics[].name` accepts the `docs_` prefix (`^(security|docs)_[a-z0-9_]+$`).
-3. `findings[].attributes.docs` is documented (`$defs.docsAttributes`); `attributes` was already
-   a free object, so this changes nothing for existing consumers.
+3. `findings[].attributes.docs` is documented (`$defs.docsAttributes`, including the optional
+   semantic-audit fields `rule`, `sub_layer`, `claim`, `quote`, `model`, `prompt_hash`, `votes`
+   and `detector_layer: semantic`); `attributes` was already a free object, so this changes
+   nothing for existing consumers.
 
 `TestContract` in `internal/check` validates real output against the 1.3 schema and against the
 unmodified upstream 1.2 schema, and fails if any difference other than (1) and (2) appears.
@@ -38,20 +40,23 @@ scanners as well) and register the `doc` and `code` asset types.
 
 | Field | docs-platform value |
 |---|---|
-| `collector.name` / `version` | `docs-check` / docsp version |
+| `collector.name` / `version` | `docs-check` (layer ③) or `docs-audit` (layer ④c) / docsp version |
 | `collector.tools` | `extract-<name>: <version>` for every extractor, `residue: <version>` when used |
 | `coverage[]` | `doc:<repo>` and `code:<repo>` ok; `doc:<repo>/<file>` gap for a file no extractor could read |
 | `id` | `sha1(layer + "|" + asset + "|" + check)[:12]` (as upstream) |
-| `check` | `docs.reference.unresolved.<kind>`, `docs.symbol.undocumented.<kind>`, `docs.reference.outside_repo`, `docs.residue.term` |
+| `check` | `docs.reference.unresolved.<kind>`, `docs.symbol.undocumented.<kind>`, `docs.reference.outside_repo`, `docs.residue.term`; audit: `docs.semantic.<rule>` |
 | `layer` | `docs` |
-| `asset` | wrong/outside/residue: `doc:<repo>/<doc path>#<kind>:[<program> ]<subject>`; undocumented: `code:<repo>/<kind>:[<program> ]<subject>` - never a line number |
-| `severity` | wrong/outside: high confidence → `medium`, medium → `low`, low → `info`; undocumented: high → `low`, else `info`; residue → `medium` |
+| `asset` | wrong/outside/residue: `doc:<repo>/<doc path>#<kind>:[<program> ]<subject>`; undocumented: `code:<repo>/<kind>:[<program> ]<subject>`; semantic: `doc:<repo>/<doc path>#semantic:<rule>:<subject>` - never a line number |
+| `severity` | wrong/outside: high confidence → `medium`, medium → `low`, low → `info`; undocumented: high → `low`, else `info`; residue → `medium`; semantic: medium → `low`, low → `info` (never higher: proposals) |
 | `kind` | `compliance` |
-| `needs_human` | `true` unless confidence is high |
+| `needs_human` | `true` unless confidence is high; always `true` for semantic findings |
 | `owner` | `.docsp.yaml` `owner` (default `unassigned`) |
 | `evidence` | `path:line` list of every location |
 | `attributes.docs.finding_type` | `wrong_or_obsolete`, `undocumented`, `outside_repo`, `residue` (reserved: `impact_unaccompanied`, `semantic`) |
-| `attributes.docs.detector_layer` | `reference` now; reserved: `generated`, `executable`, `impact`, `ai_audit` |
+| `attributes.docs.detector_layer` | `reference` (check), `semantic` (audit); reserved: `generated`, `executable`, `impact`, `ai_audit` |
+| `attributes.docs.rule`, `sub_layer` | semantic only: the rule (`value_mismatch`, `list_incomplete`, `state_contradiction`, `model_contradiction`, ...) and its sub-layer (`value`, `state`, `staleness`, `model`) |
+| `attributes.docs.claim`, `quote` | semantic only: the sentence checked, and the verbatim evidence line (for the judge: its quote, verified verbatim in the evidence) |
+| `attributes.docs.model`, `prompt_hash`, `votes` | judge only: `provider:model`, hash of the exact prompt, self-consistency result (`2/3 yes`) |
 | `attributes.docs.locations[]` | `{path, line, role: doc|code}` |
 | `attributes.docs.suggestion` | nearest defined name of the same kind, if any |
 
@@ -67,6 +72,7 @@ OCSF export follows the upstream mapping (`class_uid 2003 Compliance Finding`, `
 | `docs_reference_resolution_ratio` | `repo` | resolved / (resolved + unresolved) |
 | `docs_public_symbol_coverage_ratio` | `repo` | documented / public |
 | `docs_impact_changes` (impact/v1) | `impacting, with_docs` | one sample per `docsp impact` run |
+| `docs_semantic_findings` (audit) | `repo, rule, sub_layer` | semantic audit findings by rule |
 
 ## extract/v1
 

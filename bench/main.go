@@ -47,6 +47,9 @@ func main() {
 	work := flag.String("work", "", "scratch directory for read-only clones")
 	deny := flag.String("denylist", "", "optional private denylist file (mode 0600) for the residue check")
 	cfgDir := flag.String("config-dir", "", "optional directory of instance configs named <repo>.docsp.yaml")
+	audit := flag.Bool("audit", false, "also run the semantic audit (layer ④c) and score it")
+	provider := flag.String("ai", "", "override audit.ai.provider of the instance config: none or ollama")
+	maxQ := flag.Int("max-questions", 0, "claims put to the judge per repository (0 = default)")
 	md := flag.String("md", "", "write a Markdown report here")
 	js := flag.String("json", "", "write a JSON report here")
 	p := pins{}
@@ -56,7 +59,10 @@ func main() {
 		flag.Usage()
 		os.Exit(2)
 	}
-	if err := run(context.Background(), opts{gt: *gt, work: *work, deny: *deny, cfgDir: *cfgDir, md: *md, js: *js, pins: p}); err != nil {
+	if err := run(context.Background(), opts{
+		gt: *gt, work: *work, deny: *deny, cfgDir: *cfgDir, md: *md, js: *js, pins: p,
+		audit: *audit, provider: *provider, maxQ: *maxQ,
+	}); err != nil {
 		fmt.Fprintln(os.Stderr, "bench:", err)
 		os.Exit(1)
 	}
@@ -65,6 +71,9 @@ func main() {
 type opts struct {
 	gt, work, deny, cfgDir, md, js string
 	pins                           pins
+	audit                          bool
+	provider                       string
+	maxQ                           int
 }
 
 func run(ctx context.Context, o opts) error {
@@ -110,7 +119,31 @@ func benchRepo(ctx context.Context, name string, items []GTItem, o opts) (repoRe
 	for _, f := range res.Document.Findings {
 		out.Findings = append(out.Findings, view(f))
 	}
+	if o.audit {
+		if err := auditRepo(ctx, &out, dir, o); err != nil {
+			return repoResult{}, fmt.Errorf("audit %s: %w", name, err)
+		}
+	}
 	return out, nil
+}
+
+func auditRepo(ctx context.Context, out *repoResult, dir string, o opts) error {
+	base := path.Base(out.Repo)
+	res, err := check.Audit(ctx, check.AuditOptions{
+		Options: check.Options{
+			Root: dir, RepoName: base, Version: "bench", ConfigFile: instanceConfig(o.cfgDir, base),
+		},
+		Provider: o.provider, MaxQuestions: o.maxQ,
+	})
+	if err != nil {
+		return fmt.Errorf("audit: %w", err)
+	}
+	out.Audit = &res.Stats
+	out.Judge = res.Judge
+	for _, f := range res.Document.Findings {
+		out.Findings = append(out.Findings, view(f))
+	}
+	return nil
 }
 
 func instanceConfig(dir, name string) string {

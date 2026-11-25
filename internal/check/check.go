@@ -1,5 +1,6 @@
-// Package check wires one `docsp check` run: open the repository read-only, run the extractor
-// plugins, match (layer ③), run the residue check, and build a findings/v1 document.
+// Package check wires one `docsp check` run (open the repository read-only, run the extractor
+// plugins, match (layer ③), run the residue check, build a findings/v1 document) and one
+// `docsp audit` run (the same scan, then the semantic audit of layer ④c).
 package check
 
 import (
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/MIERAI/docs-platform/internal/ai"
 	"github.com/MIERAI/docs-platform/internal/config"
 	"github.com/MIERAI/docs-platform/internal/extract/comments"
 	"github.com/MIERAI/docs-platform/internal/extract/golang"
@@ -26,6 +28,7 @@ import (
 	"github.com/MIERAI/docs-platform/internal/residue"
 	"github.com/MIERAI/docs-platform/internal/scan"
 	"github.com/MIERAI/docs-platform/internal/secret"
+	"github.com/MIERAI/docs-platform/internal/semantic"
 )
 
 // Options of one run.
@@ -213,6 +216,92 @@ func gaps(g []repo.Gap) []findings.Gap {
 	out := make([]findings.Gap, 0, len(g))
 	for _, x := range g {
 		out = append(out, findings.Gap{Path: x.Path, Reason: x.Reason})
+	}
+	return out
+}
+
+// AuditOptions of one semantic audit (layer ④c).
+type AuditOptions struct {
+	Options
+	// Provider overrides audit.ai.provider from the configuration ("none" or "ollama").
+	Provider string
+	// MaxQuestions bounds the claims put to the judge model.
+	MaxQuestions int
+}
+
+// AuditResult of one audit.
+type AuditResult struct {
+	Document *findings.Document
+	Stats    semantic.Stats
+	Judge    string
+}
+
+// Audit runs the semantic audit: the same read-only scan as check, then claims, deterministic
+// semantic checks and (when a local judge is configured) the judge protocol.
+func Audit(ctx context.Context, o AuditOptions) (*AuditResult, error) {
+	now := o.Now
+	if now == nil {
+		now = time.Now
+	}
+	started := now()
+	cfg, err := config.Load(o.Root, o.ConfigFile)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // already descriptive
+	}
+	judge, err := newJudge(cfg.Audit, o.Provider)
+	if err != nil {
+		return nil, err
+	}
+	r, err := repo.Open(o.Root, cfg.Exclude)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // already descriptive
+	}
+	exts, err := extractors(cfg)
+	if err != nil {
+		return nil, err
+	}
+	inv := scan.Run(r, exts, scan.Options{Docs: cfg.Docs})
+	res, err := semantic.Run(ctx, r, inv, semantic.Options{
+		StaleCommits: cfg.Audit.StaleCommits, Judge: judge, MaxQuestions: o.MaxQuestions,
+		Suppressed: suppressedLines(inv),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("audit: %w", err)
+	}
+	tools := plugin.Versions(exts)
+	tools["semantic"] = semantic.Version
+	name := "none"
+	if judge != nil {
+		name = judge.Name() + ":" + judge.Model()
+		tools["judge"] = name + " " + semantic.PromptHash()
+	}
+	doc := findings.BuildSemantic(findings.Params{
+		Repo: repoName(o.Options), Version: o.Version, Tools: tools, Started: findings.Timestamp(started),
+		Finished: findings.Timestamp(now()), Instance: o.Instance, Owner: cfg.Owner, Gaps: gaps(inv.Gaps),
+	}, res.Issues)
+	return &AuditResult{Document: doc, Stats: res.Stats, Judge: name}, nil
+}
+
+func newJudge(a config.Audit, override string) (ai.Asker, error) {
+	provider := a.AI.Provider
+	if override != "" {
+		provider = override
+	}
+	j, err := ai.NewAsker(provider, ai.OllamaConfig{
+		Endpoint: a.AI.Endpoint, Model: a.AI.Model, Timeout: time.Duration(a.AI.TimeoutSeconds) * time.Second,
+		Retries: a.AI.Retries, MaxConcurrency: a.AI.MaxConcurrency, MaxRequests: a.AI.MaxRequests,
+		Seed: a.AI.Seed, NumCtx: a.AI.NumCtx,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("audit judge: %w", err)
+	}
+	return j, nil
+}
+
+func suppressedLines(inv *scan.Inventory) map[string]bool {
+	out := map[string]bool{}
+	for _, s := range inv.Suppressions {
+		out[fmt.Sprintf("%s:%d", s.Path, s.Line)] = true
 	}
 	return out
 }

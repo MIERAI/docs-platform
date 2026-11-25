@@ -6,6 +6,8 @@ import (
 	"os"
 	"sort"
 	"strings"
+
+	"github.com/MIERAI/docs-platform/internal/semantic"
 )
 
 type repoResult struct {
@@ -13,6 +15,8 @@ type repoResult struct {
 	Revision string
 	GT       []GTItem
 	Findings []fview
+	Audit    *semantic.Stats
+	Judge    string
 }
 
 // Cell is recall or precision as found/total.
@@ -49,6 +53,7 @@ type Report struct {
 	Matched    []string          `json:"matched"`
 	Missed     []string          `json:"missed_gt"`
 	Unmatched  []string          `json:"unmatched_findings_sample"`
+	Semantic   *SemanticReport   `json:"semantic,omitempty"`
 }
 
 func buildReport(rs []repoResult) *Report {
@@ -65,6 +70,7 @@ func buildReport(rs []repoResult) *Report {
 	}
 	rep.Matched, rep.Unmatched = details(rs)
 	rep.Missed = missed(rs)
+	rep.Semantic = semanticReport(rs)
 	return rep
 }
 
@@ -225,6 +231,9 @@ func (r *Report) Markdown() string {
 			fmt.Fprintf(&b, " recall %s %s;", k, t.RecallByRepo[k])
 		}
 		b.WriteString("\n")
+	}
+	if r.Semantic != nil {
+		b.WriteString(r.Semantic.Markdown())
 	}
 	b.WriteString("\n## Matched findings\n\n")
 	for _, m := range r.Matched {

@@ -38,6 +38,29 @@ type Config struct {
 	// RelatedRepos are names of other repositories; a path written right after one of them
 	// ("gitops-manifests scripts/x.py") is that repository's path, not this one's.
 	RelatedRepos []string `yaml:"related_repos"`
+	// Audit configures layer ④(c), the semantic audit (`docsp audit`).
+	Audit Audit `yaml:"audit"`
+}
+
+// Audit configures the semantic audit.
+type Audit struct {
+	// StaleCommits is how many later commits to a claim's code make the claim "stale".
+	StaleCommits int `yaml:"stale_commits"`
+	AI           AI  `yaml:"ai"`
+}
+
+// AI selects the judge model. Only local providers exist; the endpoint belongs in instance
+// configuration, never in the product.
+type AI struct {
+	Provider       string `yaml:"provider"` // none (default) or ollama
+	Endpoint       string `yaml:"endpoint"`
+	Model          string `yaml:"model"`
+	TimeoutSeconds int    `yaml:"timeout_seconds"`
+	Retries        int    `yaml:"retries"`
+	MaxConcurrency int    `yaml:"max_concurrency"`
+	MaxRequests    int    `yaml:"max_requests"`
+	Seed           int    `yaml:"seed"`
+	NumCtx         int    `yaml:"num_ctx"`
 }
 
 // Extractors enables/disables plugins and declares external ones.
@@ -93,6 +116,7 @@ func Defaults() *Config {
 		MinConfidence: "medium",
 		Owner:         "unassigned",
 		Impact:        Impact{Trailer: "Docs-Not-Needed"},
+		Audit:         Audit{StaleCommits: 2, AI: AI{Provider: "none", Retries: 2}},
 	}
 }
 
@@ -157,6 +181,7 @@ func (c *Config) Validate() error {
 		}
 	}
 	errs = append(errs, c.validateGlobs()...)
+	errs = append(errs, c.Audit.validate()...)
 	for i, e := range c.Extractors.External {
 		if e.Name == "" || len(e.Command) == 0 || !filepath.IsAbs(e.Command[0]) {
 			errs = append(errs, fmt.Errorf("extractors.external[%d]: name and an absolute command path are required", i))
@@ -185,6 +210,26 @@ func (c *Config) validateGlobs() []error {
 		}
 		check(fmt.Sprintf("impact.rules[%d].code", i), r.Code)
 		check(fmt.Sprintf("impact.rules[%d].docs", i), r.Docs)
+	}
+	return errs
+}
+
+func (a Audit) validate() []error {
+	var errs []error
+	switch a.AI.Provider {
+	case "", "none":
+	case "ollama":
+		if a.AI.Endpoint == "" || a.AI.Model == "" {
+			errs = append(errs, errors.New("audit.ai: provider ollama needs endpoint and model"))
+		}
+	default:
+		errs = append(errs, fmt.Errorf("audit.ai.provider %q: want none or ollama (only local models are supported)", a.AI.Provider))
+	}
+	if a.StaleCommits < 1 {
+		errs = append(errs, errors.New("audit.stale_commits must be at least 1"))
+	}
+	if a.AI.MaxConcurrency < 0 || a.AI.MaxRequests < 0 || a.AI.TimeoutSeconds < 0 || a.AI.Retries < 0 {
+		errs = append(errs, errors.New("audit.ai: limits must not be negative"))
 	}
 	return errs
 }

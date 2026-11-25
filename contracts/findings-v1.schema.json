@@ -264,7 +264,8 @@
             "generated",
             "executable",
             "impact",
-            "ai_audit"
+            "ai_audit",
+            "semantic"
           ]
         },
         "locations": {
@@ -292,6 +293,34 @@
         },
         "suggestion": {
           "type": "string"
+        },
+        "rule": {
+          "type": "string",
+          "description": "semantic audit rule (value_mismatch, list_incomplete, state_contradiction, model_contradiction, ...)"
+        },
+        "sub_layer": {
+          "type": "string",
+          "description": "semantic sub-layer: value, state, staleness or model"
+        },
+        "claim": {
+          "type": "string",
+          "description": "the documentation sentence that was checked"
+        },
+        "quote": {
+          "type": "string",
+          "description": "verbatim evidence line (deterministic rules) or the judge quote verified verbatim in the evidence"
+        },
+        "model": {
+          "type": "string",
+          "description": "judge provider:model (model rule only)"
+        },
+        "prompt_hash": {
+          "type": "string",
+          "description": "hash of the exact prompt sent to the judge (model rule only)"
+        },
+        "votes": {
+          "type": "string",
+          "description": "self-consistency result, e.g. \"2/3 yes\" (model rule only)"
         }
       }
     }

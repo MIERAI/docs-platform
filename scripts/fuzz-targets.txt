@@ -7,3 +7,7 @@
 ./internal/extract/golang FuzzExtract
 ./internal/extract/comments FuzzSegments
 ./internal/plugin FuzzDecodeExternal
+./internal/semantic/claim FuzzMarkdown
+./internal/semantic/claim FuzzValues
+./internal/semantic/evidence FuzzFactsOf
+./internal/semantic FuzzParseReply

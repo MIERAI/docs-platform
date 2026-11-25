@@ -13,11 +13,18 @@ type fview struct {
 	Subject    string
 	Confidence string
 	Locs       []findings.Location
+	Rule       string
+	SubLayer   string
+	Detail     string
+	Quote      string
 }
 
 func view(f findings.Finding) fview {
 	a, _ := f.Attributes["docs"].(findings.DocsAttributes)
-	return fview{Check: f.Check, Type: a.FindingType, Subject: a.Subject, Confidence: a.Confidence, Locs: a.Locations}
+	return fview{
+		Check: f.Check, Type: a.FindingType, Subject: a.Subject, Confidence: a.Confidence, Locs: a.Locations,
+		Rule: a.Rule, SubLayer: a.SubLayer, Detail: f.Title, Quote: a.Quote,
+	}
 }
 
 // matches decides whether a finding corresponds to a ground-truth item. Identifiers are
@@ -25,6 +32,9 @@ func view(f findings.Finding) fview {
 // ground-truth line (±1) or name the same identifier in the same file.
 func matches(f fview, g GTItem) bool {
 	raw := g.Claim + "\n" + g.Actual + "\n" + g.Fix
+	if f.Type == "semantic" {
+		return matchesSemantic(f, g)
+	}
 	if f.Type == "undocumented" {
 		return g.Type == "missing" && len(strings.TrimLeft(f.Subject, "-")) >= 3 && containsWord(raw, f.Subject)
 	}
@@ -77,3 +87,8 @@ func abs(x int) int {
 }
 
 var confRank = map[string]int{"low": 1, "medium": 2, "high": 3}
+
+// matchesSemantic: a semantic finding is about one documentation line: same file, line ±1.
+func matchesSemantic(f fview, g GTItem) bool {
+	return len(f.Locs) > 0 && f.Locs[0].Path == g.File && g.Line != nil && abs(f.Locs[0].Line-*g.Line) <= 1
+}

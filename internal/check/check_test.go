@@ -10,7 +10,10 @@ import (
 	"time"
 
 	"github.com/MIERAI/docs-platform/contracts"
+	"github.com/MIERAI/docs-platform/internal/findings"
 	"github.com/MIERAI/docs-platform/internal/jsonschema"
+	"github.com/MIERAI/docs-platform/internal/model"
+	"github.com/MIERAI/docs-platform/internal/semantic"
 )
 
 var update = flag.Bool("update", false, "rewrite golden files")
@@ -109,5 +112,48 @@ func TestStableIDsAcrossLineShifts(t *testing.T) {
 			t.Errorf("duplicate finding id %s (%s) in one document", f.ID, f.Asset)
 		}
 		seen[f.ID] = true
+	}
+}
+
+func TestSemanticContract(t *testing.T) {
+	doc := findings.BuildSemantic(findings.Params{
+		Repo: "demo", Version: "0.0.0", Started: findings.Timestamp(fixedNow()), Finished: findings.Timestamp(fixedNow()),
+		Owner: "docs", Tools: map[string]string{"semantic": semantic.Version},
+	}, []semantic.Issue{
+		{
+			Rule: semantic.RuleValueMismatch, Path: "README.md", Line: 5, Claim: "kept for 3d", Subject: "retention=3d",
+			Detail: "the docs say 3d", Confidence: model.ConfMedium, Quote: "retention: 30d",
+			Locations: []semantic.Location{{Path: "README.md", Line: 5, Role: "doc"}, {Path: "values.yaml", Line: 1, Role: "code"}},
+		},
+		{
+			Rule: semantic.RuleModelContradiction, Path: "README.md", Line: 9, Claim: "c", Subject: "q",
+			Confidence: model.ConfLow, Quote: "const Window = 1000", Model: "ollama:m", PromptHash: "0123456789abcdef", Votes: "2/3 yes",
+			Locations: []semantic.Location{{Path: "README.md", Line: 9, Role: "doc"}, {Path: "w.go", Line: 3, Role: "code"}},
+		},
+	})
+	b, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ours, err := jsonschema.Compile(contracts.Findings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if errs := ours.ValidateJSON(b); len(errs) > 0 {
+		t.Fatalf("violates contracts/findings-v1.schema.json: %v", errs)
+	}
+	upstream, err := jsonschema.Compile(contracts.UpstreamFindings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range upstream.ValidateJSON(b) {
+		if !isExtension(e) {
+			t.Errorf("upstream incompatibility outside the proposed extension: %s", e)
+		}
+	}
+	for _, f := range doc.Findings {
+		if !f.NeedsHuman || f.Severity == "medium" || f.Severity == "high" {
+			t.Errorf("semantic findings are proposals: %+v", f)
+		}
 	}
 }

@@ -34,6 +34,9 @@ func TestRunCommands(t *testing.T) {
 		{"extract", []string{"extract", fixture}, exitOK, `"kind": "cli_flag"`},
 		{"validate golden", []string{"validate", "../../testdata/golden/basic-low.findings.json"}, exitOK, "valid findings/v1"},
 		{"check help", []string{"check", "-h"}, exitOK, ""},
+		{"audit none", []string{"audit", "-ai", "none", fixture}, exitOK, `"name": "docs-audit"`},
+		{"audit cloud refused", []string{"audit", "-ai", "openai", fixture}, exitUsage, ""},
+		{"audit ollama needs endpoint", []string{"audit", "-ai", "ollama", fixture}, exitUsage, ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

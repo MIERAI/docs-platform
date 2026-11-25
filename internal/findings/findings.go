@@ -85,6 +85,14 @@ type DocsAttributes struct {
 	DetectorLayer string     `json:"detector_layer"`
 	Locations     []Location `json:"locations"`
 	Suggestion    string     `json:"suggestion,omitempty"`
+	// Semantic audit (detector_layer "semantic") only.
+	Rule       string `json:"rule,omitempty"`
+	SubLayer   string `json:"sub_layer,omitempty"`
+	Claim      string `json:"claim,omitempty"`
+	Quote      string `json:"quote,omitempty"`
+	Model      string `json:"model,omitempty"`
+	PromptHash string `json:"prompt_hash,omitempty"`
+	Votes      string `json:"votes,omitempty"`
 }
 
 // Location is a doc or code position.
