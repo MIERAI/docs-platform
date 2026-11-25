@@ -114,7 +114,7 @@ path|identifier|rule, subject, changed, doc_line}]}`, plus `judgement {verdict, 
 quote_rejected, model, prompt_hash, error}` and `draft` when a model is configured. Sections are
 advisory: the verdict is decided by the explicit rules only.
 
-## judge/v1 (1.1)
+## judge/v1 (1.2)
 
 The only coupling between docs-platform and a model. Request: `id`, `task.type`
 (`claim_contradiction`, `claim_incomplete`, `change_contradiction`, `draft_edit`), `claim`
@@ -134,28 +134,70 @@ core validates every response against the schema, verifies quotes (snippet: verb
 evidence line; agentic: at path:line±2 in the worktree or at `rev`) and downgrades a yes it
 cannot verify to unknown.
 
+1.2 (additive) brings the agentic judge of layer ④c. Three task types, agentic mode only:
+`repo_drift` (list the history changes that make older docs wrong), `claim_facts` (check one
+line fact by fact) and `doc_facts` (the same for up to a few lines of one document, listed in
+the new `claims[]`). Their answer is a structured object, not a verdict: the provider passes
+it through in the new response field `answer` and says in `answer_parse` how it got it
+(`schema` = schema-enforced structured output, `fallback` = found in free text by the
+tolerant parser `judgev1.ParseObject`, `repaired` = stray closing braces removed, `failed` =
+none; the response then carries error `bad_reply`). `verdict` stays `unknown`: the core
+validates every piece of evidence in the answer and derives the verdict itself. Reply schemas
+(in `prompt.reply_schema`):
+
+- `repo_drift`: `{drift: [{kind, old, new, summary, commits[], evidence[{path, line, quote}]}]}`
+- `claim_facts`: `{facts: [{fact, status, evidence[]}], reason}` with status one of
+  `confirmed`, `unverifiable_in_repo`, `contradicted`, `dangling_reference`,
+  `incomplete_list`, `outdated_wording`, and evidence `{kind: quote, path, line, quote}`,
+  `{kind: absence, search_pattern, search_scope, search_regex}`, `{kind: drift, drift_id}` or
+  `{kind: path_missing, path}`
+- `doc_facts`: `{lines: [{line, facts, reason}]}`
+
+`limits.max_turns` bounds the model turns of one request and `limits.max_request_usd` its
+cost (reaching it ends that request without an answer, never the run); `tools.definitions`
+describes each allowed tool (name, description, JSON Schema of the arguments) so a provider
+can hand them to its model. A consumer of 1.1 that ignores unknown fields is unaffected; a
+1.1 provider never receives the new task types (it does not declare `agentic`, or the core's
+Guard refuses the mode).
+
 Who may receive what is decided by the core, not the provider: a provider declares `Cloud()`
 and its `modes`; the instance configuration classifies repositories and paths `public` /
 `private` (default private); a cloud provider is refused any request or tool result touching
 private content.
 
-## judge-tools/v1
+## judge-tools/v1 (1.1)
 
 Read-only tools for the agentic mode, executed by the core: `list_dir {path}`, `read_file
 {path, from_line, to_line}` (≤ 400 lines), `grep {pattern (RE2), path, max_results ≤ 200}`,
-`git_log {path, max_count ≤ 50}`, `git_show {rev, path?}`. Paths are repository-relative;
-absolute paths, `..`, `.git` and symlinks out of the worktree are refused (`os.Root`); results
-are capped (default 32 KiB per result, 512 KiB and 20 steps per request); unknown arguments are
-errors; revisions are validated (no option injection).
+`git_log {path, max_count ≤ 50}`, `git_show {rev, path?}`; 1.1 adds `search {pattern, scope,
+regex, max_results}` (case-insensitive fixed string unless regex; the scope glob is broad:
+`*` crosses `/`; absence evidence re-runs exactly this search), `glob {pattern}`,
+`git_changes {kind (A/D/R/M letters, default DR), path, max_count ≤ 150}` (paths with the
+commit that added/deleted/renamed them), `changes_since {path, line}` (blame of the line,
+the files it names, later commits to them), `find_references {name}` and `check_quote {path,
+line, text}`. Paths are repository-relative; absolute paths, `..`, any path segment named
+`.git` (`.github` is fine) and symlinks out of the worktree are refused (`os.Root`); results
+are capped (default 32 KiB per result, 512 KiB and 20 steps per request; the agentic judge
+uses 16 steps per line and 45 / 1 MiB for the drift scan); unknown arguments are errors;
+revisions are validated (no option injection).
+
+Transports: exec providers exchange `tool_call` / `tool_result` lines (above). For a CLI
+provider (claude-code) the core starts `docsp judge-tools-mcp -spec FILE` as the CLI's only
+MCP server (stdio JSON-RPC: `initialize`, `tools/list`, `tools/call`); the spec file (mode
+0600, in the run's private temporary directory) fixes the worktree, the classification
+policy, the limits and the transcript file. Ollama gets the definitions as native tools and
+the core runs each call in process.
 
 ## instance/v1
 
 The operator's settings (YAML): `ai.judge` and `ai.draft` (provider, model, effort, timeout,
-concurrency, `budget {max_requests, max_usd, max_tokens}`, provider-specific blocks),
+concurrency, `budget {max_requests, max_usd, max_tokens}`, provider-specific blocks, and
+(additive) `agentic {max_steps, drift_max_steps, max_request_usd, drift_max_request_usd,
+group}`),
 `classification {default, repos, paths}`, `eval {judge, draft}` switching thresholds, and
 `prices` overriding the built-in list prices used for estimates.
 
-## eval/v1
+## eval/v1 (1.1)
 
 One `docsp eval-model` run of one task: the frozen set (`path`, `sha256`, item count), task,
 provider, model, prompt template hash, start time, `dry_run`, `scores` (judge: tp/fp/fn/tn,
@@ -166,3 +208,13 @@ strong-AI-labelled positives measure agreement, not accuracy), the `switch` deci
 items (`id, source, label, repo, split, revision, task, task_type, expected, claim, evidence,
 reference_fix, reference_actual`); prompts are rebuilt from the current templates at run time,
 so a template change is visible as a different `prompt_template_hash`.
+
+1.1 (additive, agentic mode): `mode` (`snippet` / `agentic`), `group` (`line` / `doc`),
+`drift[{repo, head, raw, validated, cached, parse, cost_usd, error}]`; per item `category`
+(derived by the harness), `claimed` (the model's own statuses before validation), `parse`,
+`evidence` / `evidence_ok`, `group_size`, `tool_steps`, `facts[{fact, status, valid,
+evidence[{evidence, ok, reason}]}]` and `reason`; scores `categories`, `unverifiable_rate`
+(`unverifiable_in_repo` is not counted in `unknown_rate`), `evidence_rejection_rate`,
+`parse_failures`, `parse_fallbacks`. Eval items may have task type `claim_facts` (agentic
+only: claim + revision, no snippets) and source `verified_control` (a line a reviewer
+verified true at the set's revision).

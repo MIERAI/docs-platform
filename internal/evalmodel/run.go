@@ -6,13 +6,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/MIERAI/docs-platform/internal/agentic"
 	"github.com/MIERAI/docs-platform/internal/instance"
 	"github.com/MIERAI/docs-platform/internal/judge"
 	"github.com/MIERAI/docs-platform/judgev1"
 )
 
 // SchemaVersion of docs-platform/eval/v1.
-const SchemaVersion = "1.0"
+const SchemaVersion = "1.1"
 
 // Options of one eval run.
 type Options struct {
@@ -25,6 +26,8 @@ type Options struct {
 	Concurrency int
 	Thresholds  instance.Eval
 	Now         func() time.Time
+	// Agentic, when set, runs the judge task in agentic mode (drift scan + claim_facts).
+	Agentic *Agentic
 }
 
 // Result is docs-platform/eval/v1.
@@ -40,6 +43,11 @@ type Result struct {
 	Scores             Scores       `json:"scores"`
 	Switch             *Switch      `json:"switch,omitempty"`
 	Items              []ItemResult `json:"items,omitempty"`
+	// Mode (1.1) is snippet or agentic; Group is line or doc (agentic only).
+	Mode  string `json:"mode,omitempty"`
+	Group string `json:"group,omitempty"`
+	// Drift (1.1, agentic) summarises the drift scan of each repository.
+	Drift []DriftSummary `json:"drift,omitempty"`
 }
 
 // SetRef identifies the frozen set.
@@ -72,6 +80,18 @@ type ItemResult struct {
 	OutputTokens  int      `json:"output_tokens"`
 	CostUSD       float64  `json:"cost_usd"`
 	LatencyMS     int64    `json:"latency_ms,omitempty"`
+	// Agentic (1.1): the category the harness derived, the model's own claim before
+	// validation, how the answer was parsed, evidence given / validated, request grouping.
+	Category   string `json:"category,omitempty"`
+	Claimed    string `json:"claimed,omitempty"`
+	Parse      string `json:"parse,omitempty"`
+	Evidence   int    `json:"evidence,omitempty"`
+	EvidenceOK int    `json:"evidence_ok,omitempty"`
+	GroupSize  int    `json:"group_size,omitempty"`
+	ToolSteps  int    `json:"tool_steps,omitempty"`
+	// Facts are the model's facts with the harness's check of every piece of evidence.
+	Facts  []agentic.FactCheck `json:"facts,omitempty"`
+	Reason string              `json:"reason,omitempty"`
 }
 
 // Run scores the guarded provider on the set.
@@ -87,6 +107,16 @@ func Run(ctx context.Context, o Options) *Result {
 	}
 	items := selectItems(o)
 	res.Items = make([]ItemResult, len(items))
+	if o.Agentic != nil && o.Task == TaskJudge {
+		res.Mode, res.Group, res.PromptTemplateHash = "agentic", o.Agentic.Settings.Group, agentic.TemplateHash()
+		if res.Group == "" {
+			res.Group = agentic.GroupLine
+		}
+		runAgentic(ctx, o, items, res)
+		finish(res, o)
+		return res
+	}
+	res.Mode = "snippet"
 	conc := max(1, o.Concurrency)
 	sem := make(chan struct{}, conc)
 	var wg sync.WaitGroup
@@ -105,11 +135,15 @@ func Run(ctx context.Context, o Options) *Result {
 		}(i)
 	}
 	wg.Wait()
+	finish(res, o)
+	return res
+}
+
+func finish(res *Result, o Options) {
 	res.Scores = score(o.Task, res.Items, o.Guard.Stats(), o.DryRun)
 	if !o.DryRun {
 		res.Switch = decide(o.Task, res.Scores, o.Thresholds)
 	}
-	return res
 }
 
 func selectItems(o Options) []Item {
@@ -130,6 +164,10 @@ func runItem(ctx context.Context, o Options, it *Item) ItemResult {
 	r := ItemResult{ID: it.ID, Source: it.Source, Split: it.Split, Expected: it.Expected, Verdict: judgev1.Unknown}
 	if ctx.Err() != nil {
 		r.Error = judge.ErrBudget.Error()
+		return r
+	}
+	if it.TaskType == judgev1.TaskClaimFacts {
+		r.Error = "claim_facts items need the agentic mode (-mode agentic)"
 		return r
 	}
 	req := judge.NewRequest(it.ID, it.TaskType, it.Claim, it.Evidence, "")

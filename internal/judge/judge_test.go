@@ -18,7 +18,14 @@ import (
 // TestMain lets the test binary act as an external provider: DOCSP_FAKE=exec speaks judge/v1
 // JSON Lines, DOCSP_FAKE=claude imitates `claude -p --output-format json`.
 func TestMain(m *testing.M) {
+	if len(os.Args) > 2 && os.Args[1] == "judge-tools-mcp" { // the tool server a fake CLI starts
+		serveMCPSpec(os.Args[3])
+		os.Exit(0)
+	}
 	switch os.Getenv("DOCSP_FAKE") {
+	case "claude-agentic":
+		fakeClaudeAgentic()
+		os.Exit(0)
 	case "exec":
 		fakeExec()
 		os.Exit(0)

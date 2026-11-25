@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/MIERAI/docs-platform/internal/agentic"
 	"github.com/MIERAI/docs-platform/internal/config"
 	"github.com/MIERAI/docs-platform/internal/extract/comments"
 	"github.com/MIERAI/docs-platform/internal/extract/golang"
@@ -236,6 +237,17 @@ type AuditOptions struct {
 	NoModel bool
 	// MaxQuestions bounds the claims put to the judge model.
 	MaxQuestions int
+	// Agentic, when set, runs the judge in agentic mode.
+	Agentic *AgenticAudit
+}
+
+// AgenticAudit selects the agentic judge for an audit.
+type AgenticAudit struct {
+	// Group overrides ai.judge.agentic.group (line or doc) when set.
+	Group string
+	// CacheDir caches drift lists by HEAD SHA ("" = no cache).
+	CacheDir string
+	NoDrift  bool
 }
 
 // AuditResult of one audit.
@@ -257,7 +269,7 @@ func Audit(ctx context.Context, o AuditOptions) (*AuditResult, error) {
 	if err != nil {
 		return nil, err //nolint:wrapcheck // already descriptive
 	}
-	g, err := NewJudge(o.InstanceFile, "judge", o.NoModel)
+	g, in, err := newJudge(o.InstanceFile, "judge", o.NoModel)
 	if err != nil {
 		return nil, err
 	}
@@ -273,20 +285,20 @@ func Audit(ctx context.Context, o AuditOptions) (*AuditResult, error) {
 		return nil, err
 	}
 	inv := scan.Run(r, exts, scan.Options{Docs: cfg.Docs})
-	res, err := semantic.Run(ctx, r, inv, semantic.Options{
+	so := semantic.Options{
 		StaleCommits: cfg.Audit.StaleCommits, Judge: g, MaxQuestions: o.MaxQuestions, Repo: repoName(o.Options),
 		Suppressed: suppressedLines(inv),
-	})
+	}
+	if o.Agentic != nil && g != nil {
+		if err := agenticOptions(&so, o.Agentic, in, r.Root); err != nil {
+			return nil, err
+		}
+	}
+	res, err := semantic.Run(ctx, r, inv, so)
 	if err != nil {
 		return nil, fmt.Errorf("audit: %w", err)
 	}
-	tools := plugin.Versions(exts)
-	tools["semantic"] = semantic.Version
-	name := "none"
-	if g != nil {
-		name = g.Name()
-		tools["judge"] = name + " " + semantic.PromptHash()
-	}
+	tools, name := auditTools(exts, g, so.Agentic != nil)
 	doc := findings.BuildSemantic(findings.Params{
 		Repo: repoName(o.Options), Version: o.Version, Tools: tools, Started: findings.Timestamp(started),
 		Finished: findings.Timestamp(now()), Instance: o.Instance, Owner: cfg.Owner, Gaps: gaps(inv.Gaps),
@@ -294,15 +306,50 @@ func Audit(ctx context.Context, o AuditOptions) (*AuditResult, error) {
 	return &AuditResult{Document: doc, Stats: res.Stats, Judge: name}, nil
 }
 
+// auditTools are the collector tools of an audit and the judge's name ("none" without one).
+func auditTools(exts []plugin.Extractor, g *judge.Guard, agenticMode bool) (map[string]string, string) {
+	tools := plugin.Versions(exts)
+	tools["semantic"] = semantic.Version
+	if g == nil {
+		return tools, "none"
+	}
+	tools["judge"] = g.Name() + " " + semantic.PromptHash()
+	if agenticMode {
+		tools["judge"] = g.Name() + " agentic " + agentic.TemplateHash()
+	}
+	return tools, g.Name()
+}
+
+// agenticOptions sets up the agentic judge of an audit from the instance configuration.
+func agenticOptions(so *semantic.Options, a *AgenticAudit, in *instance.Instance, root string) error {
+	st := agentic.FromInstance(in.AI.Judge.Agentic)
+	if a.Group != "" {
+		st.Group = a.Group
+	}
+	if st.Group != agentic.GroupLine && st.Group != agentic.GroupDoc {
+		return fmt.Errorf("agentic group %q: want line or doc", st.Group)
+	}
+	so.AgenticGroup = st.Group
+	so.Agentic = agentic.New(agentic.Options{
+		Guard: so.Judge, Repo: so.Repo, Dir: root, Class: in.Classification, CacheDir: a.CacheDir, NoDrift: a.NoDrift, Settings: st,
+	})
+	return nil
+}
+
 // NewJudge returns the guarded provider of task ("judge" or "draft") from the instance
 // configuration, or nil when none is configured (or noModel is set).
 func NewJudge(instanceFile, task string, noModel bool) (*judge.Guard, error) {
+	g, _, err := newJudge(instanceFile, task, noModel)
+	return g, err
+}
+
+func newJudge(instanceFile, task string, noModel bool) (*judge.Guard, *instance.Instance, error) {
 	if noModel {
-		return nil, nil
+		return nil, nil, nil
 	}
 	in, err := instance.Load(instanceFile)
 	if err != nil {
-		return nil, err //nolint:wrapcheck // already descriptive
+		return nil, nil, err //nolint:wrapcheck // already descriptive
 	}
 	t := in.AI.Judge
 	if task == "draft" {
@@ -310,13 +357,13 @@ func NewJudge(instanceFile, task string, noModel bool) (*judge.Guard, error) {
 	}
 	p, err := judge.New(t)
 	if err != nil {
-		return nil, fmt.Errorf("%s provider: %w", task, err)
+		return nil, nil, fmt.Errorf("%s provider: %w", task, err)
 	}
 	g, err := judge.NewGuard(task, p, in)
 	if err != nil {
-		return nil, fmt.Errorf("%s provider: %w", task, err)
+		return nil, nil, fmt.Errorf("%s provider: %w", task, err)
 	}
-	return g, nil
+	return g, in, nil
 }
 
 func suppressedLines(inv *scan.Inventory) map[string]bool {

@@ -27,6 +27,9 @@
       "additionalProperties": false,
       "properties": {"qualifies": {"type": "boolean"}, "failed": {"type": "array", "items": {"type": "string"}}}
     },
-    "items": {"type": "array", "items": {"type": "object"}}
+    "items": {"type": "array", "items": {"type": "object"}},
+    "mode": {"type": "string", "enum": ["snippet", "agentic"], "description": "1.1"},
+    "group": {"type": "string", "enum": ["line", "doc"], "description": "1.1, agentic only"},
+    "drift": {"type": "array", "description": "1.1, agentic only: the drift scan of each repository", "items": {"type": "object", "required": ["repo", "raw", "validated", "cached", "cost_usd"], "properties": {"repo": {"type": "string"}, "head": {"type": "string"}, "raw": {"type": "integer"}, "validated": {"type": "integer"}, "cached": {"type": "boolean"}, "parse": {"type": "string"}, "cost_usd": {"type": "number"}, "error": {"type": "string"}}}}
   }
 }

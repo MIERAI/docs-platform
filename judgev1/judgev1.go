@@ -14,7 +14,7 @@ import (
 )
 
 // SchemaVersion of judge/v1 produced by this package.
-const SchemaVersion = "1.1"
+const SchemaVersion = "1.2"
 
 // Task types.
 const (
@@ -22,6 +22,30 @@ const (
 	TaskClaimIncomplete     = "claim_incomplete"
 	TaskChangeContradiction = "change_contradiction"
 	TaskDraftEdit           = "draft_edit"
+	// TaskRepoDrift (1.2, agentic): build the repository's drift list from its history.
+	TaskRepoDrift = "repo_drift"
+	// TaskClaimFacts (1.2, agentic): check one documentation line fact by fact.
+	TaskClaimFacts = "claim_facts"
+	// TaskDocFacts (1.2, agentic): check up to a few lines of one document (claims[]) at once.
+	TaskDocFacts = "doc_facts"
+)
+
+// Structured reports whether a task's answer is a structured object (Response.Answer) from
+// which the core derives the verdict itself, rather than a yes/no verdict with a quote.
+func Structured(task string) bool {
+	return task == TaskRepoDrift || task == TaskClaimFacts || task == TaskDocFacts
+}
+
+// Answer parse outcomes (Response.AnswerParse).
+const (
+	// ParseSchema: the provider's structured output (JSON Schema enforced) was used as is.
+	ParseSchema = "schema"
+	// ParseFallback: the object was found in free text by the tolerant parser.
+	ParseFallback = "fallback"
+	// ParseRepaired: the tolerant parser had to repair the text (stray closing braces).
+	ParseRepaired = "repaired"
+	// ParseFailed: no answer object could be read (the response carries error bad_reply).
+	ParseFailed = "failed"
 )
 
 // Modes: how a provider gets its evidence.
@@ -75,6 +99,8 @@ type Request struct {
 	Mode string `json:"mode,omitempty"`
 	// Tools describes the tools available in agentic mode.
 	Tools *ToolSpec `json:"tools,omitempty"`
+	// Claims (1.2, doc_facts) are the lines under test of one document; Claim is the first.
+	Claims []Claim `json:"claims,omitempty"`
 }
 
 // ToolSpec announces the read-only tools of docs-platform/judge-tools/v1 for one request.
@@ -82,6 +108,16 @@ type ToolSpec struct {
 	Contract string     `json:"contract"` // "judge-tools/v1"
 	Allowed  []string   `json:"allowed"`
 	Limits   ToolLimits `json:"limits"`
+	// Definitions (1.1 of judge-tools/v1) describe each allowed tool for the model: name,
+	// description and the JSON Schema of its arguments.
+	Definitions []ToolDef `json:"definitions,omitempty"`
+}
+
+// ToolDef describes one tool to a model.
+type ToolDef struct {
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	InputSchema json.RawMessage `json:"input_schema"`
 }
 
 // ToolLimits bound one agentic request.
@@ -130,6 +166,11 @@ type Limits struct {
 	TimeoutSeconds        int      `json:"timeout_seconds,omitempty"`
 	BudgetRemainingUSD    *float64 `json:"budget_remaining_usd,omitempty"`
 	BudgetRemainingTokens *int     `json:"budget_remaining_tokens,omitempty"`
+	// MaxTurns (1.2, agentic) bounds the model turns of one request.
+	MaxTurns int `json:"max_turns,omitempty"`
+	// MaxRequestUSD (1.2, agentic) bounds the cost of this one request; reaching it ends the
+	// request without an answer, never the run.
+	MaxRequestUSD *float64 `json:"max_request_usd,omitempty"`
 }
 
 // Response is one judge/v1 response.
@@ -153,6 +194,12 @@ type Response struct {
 	// Transcript records the tool steps of an agentic answer (arguments and result sizes,
 	// never result contents).
 	Transcript []Step `json:"transcript,omitempty"`
+	// Answer (1.2) is the model's structured answer object for structured tasks (repo_drift,
+	// claim_facts, doc_facts). The provider passes it through; the core validates every piece
+	// of evidence in it and derives the verdict itself.
+	Answer json.RawMessage `json:"answer,omitempty"`
+	// AnswerParse (1.2) says how Answer was obtained: schema, fallback, repaired or failed.
+	AnswerParse string `json:"answer_parse,omitempty"`
 }
 
 // EvidenceRef is one quoted line of the inspected worktree.
@@ -179,6 +226,13 @@ const (
 	ToolGrep     = "grep"
 	ToolGitLog   = "git_log"
 	ToolGitShow  = "git_show"
+	// judge-tools/v1 1.1
+	ToolSearch         = "search"
+	ToolGlob           = "glob"
+	ToolGitChanges     = "git_changes"
+	ToolChangesSince   = "changes_since"
+	ToolFindReferences = "find_references"
+	ToolCheckQuote     = "check_quote"
 )
 
 // ToolCall is a provider's request to run one tool (a line on the provider's stdout, in
@@ -346,6 +400,14 @@ func (r *Request) Validate() error {
 	}
 	switch r.Task.Type {
 	case TaskClaimContradiction, TaskClaimIncomplete, TaskChangeContradiction, TaskDraftEdit:
+		return nil
+	case TaskRepoDrift, TaskClaimFacts, TaskDocFacts:
+		if r.Mode != ModeAgentic {
+			return fmt.Errorf("judge/v1 request: task %s needs mode agentic", r.Task.Type)
+		}
+		if r.Task.Type == TaskDocFacts && len(r.Claims) == 0 {
+			return errors.New("judge/v1 request: doc_facts needs claims")
+		}
 		return nil
 	}
 	return fmt.Errorf("judge/v1 request: unknown task type %q", r.Task.Type)

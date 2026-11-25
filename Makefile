@@ -10,12 +10,16 @@ FUZZ_LIST = scripts/fuzz-targets.txt
 # The Anthropic Messages API provider is its own module (keeps the core at one dependency).
 PROVIDERS = providers/anthropic
 
-.PHONY: all build providers test race lint vuln fuzz golden check-self ci
+.PHONY: all build build-replay providers test race lint vuln fuzz golden check-self ci
 
 all: lint test
 
 build:
 	$(GO) build -trimpath -o bin/docsp ./cmd/docsp
+
+# offline judge/v1 provider answering from canned answers (tests, re-scoring frozen runs)
+build-replay:
+	$(GO) build -trimpath -o bin/docsp-judge-replay ./cmd/docsp-judge-replay
 
 providers:
 	cd providers/anthropic && $(GO) build -trimpath -o ../../bin/docsp-judge-anthropic .

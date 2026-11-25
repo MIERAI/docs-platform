@@ -121,8 +121,9 @@ func (*Ollama) Cloud() bool { return false }
 // Billing implements Provider.
 func (*Ollama) Billing() string { return judgev1.BillingNone }
 
-// Modes implements Provider: snippet mode only (agentic mode is being evaluated separately).
-func (*Ollama) Modes() []string { return snippetOnly }
+// Modes implements Provider: snippet, and agentic (native tool calls against the core's
+// judge-tools, then a final answer constrained by the reply schema as Ollama's format).
+func (*Ollama) Modes() []string { return []string{judgev1.ModeSnippet, judgev1.ModeAgentic} }
 
 // Close implements Provider.
 func (o *Ollama) Close() error {
@@ -161,6 +162,15 @@ func (o *Ollama) Judge(ctx context.Context, req *judgev1.Request) (*judgev1.Resp
 	m := judgev1.Model{Provider: o.Name(), ID: o.cfg.Model}
 	if req.DryRun {
 		return dryRun(req, m, judgev1.BillingNone, nil), nil
+	}
+	if req.Mode == judgev1.ModeAgentic {
+		select {
+		case o.sem <- struct{}{}:
+		case <-ctx.Done():
+			return nil, fmt.Errorf("ollama: %w", ctx.Err())
+		}
+		defer func() { <-o.sem }()
+		return o.judgeAgentic(ctx, req)
 	}
 	body, err := json.Marshal(genRequest{
 		Model: o.cfg.Model, System: req.Prompt.System, Prompt: req.Prompt.User, Format: req.Prompt.ReplySchema,

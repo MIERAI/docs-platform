@@ -27,15 +27,19 @@ var (
 
 // Stats account for one task in one run.
 type Stats struct {
-	Requests       int     `json:"requests"`
-	Responses      int     `json:"responses"`
-	Errors         int     `json:"errors"`
-	BudgetStops    int     `json:"budget_stops"`
-	Refused        int     `json:"classification_refused"`
-	Yes            int     `json:"yes"`
-	No             int     `json:"no"`
-	Unknown        int     `json:"unknown"`
-	QuotesRejected int     `json:"quotes_rejected"`
+	Requests       int `json:"requests"`
+	Responses      int `json:"responses"`
+	Errors         int `json:"errors"`
+	BudgetStops    int `json:"budget_stops"`
+	Refused        int `json:"classification_refused"`
+	Yes            int `json:"yes"`
+	No             int `json:"no"`
+	Unknown        int `json:"unknown"`
+	QuotesRejected int `json:"quotes_rejected"`
+	// ParseFailures counts structured answers that could not be read at all (also counted in
+	// Errors); ParseFallbacks those read only by the tolerant parser (fallback or repaired).
+	ParseFailures  int     `json:"parse_failures"`
+	ParseFallbacks int     `json:"parse_fallbacks"`
 	InputTokens    int     `json:"input_tokens"`
 	OutputTokens   int     `json:"output_tokens"`
 	CacheRead      int     `json:"cache_read_input_tokens"`
@@ -173,7 +177,14 @@ func (g *Guard) Judge(ctx context.Context, req *judgev1.Request) (Outcome, error
 	}
 	g.account(resp, time.Since(start))
 	if req.Mode == judgev1.ModeAgentic {
-		resp.Transcript = ToolsFrom(ctx).Transcript()
+		// In-process tools (exec, ollama) record here; an out-of-process tool server
+		// (claude-code) hands its transcript back in the response.
+		if tr := ToolsFrom(ctx).Transcript(); len(tr) > 0 || len(resp.Transcript) == 0 {
+			resp.Transcript = tr
+		}
+	}
+	if judgev1.Structured(req.Task.Type) {
+		return g.structured(resp)
 	}
 	if resp.Error != nil {
 		g.st.Errors++
@@ -184,6 +195,36 @@ func (g *Guard) Judge(ctx context.Context, req *judgev1.Request) (Outcome, error
 		return Outcome{Response: resp, Verdict: judgev1.Unknown}, nil
 	}
 	return g.verify(ctx, req, resp), nil
+}
+
+// structured accounts the answer of a structured task: the verdict stays unknown here (the
+// caller derives it from the validated answer); parse outcomes are counted separately.
+func (g *Guard) structured(resp *judgev1.Response) (Outcome, error) {
+	o := Outcome{Response: resp, Verdict: judgev1.Unknown}
+	switch resp.AnswerParse {
+	case judgev1.ParseFailed:
+		g.st.ParseFailures++
+	case judgev1.ParseFallback, judgev1.ParseRepaired:
+		g.st.ParseFallbacks++
+	}
+	if resp.Error != nil {
+		g.st.Errors++
+		if resp.AnswerParse == "" && resp.Error.Code == judgev1.ErrCodeBadReply {
+			g.st.ParseFailures++
+		}
+		if resp.Error.Code == judgev1.ErrCodeBudget {
+			g.st.BudgetStops++
+			return o, ErrBudget
+		}
+		return o, nil
+	}
+	if len(resp.Answer) == 0 {
+		g.st.Errors++
+		g.st.ParseFailures++
+		resp.Error = &judgev1.Error{Code: judgev1.ErrCodeBadReply, Message: "structured task without an answer object"}
+	}
+	g.st.Unknown++
+	return o, nil
 }
 
 // checkMode refuses a mode the provider does not declare; agentic requests need tools in ctx.
@@ -221,6 +262,15 @@ func (g *Guard) classify(req *judgev1.Request) error {
 	}
 	if err := check(req.Claim.Repo, req.Claim.Path); err != nil {
 		return err
+	}
+	for _, c := range req.Claims {
+		repo := c.Repo
+		if repo == "" {
+			repo = req.Claim.Repo
+		}
+		if err := check(repo, c.Path); err != nil {
+			return err
+		}
 	}
 	for _, e := range req.Evidence {
 		repo := e.Repo
@@ -350,16 +400,21 @@ func (g *Guard) count(o Outcome) {
 // estimate accounts a dry-run request without calling the provider.
 func (g *Guard) estimate(req *judgev1.Request) Outcome {
 	in, out := EstimateUsage(req, g.overhead)
+	cache := 0
+	if req.Mode == judgev1.ModeAgentic {
+		in, cache, out = agenticEstimate(req, g.overhead)
+	}
 	cost := 0.0
 	if g.price != nil {
-		cost = g.price.Cost(in, out, 0)
+		cost = g.price.Cost(in, out, cache)
 	}
 	resp := dryRun(req, judgev1.Model{Provider: g.p.Name(), ID: g.p.Model()}, g.p.Billing(), nil)
-	resp.Usage.InputTokens, resp.Usage.OutputTokens, resp.Usage.CostUSD = in, out, cost
+	resp.Usage.InputTokens, resp.Usage.CacheReadInputTokens, resp.Usage.OutputTokens, resp.Usage.CostUSD = in, cache, out, cost
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.st.Requests++
 	g.st.InputTokens += in
+	g.st.CacheRead += cache
 	g.st.OutputTokens += out
 	g.st.CostUSD += cost
 	g.st.Estimated = true

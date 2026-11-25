@@ -38,9 +38,12 @@
             "claim_contradiction",
             "claim_incomplete",
             "change_contradiction",
-            "draft_edit"
+            "draft_edit",
+            "repo_drift",
+            "claim_facts",
+            "doc_facts"
           ],
-          "description": "claim_contradiction: does the evidence contradict the claim? claim_incomplete: does the evidence show members/steps the claim omits? change_contradiction: does this code change make the doc section wrong? draft_edit: propose a corrected text for the claim (only after a judge said yes)."
+          "description": "claim_contradiction: does the evidence contradict the claim? claim_incomplete: does the evidence show members/steps the claim omits? change_contradiction: does this code change make the doc section wrong? draft_edit: propose a corrected text for the claim (only after a judge said yes). (1.2, agentic mode only) repo_drift: list the changes in the repository's history that make older documentation wrong (a drift list the core validates: commits are ancestors of HEAD, quotes are verbatim, removed paths are really gone). claim_facts: check one documentation line fact by fact; the answer is a list of facts with statuses and evidence the core re-checks, and the core derives the verdict. doc_facts: the same for up to a few lines of one document (claims[])."
         },
         "question": {
           "type": "string",
@@ -49,29 +52,7 @@
       }
     },
     "claim": {
-      "type": "object",
-      "required": [
-        "text",
-        "path"
-      ],
-      "additionalProperties": false,
-      "properties": {
-        "repo": {
-          "type": "string",
-          "maxLength": 200
-        },
-        "path": {
-          "type": "string",
-          "maxLength": 1000
-        },
-        "line": {
-          "type": "integer"
-        },
-        "text": {
-          "type": "string",
-          "maxLength": 20000
-        }
-      }
+      "$ref": "#/$defs/claim"
     },
     "evidence": {
       "type": "array",
@@ -138,6 +119,14 @@
         },
         "budget_remaining_tokens": {
           "type": "integer"
+        },
+        "max_turns": {
+          "type": "integer",
+          "description": "(1.2, agentic) the model turns this request may take."
+        },
+        "max_request_usd": {
+          "type": "number",
+          "description": "(1.2, agentic) the cost this one request may reach; reaching it ends the request without an answer (bad_reply), never the run."
         }
       }
     },
@@ -177,7 +166,13 @@
               "read_file",
               "grep",
               "git_log",
-              "git_show"
+              "git_show",
+              "search",
+              "glob",
+              "git_changes",
+              "changes_since",
+              "find_references",
+              "check_quote"
             ]
           }
         },
@@ -195,7 +190,40 @@
               "type": "integer"
             }
           }
+        },
+        "definitions": {
+          "type": "array",
+          "description": "(judge-tools/v1 1.1) one entry per allowed tool, to hand to the model: name, description, JSON Schema of the arguments.",
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "description",
+              "input_schema"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string",
+                "maxLength": 2000
+              },
+              "input_schema": {
+                "type": "object"
+              }
+            }
+          }
         }
+      }
+    },
+    "claims": {
+      "type": "array",
+      "description": "(1.2, doc_facts) the lines under test of one document, in line order; claim is the first of them.",
+      "maxItems": 20,
+      "items": {
+        "$ref": "#/$defs/claim"
       }
     }
   },
@@ -230,6 +258,31 @@
         "text": {
           "type": "string",
           "maxLength": 50000
+        }
+      }
+    },
+    "claim": {
+      "type": "object",
+      "required": [
+        "text",
+        "path"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "repo": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "path": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "line": {
+          "type": "integer"
+        },
+        "text": {
+          "type": "string",
+          "maxLength": 20000
         }
       }
     }

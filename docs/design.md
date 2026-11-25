@@ -1,6 +1,6 @@
 # docs-platform 设计书
 
-状态：v0.3（层③ 引用检查、层④a 变更时影响推导、层④c 语义审计、模型契约 judge/v1 + 5 种 provider + 按任务路由 + 数据分级、模型评测、历史回放基准、积压导入已实现；agentic 判定模式只有契约；其余为设计）
+状态：v0.4（层③ 引用检查、层④a 变更时影响推导、层④c 语义审计（snippet 与 agentic 两种判定模式）、模型契约 judge/v1 1.2 + 5 种 provider + 按任务路由 + 数据分级、模型评测、历史回放基准、积压导入已实现；其余为设计）
 读者：产品负责人（本人）。面向用户的说明见 [README](../README.md)，契约细节见 [contracts.md](contracts.md)。
 
 ---
@@ -35,7 +35,7 @@
 | ① 生成的参考文档 | CLI 帮助、配置项表、指标表、环境变量表由代码生成，CI 比对 | 确定性（diff） | 每个 PR | 设计 |
 | ② 可执行文档 | 文档里的 shell 代码块在 CI 沙箱里真跑 | 确定性（退出码/输出） | 每个 PR / 每夜 | 设计 |
 | ③ 引用检查 | 文档提到的标识符必须存在；公开符号必须有文档 | 确定性（符号表对账）+ 置信度 | 每个 PR + 定期 | **已实现** |
-| ④ 语义 | (a) 变更时影响：从引用图推导该重读的段落 (b) 模型判定"这次变更是否与该段矛盾"+ 草拟修改 (c) 定期语义审计 → findings | (a) 确定性；(b) 模型提议 + 人审；(c) 确定性语义检查 + 可验证的模型小问题 + 人审 | PR / 合并后 / 每周 | **(a)(b)(c) 已实现**（b 为 snippet 模式；agentic 模式待实验结论） |
+| ④ 语义 | (a) 变更时影响：从引用图推导该重读的段落 (b) 模型判定"这次变更是否与该段矛盾"+ 草拟修改 (c) 定期语义审计 → findings | (a) 确定性；(b) 模型提议 + 人审；(c) 确定性语义检查 + 可验证的模型小问题 + 人审 | PR / 合并后 / 每周 | **(a)(b)(c) 已实现**（c 有 snippet 与 agentic 两种模式；agentic 见 §3.8） |
 
 分层的理由：①②③④a 是确定性的，可以做 CI 闸门；④b/④c 只能产出"提议"，进台账但不阻断。基准结果（§9）显示 ~85% 的人工审出问题属于语义层，这正是为什么 ④ 不能省，也是为什么 ③ 必须把误报压低——否则闸门会被关掉。
 
@@ -103,7 +103,7 @@
 5. **数据分级（安全）**：实例配置给每个仓库/路径 `public` / `private`（默认 private，路径规则可覆盖仓库）。云端 provider（claude-code、anthropic、未声明 local 的 exec）只能收到 public 内容——在代码里强制：请求被拒绝、计数，审计里生成 `docs.semantic.classification_refused` finding，impact 里在 judgement.error 里说明。agentic 的工具结果同样过分级（私有路径的 read/grep/list 结果不返回）。
 6. **温度**：负责人要求 temperature 0；但当前强模型（Opus 5.5 / Sonnet 5.5）**已不接受采样参数**（发送即 400）。可复现性改由固定提示词 + 结构化回答 + 引用核验 + 冻结评测集保证；ollama 仍用 temperature 0 + 固定 seed。
 7. **默认模型**：实例配置示例用 `claude-opus-5-5`（claude-api 参考的当前默认模型；判定需要读懂叙述与代码的关系，且"不为省钱降级"由负责人决定）。Sonnet 5.5 价格一半，是否换由评测数据决定（§9.3 的估算两者并列）。
-8. **agentic 模式（契约已定，实现待实验）**：试点显示"固定小片段 + yes/no"会饿死强模型（漏判全是"证据不在片段里"），而自由探索的 agent 找到了 147 条 GT。所以 judge/v1 1.1 预留 `mode: agentic`：provider 通过 **judge-tools/v1**（`list_dir`/`read_file`/`grep`/`git_log`/`git_show`）探索仓库，工具**由核心执行**（provider 永远碰不到文件系统）：`os.Root` 限定在被检 worktree、拒绝绝对路径/`..`/`.git`/符号链接越界、单结果 32KiB、每请求 20 步 / 512KiB、未知参数报错、修订号校验防选项注入、私有路径对云端拒绝；exec 协议里 provider 先输出若干 `tool_call` 行、读 `tool_result` 行，最后输出 judge/v1 回答。各 provider 声明自己支持的 mode（目前内置的都只声明 snippet；exec 可在配置里声明 agentic）。最佳 agentic 配置由另一个实验决定，落地后只需实现 provider 端，核心不用改。snippet 模式的提示词不再调优。
+8. **agentic 模式（v0.4 已实现，见 §3.8）**：试点显示"固定小片段 + yes/no"会饿死强模型（漏判全是"证据不在片段里"）。judge/v1 1.1 预留了 `mode: agentic`，1.2 加上结构化任务（`repo_drift` / `claim_facts` / `doc_facts`）与回答字段 `answer` / `answer_parse`。provider 通过 **judge-tools/v1 1.1**（`list_dir`/`read_file`/`grep`/`search`/`glob`/`git_log`/`git_show`/`git_changes`/`changes_since`/`find_references`/`check_quote`）探索仓库，工具**由核心执行**（provider 永远碰不到文件系统）：`os.Root` 限定在被检 worktree、拒绝绝对路径/`..`/任何名为 `.git` 的路径段（`.github` 照常可读）/符号链接越界、单结果 32KiB、步数与总量上限、未知参数报错、修订号校验防选项注入、私有路径对云端拒绝。传输：exec 协议里 provider 输出 `tool_call` 行、读 `tool_result` 行；claude-code 不给任何内置工具，唯一的工具是 docsp 子进程（`docsp judge-tools-mcp`）经 MCP stdio 提供的同一套只读工具；ollama 用原生 tool calling，核心在进程内执行。snippet 模式的提示词不再调优。
 
 ### 3.6 层④c 语义审计（已实现：`docsp audit`）
 
@@ -131,6 +131,32 @@ v0.2 时的约束是"只用本地弱模型"；v0.3 起按决定 A 改为"强模�
 - **打分（按任务分开）**：judge → precision、recall、unknown 率、引用拒绝率、按 dev/test 拆分；draft → "无捏造率"（草稿里每个标识符/路径/数字都必须出现在断言或证据里）+ 与参考修复的词重叠（廉价的采纳代理）；两者都有 token、成本、每条成本、p50 延迟。结果写成 eval/v1 JSON，按时间比较。
 - **切换规则**：候选 provider 在冻结集上满足实例配置里该任务的全部阈值（`eval.judge`：min_precision / min_recall / max_unknown_rate / max_quote_rejection_rate / max_usd_per_item / max_p50_latency_ms；`eval.draft`：min_supported_rate / min_similarity / 成本 / 延迟）且没有未答项，才可替换当前 provider；不满足退出码 1。生产切换只改实例配置；`--model/--provider` 只用于评测候选。
 - `--dry-run` 不调用任何模型，按提示词长度 + provider 固定开销 + 输出假设（judge 700、draft 1000 token，含自适应思考）估算调用数、token 与成本。
+
+### 3.8 层④c 的 agentic 模式（v0.4 已实现：`-mode agentic`）
+
+**为什么**：同一个 Sonnet，在 held-out TEST 集（30 正例 + 30 对照）上，逐行 snippet 设计召回 27%（8/30）；重新设计的原型（在 DEV 上调、TEST 只跑一次）召回 80%（24/30），对照组经复核只有 1 条误报，成本约每行 $0.039 + 每仓库漂移扫描 $0.15–0.25。v0.4 把这个原型移植进产品，经同一套 provider 与 judge 契约，模型仍然只靠实例配置切换。
+
+**两步**（`internal/agentic`）：
+
+1. **仓库漂移扫描**（每个仓库每个 HEAD 一次）：模型读历史（`git_log` / `git_show` / `git_changes`），列出"让旧文档变错的变化"（改名、搬家、删除、换主机、计划变已实现、键/默认值/版本变化……）。**核心逐条机器校验**：提交必须存在且是 HEAD 的祖先（`merge-base --is-ancestor`）、引用必须在 path:line±2 逐字出现、说"已删除/改名/搬走"的旧路径必须真的不存在（否则整条拒绝）；保留条件 = 有一条核验过的引用，或（有效提交 + 旧路径确实不存在）。只有通过的条目（D1、D2…）注入每行判定。结果按 HEAD SHA + 提示词 + 模型缓存（0600，放在用户缓存目录，不进被检仓库）；每次读缓存都重新校验。
+2. **逐行判定**（默认）或按文档成组（≤6 行，`-group doc`，更便宜、评测较少）：模型把一行拆成事实，每条给状态 `contradicted` / `incomplete_list` / `outdated_wording` / `dangling_reference` / `unverifiable_in_repo` / `confirmed` 和证据。提示词规则（来自原型）：**别的文档不是证据**；"同名但换了主机、改了名、搬了家、进入了新状态"都算不一致，不要替它开脱。
+
+**四种证据，全部由核心复核**：
+
+| 种类 | 模型给出 | 核心怎么核 |
+|---|---|---|
+| quote | path、line、逐字文本 | 空白归一后在 path:line±2 出现；≥6 字符；不能是被测行本身（±3）；云端不能引用私有路径 |
+| absence | search_pattern、search_scope、search_regex | 用与 `search` 工具**完全相同**的搜索重跑（不区分大小写的定串，或 RE2），范围内所有被跟踪文件（含私有文件，结果不外发），排除被测文档；无命中才接受。范围一个文件都没选中时拒绝（防止拼错目录），除非范围本身就是要找的那个缺失文件（`**/ENVIRONMENTS.md`） |
+| drift | drift_id | 必须是本次注入的已校验条目 |
+| path_missing（新增） | path | 从根、相对于文档所在目录都不存在；裸文件名时仓库里任何同名文件/目录都不能有；拒绝 glob、URL、越界路径。原型没有这一种，因此漏了一个"引用的 ENVIRONMENTS.md 不存在"的正例 |
+
+**判定由核心推导**：某事实至少一条证据通过即有效（`unverifiable_in_repo` 不需要证据）；按 contradicted > dangling_reference > incomplete_list > outdated_wording 的顺序，第一个被有效事实持有的问题状态即结论；否则全部有效且 confirmed → confirmed；全部有效且只有 confirmed/unverifiable → `unverifiable_in_repo`（单独报告，不算错误、不算 unknown）；其余 unknown。映射到 judge/v1：问题 = yes，confirmed = no，其余 unknown。审计里问题行成为 `docs.semantic.agentic_<category>`（medium，提议）。
+
+**结构化输出**：claude-code 用 `--json-schema` 读 `structured_output`；Ollama 探索结束后再发一次不带工具、`format` = 回答 schema 的请求；两者都有宽容解析器兜底（代码块、前后文字、多余右括号修复），解析失败单独计数（Guard 的 `parse_failures` / `parse_fallbacks`，评测结果里同名分数）。
+
+**可换模型**：一切经 judge/v1 与 Guard；数据分级照旧（云端 provider 收不到私有文档，工具对私有路径拒绝，漂移缓存按模型分开）。以后换弱本地模型只改实例配置（`provider: ollama`，`ai.judge.agentic` 调步数），并用同一冻结集 `eval-model -mode agentic` 比较。
+
+**与原型的对等验证**：用 `docsp-judge-replay` 把原型冻结的 60 条回答与 3 份漂移列表喂进产品（不调用模型），产品推导出的 60 条结论与"通过核验的证据条数"与原型逐条一致；漂移条目 18/18、15/15 通过。
 
 ## 4. 架构
 
@@ -185,9 +211,10 @@ type Extractor interface {
 |---|---|---|
 | `docsp check` | 层③ → findings/v1 + 摘要 | 0；`--fail-on` 命中 → 1；用法/运行错误 → 2 |
 | `docsp impact` | 层④a → impact/v1（规则闸门 + 推导的重读段落 + 可选判定/草稿） | 通过/豁免/不适用 → 0；缺文档 → 1 |
-| `docsp eval-model` | 按任务在冻结集上评测 provider → eval/v1；`--dry-run` 估算 | 达到切换阈值/估算 → 0；未达到 → 1；错误 → 2 |
+| `docsp eval-model` | 按任务在冻结集上评测 provider → eval/v1；`--dry-run` 估算；`-mode agentic -worktree NAME=DIR` 评测 agentic 模式 | 达到切换阈值/估算 → 0；未达到 → 1；错误 → 2 |
 | `docsp import-findings` | 已审阅的积压（GT 格式 JSONL）→ findings/v1（collector `docs-backlog`，id 稳定、coverage 为空所以导入永不"修复"任何 finding） | 0 |
-| `docsp audit` | 层④c → findings/v1（提议） | 0（不因 finding 失败）；用法/运行错误 → 2 |
+| `docsp audit` | 层④c → findings/v1（提议）；`-mode agentic` 用 §3.8 的漂移扫描 + 逐行事实核对 | 0（不因 finding 失败）；用法/运行错误 → 2 |
+| `docsp judge-tools-mcp` | （内部）为 claude-code 的 agentic 请求经 MCP stdio 提供只读工具；规格文件由核心写入（0600） | 0 / 2 |
 | `docsp extract` | 输出 extract/v1（调试、写插件） | 0 |
 | `docsp validate` | 校验 findings 文档 | 0 / 1 |
 
@@ -247,7 +274,7 @@ type Extractor interface {
 | 威胁 | 对策 |
 |---|---|
 | 被检仓库内容恶意（路径穿越、超大文件、YAML 炸弹、构造的 Markdown） | `os.Root` 读文件；单文件 2 MiB 上限；YAML 不展开别名、深度/节点数上限；所有解析器 fuzz；抽取器 panic 隔离为 gap |
-| 命令注入 | 不用 shell；git 只经 argv 调用且子命令白名单（diff/log/rev-parse/ls-files）；ref 正则校验且禁止 `-` 开头和 `..`；golangci 的 forbidigo 规则禁止 `exec.Command("sh"/"bash")` |
+| 命令注入 | 不用 shell；git 只经 argv 调用且子命令白名单（diff/log/rev-parse/ls-files/show/blame/merge-base）；ref 正则校验且禁止 `-` 开头和 `..`；golangci 的 forbidigo 规则禁止 `exec.Command("sh"/"bash")` |
 | PR 描述注入（Action） | 经环境变量 → 文件，不拼进脚本 |
 | 外部抽取器 | 绝对路径、无 shell、最小环境、超时、输出上限、契约校验 |
 | 秘密泄露 | 秘密/私密文件只读 0600（`internal/secret`）；错误信息不含内容；输出文件 0600 |
@@ -255,7 +282,8 @@ type Extractor interface {
 | 私有内容外发到云端模型 | 实例配置分级（默认 private）；Guard 在发送前拒绝含 private 路径的请求并报 finding；agentic 工具结果同样过滤；exec provider 默认视为云端 |
 | 模型凭据泄露 | Anthropic key 只从 0600 文件（否则拒绝）或点名的环境变量读取，不写日志、不回显、错误信息不含 key；claude-code 只用 CLI 自身登录，docsp 不读凭据，CLI 的 stderr 与原始输出不落日志；子进程只拿到 PATH/HOME/USER/TMPDIR 与点名透传的变量 |
 | 模型端点被改向 | Anthropic 客户端的 transport 只放行 `https://api.anthropic.com`，不跟随重定向；ollama 只能拨本地地址 |
-| agentic 模型越界读取 | 工具由核心执行，`os.Root` 限定 worktree，拒绝绝对路径/`..`/`.git`/符号链接越界，大小与步数上限，git 只允许 log/show 且修订号校验 |
+| agentic 模型越界读取 | 工具由核心执行，`os.Root` 限定 worktree，拒绝绝对路径/`..`/任何 `.git` 路径段/符号链接越界，大小与步数上限，git 只允许只读子命令（log/show/blame/merge-base --is-ancestor）且修订号校验；claude-code 没有任何内置工具（`--tools ""`），只有 docsp 提供的 MCP 只读工具，工作目录是空临时目录 |
+| agentic 模型编造证据 | 证据全部由核心复核（引用逐字、搜索重跑、漂移条目先校验、路径真实不存在），未通过的证据作废；判定只从通过的证据推导 |
 | 成本失控 | 每任务每次运行的硬预算（请求数/token/USD），发送前按最坏情况预判；dry-run 先估算 |
 | findings 本身敏感（私有仓库结构、denylist 命中） | findings 视为私有数据，存放在实例的私有数据仓库，不进产品仓库 |
 
@@ -346,7 +374,14 @@ Ground truth 质量抽查（15 条分歧：10 条工具漏掉的 GT + 5 条 GT �
 | 合计 | 352 | 853k | 285k | **$9.11** | **$4.56** |
 
   claude-code 走订阅：不产生 API 账单，但消耗订阅额度（上表为标价折算的名义成本）；anthropic provider 走 API 时少了 CLI 开销，Opus 约 $7.3、Sonnet 约 $3.6。冒烟实测每条判定 $0.025 / 草稿 $0.019，与估算（$0.024 / $0.030）一致或更低。
-- **注意**：这个评测集是 snippet 模式的。§3.5-8 的 agentic 模式落地后，需要用同一批 GT 重建 agentic 版评测集（断言 + worktree 修订号，不带片段）。
+- **注意**：这个评测集是 snippet 模式的。agentic 模式（§3.8）用自己的冻结集：断言 + worktree 修订号，不带片段（`task_type: claim_facts`），见 §9.4。
+
+### 9.4 agentic 模式（2026-11-26）
+
+- 冻结集：原型的 TEST 集（30 正例 + 30 经复核为真的对照，2 个仓库），条目带仓库修订号；`eval-model -mode agentic -worktree NAME=DIR` 拒绝修订号不符的 checkout。
+- 原型结果（Sonnet，TEST 只跑一次）：召回 80%（24/30），对照组 4 条被标出、复核后 1 条是真误报；每行约 $0.039，漂移扫描每仓库 $0.16 / $0.25。
+- 产品对等验证（`docsp-judge-replay` 回放原型回答，零成本）：60/60 条推导结论一致；precision 0.86、recall 0.80（未复核口径）。
+- 付费重跑估算（`--dry-run`，缓存感知）：Sonnet 5.5 约 $2.5（每行 ~$0.035 + 每仓库漂移 ~$0.21）；Opus 5.5 约 $5.0；`-group doc` 约 $1.5。由负责人决定是否重跑。
 
 ## 10. 路线图
 
@@ -356,7 +391,7 @@ Ground truth 质量抽查（15 条分歧：10 条工具漏掉的 GT + 5 条 GT �
 | P1 | security-platform 合并 findings 1.3 扩展；docs findings 进同一 ledger 与看板；SLO 规则由 slo-platform 生成 | 3 个仓库每日检查 ≥ 2 周，新鲜度 SLO 达标 |
 | P2 | 层① 生成器（CLI flag 表、环境变量表、指标表）；PR 评论适配器（GitHub/Gitea） | 至少 1 个仓库的参考表由生成器维护 |
 | P3 | 层② 可执行文档（一次性容器执行器） | 标注块在 CI 中稳定运行 |
-| P4 | ④b 模型判定 + 草稿（已实现，snippet 模式）；agentic 模式按实验结论实现 provider 端；④c 周期审计 findings——第一版已实现（§3.5–3.7、§9） | 历史回放测试集首提交命中 ≥ 60%（当前 52%）且每次变更重读段数中位 ≤ 10；judge 在冻结集上达到实例配置阈值 |
+| P4 | ④b 模型判定 + 草稿（已实现，snippet 模式）；④c agentic 模式（v0.4 已实现，§3.8）；④c 周期审计 findings——第一版已实现（§3.5–3.8、§9） | 历史回放测试集首提交命中 ≥ 60%（当前 52%）且每次变更重读段数中位 ≤ 10；judge 在冻结集上达到实例配置阈值 |
 | P5 | 更多抽取器（Java/Kotlin、Rust、OpenAPI、Helm 模板引用、Ansible tag）；外部抽取器样例仓库 | 每个新抽取器自带 fixture + fuzz |
 
 ## 11. 待产品负责人决定的事项
@@ -371,4 +406,5 @@ Ground truth 质量抽查（15 条分歧：10 条工具漏掉的 GT + 5 条 GT �
 10. **变更时推导何时升级为闸门**：目前只建议；建议在负责人的 PR 上影子运行 ≥2 周、测采纳率后再定。
 11. **积压导入**：147 条 GT 导入共用 ledger 之前需要 findings 1.3（第 1 项）落地；在此之前导入结果只存私有数据仓库。
 9. **④c 的下一步**：P4 退出条件（语义召回 ≥ 50%）用弱模型 + 当前问题形式达不到。可选：(a) 增加确定性规则覆盖（叙述性"过时"大多是"文档描述的计划已合入"——可以用提交信息/PR 标题与文档标题的对应来判定）；(b) 换问题形式（"证据里有没有断言没提到的成员"之类的补全问题，同样要求逐字引用）；(c) 接受 ④c 只是"低成本的提示器"，召回目标下调。
+12. **agentic 模式的下一步**：(a) 是否用产品对 TEST 集付费重跑一次（Sonnet 约 $2.5）以确认移植后的真实召回；(b) 默认分组用 line（已评测）还是 doc（便宜约 40%，未单独评测）；(c) anthropic provider 是否也实现 agentic（目前只有 claude-code / ollama / exec）；(d) 弱本地模型的替换评测何时做。
 8. **发布**：仓库何时公开、许可证 Apache-2.0 是否最终确定、模块路径 `github.com/MIERAI/docs-platform` 是否沿用。

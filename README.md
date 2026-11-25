@@ -20,8 +20,8 @@ a swappable contract. Implemented so far:
 | ② executable docs | shell blocks run in CI | design |
 | ③ reference check | every identifier a document mentions exists in code; every public symbol is documented | **implemented** |
 | ④a change-time impact | the doc sections a change affects, derived from layer ③'s reference graph (no hand-written map); explicit rules and reasoned waivers still decide the gate | **implemented** (`docsp impact`) |
-| ④c semantic audit | claims in the docs (values, schedules, versions, lists, state words, file roles) checked against the code: deterministic rules first, then an optional judge model | **implemented** (`docsp audit`) |
-| ④b model judgement + draft | a configured model judges "does this change contradict this section?" and drafts an edit (proposal only) | **implemented** (behind `judge/v1`); agentic mode: contract only |
+| ④c semantic audit | claims in the docs (values, schedules, versions, lists, state words, file roles) checked against the code: deterministic rules first, then an optional judge model - snippet mode, or agentic mode (repository drift scan + fact-by-fact checking with re-validated evidence) | **implemented** (`docsp audit`, `-mode agentic`) |
+| ④b model judgement + draft | a configured model judges "does this change contradict this section?" and drafts an edit (proposal only) | **implemented** (behind `judge/v1`) |
 | model evaluation | per-task scores of any provider on a frozen eval set; config-driven switching rule | **implemented** (`docsp eval-model`) |
 | backlog import | a reviewed defect backlog becomes findings the ledger tracks | **implemented** (`docsp import-findings`) |
 
@@ -39,7 +39,8 @@ bin/docsp audit -format text /path/to/repo          # semantic audit (determinis
 ```
 
 `docsp` never writes into the repository it inspects, never runs code from it, and only calls
-the read-only git sub-commands `diff`, `log`, `rev-parse`, `ls-files` and `show`.
+the read-only git sub-commands `diff`, `log`, `rev-parse`, `ls-files`, `show`, `blame` and
+`merge-base`.
 
 ## Commands
 
@@ -134,12 +135,22 @@ Every audit finding is a proposal: `needs_human: true`, severity `low` (medium c
 `info`, collector `docs-audit`, `attributes.docs.detector_layer: semantic` with the rule, the
 claim, the quote and, for the judge, the model and the prompt hash.
 
+**Agentic mode** (`-mode agentic`) replaces the snippet questions with a model that explores
+the repository through docsp's read-only tools (see *Agentic judge* below). Problems it can
+back with validated evidence become `docs.semantic.agentic_contradicted`,
+`agentic_dangling_reference`, `agentic_incomplete_list` or `agentic_outdated_wording`
+(sub-layer `model`, confidence medium); lines it finds `unverifiable_in_repo` are counted,
+not reported.
+
 | Flag | Meaning |
 |---|---|
 | `--config FILE` | configuration file |
 | `--instance-config FILE` | instance configuration (judge provider, model, budget, classification) |
 | `--no-model` | deterministic checks only, whatever the instance configuration says |
 | `--max-questions N` | claims put to the judge per run (default 150) |
+| `--mode snippet\|agentic` | judge mode (default snippet) |
+| `--group line\|doc` | agentic: one request per line (default) or per document, up to six lines (cheaper) |
+| `--drift-cache DIR`, `--no-drift-cache`, `--no-drift` | agentic: where drift lists are cached by HEAD SHA (default: the user cache directory), no cache, or no drift scan |
 | `--out`, `--format`, `--repo-name`, `--instance` | as for `check` |
 
 ### `docsp eval-model --set FILE [flags]`
@@ -167,6 +178,12 @@ are the same claims against the code at the commit that wrote them (assumed cons
 | `--split dev\|test`, `--limit N`, `--concurrency N` | subset and parallelism |
 | `--dry-run` | estimate only |
 | `--out-dir DIR` | write eval/v1 results here |
+| `--mode agentic`, `--worktree NAME=DIR` | evaluate the agentic judge: one drift scan per repository, then each item's line against a checkout of its repository (repeatable; it must be at the items' revision) |
+| `--group`, `--drift-cache`, `--no-drift-cache`, `--no-drift` | as for `audit` |
+
+In agentic mode the scores add the derived categories, `unverifiable_rate` (not counted as
+unknown), `evidence_rejection_rate`, `parse_failures` and `parse_fallbacks`, and each item
+carries its facts with the check of every piece of evidence.
 
 ### `docsp import-findings --repo-name NAME [--repo owner/name] FILE.jsonl`
 
@@ -266,6 +283,15 @@ eval:                              # switching thresholds per task
 | `anthropic` | `docsp-judge-anthropic` (own module, official Go SDK) | key only from a 0600 file or a named env var, never logged; HTTP only to `https://api.anthropic.com`; structured output; explicit effort; per-run USD budget |
 | `exec` | any program speaking judge/v1 as JSON Lines on stdin/stdout | treated as cloud unless `exec.local: true`; declares its `modes` |
 
+Agentic mode is supported by `claude-code` (its only tools are docsp's read-only tools, served
+over MCP by a `docsp judge-tools-mcp` child process; no built-in tools; docsp's system prompt
+is appended to the CLI's own agent prompt), `ollama` (native tool calls, then the answer with
+the reply schema as `format`; give it a context of 32k tokens or more with `ollama.num_ctx`)
+and `exec` (`modes: [agentic]`); the `anthropic` adapter is snippet-only for now. `docsp-judge-replay -answers FILE [-probe]`
+(`make build-replay`) is an offline exec provider that answers from canned answers (JSON
+Lines `{"key": "drift:<repo>" | "line:<repo>:<path>:<line>", "answer": {...}}`; `-probe` makes
+one tool call per request) - for tests and for re-scoring a frozen run at no cost.
+
 `docsp-judge-anthropic` is started by docsp with argv built from the instance configuration:
 `--model ID`, `--effort LEVEL`, `--max-retries N` (SDK retries on 408/409/429/5xx, honouring
 `retry-after`), `--fallbacks default|none` (server-side refusal fallback; the answering model is
@@ -279,14 +305,56 @@ validation of every response, and verbatim-quote verification. Current strong mo
 accept sampling parameters (temperature), so reproducibility comes from fixed prompts, schema-bound
 answers and quote verification instead.
 
+### Agentic judge
+
+```yaml
+ai:
+  judge:
+    provider: claude-code
+    model: claude-sonnet-5-5
+    agentic:
+      max_steps: 16              # tool steps per line (default)
+      drift_max_steps: 45        # tool steps of the drift scan (default)
+      max_request_usd: 0.6       # cap per line request; reaching it ends that request only
+      drift_max_request_usd: 2.5
+      group: line                # or doc
+```
+
+1. **Drift scan**, once per repository and HEAD: the model reads the history (`git_log`,
+   `git_show`, `git_changes`) and lists the changes that make older documentation wrong. The
+   harness keeps an entry only if its commits are ancestors of HEAD, its quotes are verbatim
+   at path:line±2, and a path it calls deleted/renamed/moved is really gone. Validated entries
+   (D1, D2, ...) are shared with every judgment; the list is cached by HEAD SHA, prompt and
+   model (validation is re-run on every load).
+2. **Judgment**: the model splits the line into facts, each with a status (`contradicted`,
+   `incomplete_list`, `outdated_wording`, `dangling_reference`, `unverifiable_in_repo`,
+   `confirmed`) and evidence. Other documentation is not evidence; the same name on another
+   host, under another name, moved, or in a later state is a mismatch.
+3. **Evidence** is re-checked by the harness, never trusted: `quote` (verbatim at path:line±2,
+   not the line under test), `absence` (the exact `search` re-run over every tracked file in
+   scope, private ones included; accepted only without a match, and only if the scope selects a
+   file or is itself the missing file),
+   `drift` (a validated entry), `path_missing` (the path exists neither from the root, nor next
+   to the document, nor - a bare name - anywhere).
+4. **Verdict**: the first problem status held by a fact with validated evidence, in the order
+   contradicted > dangling_reference > incomplete_list > outdated_wording; otherwise
+   `confirmed` (every fact confirmed and validated), `unverifiable_in_repo` (the rest is
+   outside the repository) or `unknown`.
+
+Answers are structured output (`--json-schema` for claude-code, `format` for Ollama); a
+tolerant parser is the fallback, and parse failures are counted on their own.
+
 Contract `judge/v1` (`contracts/judge-v1-*.schema.json`) carries the task type, the claim,
 evidence snippets with ids, the exact prompt and its hash, the required quote, the verdict
 (yes/no/unknown), confidence, the answering model, token and cost accounting - and, for the
 coming **agentic** mode, an evidence list (`path`, `line`, `quote`, each verified at path:line±2)
-and a tool transcript. In agentic mode the provider explores the worktree through the read-only
-tools of `judge-tools/v1` (`list_dir`, `read_file`, `grep`, `git_log`, `git_show`), which the
-core executes: confined to the worktree (absolute paths, `..`, `.git` and symlink escapes are
-refused), size-capped, private paths refused for cloud providers.
+and a tool transcript; 1.2 adds the agentic task types (`repo_drift`, `claim_facts`,
+`doc_facts`) whose structured `answer` the core validates itself. In agentic mode the provider
+explores the worktree through the read-only tools of `judge-tools/v1` (`list_dir`,
+`read_file`, `grep`, `search`, `glob`, `git_log`, `git_show`, `git_changes`, `changes_since`,
+`find_references`, `check_quote`), which the core executes: confined to the worktree
+(absolute paths, `..`, any `.git` segment and symlink escapes are refused), size- and
+step-capped, private paths refused for cloud providers.
 
 ## Extractors (plugins)
 
@@ -385,6 +453,7 @@ make lint        # golangci-lint (strict: funlen 50, gocognit, gosec, wrapcheck,
 make fuzz        # every parser of external input (FUZZTIME=30s each, GO=go)
 make vuln        # govulncheck
 make golden      # rewrite golden files after an intended change, then review the diff
+make build-replay # bin/docsp-judge-replay, the offline canned-answer provider
 make check-self  # docs-platform checks its own documentation
 ```
 

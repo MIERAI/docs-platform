@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"github.com/MIERAI/docs-platform/internal/check"
 	"github.com/MIERAI/docs-platform/internal/config"
 	"github.com/MIERAI/docs-platform/internal/jsonschema"
+	"github.com/MIERAI/docs-platform/internal/judge"
 	"github.com/MIERAI/docs-platform/internal/model"
 	"github.com/MIERAI/docs-platform/internal/plugin"
 	"github.com/MIERAI/docs-platform/internal/repo"
@@ -88,4 +90,29 @@ func cmdValidate(args []string, stdout io.Writer) (int, error) {
 	}
 	_, err = fmt.Fprintln(stdout, "valid findings/v1")
 	return exitOK, err //nolint:wrapcheck // stdout write
+}
+
+// cmdJudgeToolsMCP serves the read-only judge-tools of one agentic request over MCP (stdio).
+// The core starts it for a CLI provider (claude-code); the spec file, written by the core
+// with mode 0600, fixes the worktree, the classification policy, the limits and the
+// transcript file. It is not meant to be run by hand.
+func cmdJudgeToolsMCP(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
+	fs := flag.NewFlagSet("judge-tools-mcp", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	spec := fs.String("spec", "", "tool spec written by docsp (required)")
+	if err := fs.Parse(args); err != nil {
+		return flagErr(err)
+	}
+	if *spec == "" {
+		return exitUsage, errors.New("-spec is required")
+	}
+	t, err := judge.OpenMCPSpec(*spec)
+	if err != nil {
+		return exitUsage, err //nolint:wrapcheck // already descriptive
+	}
+	defer func() { _ = t.Close() }()
+	if err := judge.ServeMCP(ctx, stdin, stdout, t); err != nil {
+		return exitUsage, err //nolint:wrapcheck // already descriptive
+	}
+	return exitOK, nil
 }

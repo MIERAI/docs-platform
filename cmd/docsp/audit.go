@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/MIERAI/docs-platform/internal/agentic"
 	"github.com/MIERAI/docs-platform/internal/check"
 )
 
@@ -26,14 +27,20 @@ func cmdAudit(ctx context.Context, args []string, stdout, stderr io.Writer) (int
 	fs.StringVar(&instanceFile, "instance-config", "", "instance configuration (docs-platform/instance/v1): judge provider, model, budget, data classification")
 	fs.BoolVar(&noModel, "no-model", false, "deterministic checks only, whatever the instance configuration says")
 	fs.IntVar(&maxQ, "max-questions", 0, "claims put to the judge (default 150)")
+	var af agenticFlags
+	af.register(fs, false)
 	if err := fs.Parse(args); err != nil {
 		return flagErr(err)
+	}
+	ag, err := auditAgentic(&af)
+	if err != nil {
+		return exitUsage, err
 	}
 	res, err := check.Audit(ctx, check.AuditOptions{
 		Options: check.Options{
 			Root: rootArg(fs), ConfigFile: f.config, RepoName: f.repoName, Instance: f.instance, Version: version,
 		},
-		InstanceFile: instanceFile, NoModel: noModel, MaxQuestions: maxQ,
+		InstanceFile: instanceFile, NoModel: noModel, MaxQuestions: maxQ, Agentic: ag,
 	})
 	if err != nil {
 		return exitUsage, err //nolint:wrapcheck // already descriptive
@@ -47,5 +54,34 @@ func cmdAudit(ctx context.Context, args []string, stdout, stderr io.Writer) (int
 	if err != nil {
 		return exitUsage, fmt.Errorf("write summary: %w", err)
 	}
+	if ag != nil {
+		_, err = fmt.Fprintf(stderr, "docsp audit (agentic): drift %d entries, %d validated (cached %v); categories %v; parse failures %d\n",
+			st.DriftEntries, st.DriftValidated, st.DriftCached, st.AgenticCategories, st.ParseFailures)
+		if err != nil {
+			return exitUsage, fmt.Errorf("write summary: %w", err)
+		}
+	}
 	return exitOK, nil
+}
+
+// auditAgentic turns the mode flags into the audit's agentic options (nil = snippet mode).
+func auditAgentic(af *agenticFlags) (*check.AgenticAudit, error) {
+	switch af.mode {
+	case "snippet":
+		return nil, nil
+	case "agentic":
+	default:
+		return nil, fmt.Errorf("-mode %q: want snippet or agentic", af.mode)
+	}
+	if af.group != "" && af.group != "line" && af.group != "doc" {
+		return nil, fmt.Errorf("-group %q: want line or doc", af.group)
+	}
+	cache := af.driftCache
+	if cache == "" {
+		cache = agentic.DefaultCacheDir()
+	}
+	if af.noCache {
+		cache = ""
+	}
+	return &check.AgenticAudit{Group: af.group, CacheDir: cache, NoDrift: af.noDrift}, nil
 }

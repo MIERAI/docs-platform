@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -64,7 +65,9 @@ func TestToolsConfinement(t *testing.T) {
 	}{
 		{"parent", judgev1.ToolReadFile, `{"path":"../x"}`, "outside"},
 		{"absolute", judgev1.ToolReadFile, `{"path":"/etc/passwd"}`, "repository-relative"},
-		{"dot-git", judgev1.ToolReadFile, `{"path":".git/config"}`, "outside"},
+		{"dot-git", judgev1.ToolReadFile, `{"path":".git/config"}`, ".git is not readable"},
+		{"nested dot-git", judgev1.ToolReadFile, `{"path":"sub/.git/config"}`, ".git is not readable"},
+		{"dot-git dir", judgev1.ToolListDir, `{"path":"./.git"}`, ".git is not readable"},
 		{"symlink escape", judgev1.ToolReadFile, `{"path":"escape/hosts"}`, "escape"},
 		{"option injection", judgev1.ToolGitLog, `{"path":"--output=/tmp/x"}`, "repository-relative"},
 		{"private", judgev1.ToolReadFile, `{"path":"private/keys.md"}`, "private"},
@@ -203,7 +206,7 @@ func TestAgenticRoundTrip(t *testing.T) {
 }
 
 func FuzzCleanPath(f *testing.F) {
-	for _, s := range []string{"a/b", "../x", "/etc", "a/../../b", ".git/x", "-rf", "a\x00b", `a\..\b`} {
+	for _, s := range []string{"a/b", "../x", "/etc", "a/../../b", ".git/x", "-rf", "a\x00b", `a\..\b`, "x/.git", ".github/a", "a/./.git/../.git/b"} {
 		f.Add(s)
 	}
 	f.Fuzz(func(t *testing.T, s string) {
@@ -211,7 +214,7 @@ func FuzzCleanPath(f *testing.F) {
 		if err != nil {
 			return
 		}
-		if strings.HasPrefix(c, "/") || c == ".." || strings.HasPrefix(c, "../") || strings.HasPrefix(c, "-") || strings.HasPrefix(c, ".git/") {
+		if strings.HasPrefix(c, "/") || c == ".." || strings.HasPrefix(c, "../") || strings.HasPrefix(c, "-") || slices.Contains(strings.Split(c, "/"), ".git") {
 			t.Fatalf("CleanPath(%q) = %q escapes", s, c)
 		}
 	})

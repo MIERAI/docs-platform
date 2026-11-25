@@ -66,6 +66,23 @@ type Task struct {
 	Anthropic       Anthropic  `yaml:"anthropic"`
 	Ollama          Ollama     `yaml:"ollama"`
 	Exec            Exec       `yaml:"exec"`
+	// Agentic tunes the agentic mode of the judge (docsp audit/eval-model -mode agentic).
+	Agentic Agentic `yaml:"agentic"`
+}
+
+// Agentic tunes the agentic judge (0 / "" = the default).
+type Agentic struct {
+	// MaxSteps bounds the tool steps of one per-line request (default 16).
+	MaxSteps int `yaml:"max_steps"`
+	// DriftMaxSteps bounds the tool steps of the repository drift scan (default 45).
+	DriftMaxSteps int `yaml:"drift_max_steps"`
+	// MaxRequestUSD caps one per-line request (default 0.6); DriftMaxRequestUSD the drift scan
+	// (default 2.5). Reaching a cap ends that request without an answer, not the run.
+	MaxRequestUSD      float64 `yaml:"max_request_usd"`
+	DriftMaxRequestUSD float64 `yaml:"drift_max_request_usd"`
+	// Group is line (one request per line, default) or doc (up to six lines of one document
+	// per request: cheaper, evaluated less).
+	Group string `yaml:"group"`
 }
 
 // Budget is the hard per-run limit of one task (0 = the default).
@@ -248,10 +265,22 @@ func (t *Task) validate(where string) []error {
 		t.Budget.MaxUSD < 0 || t.Budget.MaxTokens < 0 {
 		bad("limits must not be negative")
 	}
+	errs = append(errs, t.Agentic.validate(where)...)
 	for _, e := range append(append([]string{}, t.ClaudeCode.PassEnv...), t.Exec.PassEnv...) {
 		if !validEnvName(e) {
 			bad("pass_env %q is not an environment variable name", e)
 		}
+	}
+	return errs
+}
+
+func (a Agentic) validate(where string) []error {
+	var errs []error
+	if a.MaxSteps < 0 || a.DriftMaxSteps < 0 || a.MaxRequestUSD < 0 || a.DriftMaxRequestUSD < 0 {
+		errs = append(errs, fmt.Errorf("%s: agentic limits must not be negative", where))
+	}
+	if a.Group != "" && a.Group != "line" && a.Group != "doc" {
+		errs = append(errs, fmt.Errorf("%s: agentic.group %q: want line or doc", where, a.Group))
 	}
 	return errs
 }

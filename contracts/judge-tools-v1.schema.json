@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/MIERAI/docs-platform/contracts/judge-tools-v1.schema.json",
   "title": "docs-platform/judge-tools/v1",
-  "description": "Read-only tools an agentic judge may call. The CORE executes every call (never the provider), confined to the inspected worktree: paths are repository-relative, absolute paths, '..' segments and symlinks out of the tree are refused (os.Root); results are size-capped; git is limited to log and show of validated revisions; private paths are refused for cloud providers (data classification). A provider writes one tool_call per line on stdout and reads one tool_result per line on stdin, then writes its judge/v1 response.",
+  "description": "Read-only tools an agentic judge may call. The CORE executes every call (never the provider), confined to the inspected worktree: paths are repository-relative, absolute paths, '..' segments and symlinks out of the tree are refused (os.Root); results are size-capped; git is limited to read-only sub-commands (log, show, blame, merge-base --is-ancestor) of validated revisions; any path segment named .git is refused (.github is an ordinary directory); private paths are refused for cloud providers (data classification). A provider writes one tool_call per line on stdout and reads one tool_result per line on stdin, then writes its judge/v1 response.",
   "oneOf_note": "a line is either a toolCall or a toolResult; validate against $defs",
   "type": "object",
   "$defs": {
@@ -14,7 +14,7 @@
         "type": {"type": "string", "enum": ["tool_call"]},
         "id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]{1,128}$", "description": "the judge request id"},
         "call": {"type": "string", "pattern": "^[A-Za-z0-9._:-]{1,64}$"},
-        "tool": {"type": "string", "enum": ["list_dir", "read_file", "grep", "git_log", "git_show"]},
+        "tool": {"type": "string", "enum": ["list_dir", "read_file", "grep", "git_log", "git_show", "search", "glob", "git_changes", "changes_since", "find_references", "check_quote"], "description": "1.1 adds search, glob, git_changes, changes_since, find_references and check_quote"},
         "args": {"type": "object"}
       }
     },
@@ -41,6 +41,16 @@
     "gitLogArgs": {"type": "object", "additionalProperties": false, "properties": {"path": {"type": "string"}, "max_count": {"type": "integer"}}},
     "gitLogResult": {"type": "object", "properties": {"commits": {"type": "array", "items": {"type": "object", "properties": {"sha": {"type": "string"}, "date": {"type": "string"}, "subject": {"type": "string"}}}}}},
     "gitShowArgs": {"type": "object", "required": ["rev"], "additionalProperties": false, "properties": {"rev": {"type": "string"}, "path": {"type": "string", "description": "with path: the file at rev (lines); without: the commit's message and diff"}}},
+    "searchArgs": {"type": "object", "required": ["pattern"], "additionalProperties": false, "properties": {"pattern": {"type": "string", "description": "case-insensitive fixed string, or an RE2 expression (case-sensitive) with regex=true"}, "scope": {"type": "string", "description": "path glob ('*' = every tracked file; '*' also crosses '/', a glob without '/' also matches base names, a plain path matches the file or everything below the directory)"}, "regex": {"type": "boolean"}, "max_results": {"type": "integer"}}, "description": "1.1. The same search re-runs absence evidence: an absence is accepted only if this search finds nothing."},
+    "searchResult": {"type": "object", "properties": {"matches": {"type": "array", "items": {"type": "object", "properties": {"path": {"type": "string"}, "line": {"type": "integer"}, "text": {"type": "string"}}}}, "files_searched": {"type": "integer"}}},
+    "globArgs": {"type": "object", "required": ["pattern"], "additionalProperties": false, "properties": {"pattern": {"type": "string"}, "max_results": {"type": "integer"}}},
+    "globResult": {"type": "object", "properties": {"paths": {"type": "array", "items": {"type": "string"}}}},
+    "gitChangesArgs": {"type": "object", "additionalProperties": false, "properties": {"kind": {"type": "string", "description": "letters of A (added), D (deleted), R (renamed), M (modified); default DR"}, "path": {"type": "string"}, "max_count": {"type": "integer"}}},
+    "gitChangesResult": {"type": "object", "properties": {"changes": {"type": "array", "items": {"type": "object", "properties": {"sha": {"type": "string"}, "date": {"type": "string"}, "subject": {"type": "string"}, "status": {"type": "string"}, "path": {"type": "string"}, "new_path": {"type": "string"}}}}}},
+    "changesSinceArgs": {"type": "object", "required": ["path", "line"], "additionalProperties": false, "properties": {"path": {"type": "string"}, "line": {"type": "integer"}}},
+    "findReferencesArgs": {"type": "object", "required": ["name"], "additionalProperties": false, "properties": {"name": {"type": "string"}}},
+    "checkQuoteArgs": {"type": "object", "required": ["path", "line", "text"], "additionalProperties": false, "properties": {"path": {"type": "string"}, "line": {"type": "integer"}, "text": {"type": "string"}}},
+    "textResult": {"type": "object", "description": "changes_since, find_references and check_quote answer with a text report", "properties": {"text": {"type": "string"}}},
     "gitShowResult": {"type": "object", "properties": {"rev": {"type": "string"}, "path": {"type": "string"}, "lines": {"type": "array", "items": {"type": "string"}}, "text": {"type": "string"}}}
   }
 }

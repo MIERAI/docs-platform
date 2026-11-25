@@ -35,6 +35,10 @@ const (
 	SourceReplayNegative = "replay_negative"
 	LabelStrongAI        = "agreement_with_strong_ai_audit"
 	LabelAssumedOK       = "assumed_consistent_at_doc_commit"
+	// SourceControl: a documentation line near the ground truth's lines that a reviewer
+	// verified true at the set's revision (a negative of the agentic TEST set).
+	SourceControl   = "verified_control"
+	LabelVerifiedOK = "verified_consistent_at_revision"
 )
 
 // Item is one frozen eval task.
@@ -129,7 +133,8 @@ func (it *Item) check() error {
 		return fmt.Errorf("item %s: task %q: want judge or draft", it.ID, it.Task)
 	}
 	switch it.TaskType {
-	case judgev1.TaskClaimContradiction, judgev1.TaskClaimIncomplete, judgev1.TaskChangeContradiction, judgev1.TaskDraftEdit:
+	case judgev1.TaskClaimContradiction, judgev1.TaskClaimIncomplete, judgev1.TaskChangeContradiction, judgev1.TaskDraftEdit,
+		judgev1.TaskClaimFacts:
 		return nil
 	}
 	return fmt.Errorf("item %s: unknown task_type %q", it.ID, it.TaskType)

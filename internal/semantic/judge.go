@@ -65,6 +65,9 @@ func (c *checker) askAll() error {
 	if len(qs) > c.opt.MaxQuestions {
 		qs = qs[:c.opt.MaxQuestions]
 	}
+	if c.opt.Agentic != nil {
+		return c.askAgentic(qs)
+	}
 	results := make([]*Issue, len(qs))
 	var mu sync.Mutex
 	var refused []claim.Claim

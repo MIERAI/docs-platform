@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/MIERAI/docs-platform/internal/instance"
 	"github.com/MIERAI/docs-platform/internal/repo"
 	"github.com/MIERAI/docs-platform/judgev1"
 )
@@ -34,8 +35,12 @@ const (
 	verifySlack           = 2
 )
 
-// AllTools lists the tools of judge-tools/v1.
-var AllTools = []string{judgev1.ToolListDir, judgev1.ToolReadFile, judgev1.ToolGrep, judgev1.ToolGitLog, judgev1.ToolGitShow}
+// AllTools lists the tools of judge-tools/v1 (1.1).
+var AllTools = []string{
+	judgev1.ToolListDir, judgev1.ToolReadFile, judgev1.ToolGrep, judgev1.ToolGitLog, judgev1.ToolGitShow,
+	judgev1.ToolSearch, judgev1.ToolGlob, judgev1.ToolGitChanges, judgev1.ToolChangesSince,
+	judgev1.ToolFindReferences, judgev1.ToolCheckQuote,
+}
 
 // Tools executes judge-tools/v1 calls for one agentic request: read-only, confined to one
 // worktree (os.Root refuses absolute paths, ".." and symlinks out of the tree), size-capped,
@@ -49,6 +54,14 @@ type Tools struct {
 	mu     sync.Mutex
 	total  int
 	steps  []judgev1.Step
+	doc    Doc
+	// files is the tracked-file list, computed once.
+	filesOnce sync.Once
+	files     []string
+	// record, when set, receives every step as it is taken (an out-of-process tool server
+	// writes its transcript this way).
+	record func(judgev1.Step)
+	policy *Policy
 }
 
 // NewTools opens dir read-only. allow (nil = everything) says which repository-relative paths
@@ -73,9 +86,39 @@ func NewTools(dir string, allow func(string) bool, lim judgev1.ToolLimits) (*Too
 	return &Tools{dir: dir, root: root, allow: allow, limits: lim}, nil
 }
 
+// Policy says which paths of one repository a provider may see: everything for a local
+// provider, only paths classified public for a cloud provider. Unlike a bare allow function
+// it can be handed to an out-of-process tool server.
+type Policy struct {
+	Repo  string                  `json:"repo"`
+	Class instance.Classification `json:"classification"`
+	Cloud bool                    `json:"cloud"`
+}
+
+// Allow reports whether the provider may see repository-relative path p.
+func (p Policy) Allow(rel string) bool {
+	return !p.Cloud || p.Class.ClassOf(p.Repo, rel) == instance.Public
+}
+
+// NewPolicyTools opens dir read-only for a provider governed by pol.
+func NewPolicyTools(dir string, pol Policy, lim judgev1.ToolLimits) (*Tools, error) {
+	t, err := NewTools(dir, pol.Allow, lim)
+	if err != nil {
+		return nil, err
+	}
+	t.policy = &pol
+	return t, nil
+}
+
+// Dir is the worktree the tools serve.
+func (t *Tools) Dir() string { return t.dir }
+
+// Limits are the tool limits of this request.
+func (t *Tools) Limits() judgev1.ToolLimits { return t.limits }
+
 // Spec announces the tools in a request.
 func (t *Tools) Spec() *judgev1.ToolSpec {
-	return &judgev1.ToolSpec{Contract: ToolsContract, Allowed: AllTools, Limits: t.limits}
+	return &judgev1.ToolSpec{Contract: ToolsContract, Allowed: AllTools, Limits: t.limits, Definitions: ToolDefs()}
 }
 
 // Close releases the worktree.
@@ -119,10 +162,15 @@ func (t *Tools) Call(ctx context.Context, c judgev1.ToolCall) judgev1.ToolResult
 	if !json.Valid(args) || len(args) == 0 || args[0] != '{' {
 		args = json.RawMessage(`{}`)
 	}
+	step := judgev1.Step{N: n, Tool: c.Tool, Args: args, ResultBytes: len(res.Content), Error: res.Error}
 	t.mu.Lock()
 	t.total += len(res.Content)
-	t.steps = append(t.steps, judgev1.Step{N: n, Tool: c.Tool, Args: args, ResultBytes: len(res.Content), Error: res.Error})
+	t.steps = append(t.steps, step)
+	rec := t.record
 	t.mu.Unlock()
+	if rec != nil {
+		rec(step)
+	}
 	return res
 }
 
@@ -182,6 +230,9 @@ func (t *Tools) run(ctx context.Context, tool string, raw json.RawMessage) (any,
 	case judgev1.ToolGitLog, judgev1.ToolGitShow:
 		return t.git(ctx, tool, raw)
 	}
+	if f, ok := moreTools[tool]; ok {
+		return f(ctx, t, raw)
+	}
 	return nil, fmt.Errorf("unknown tool %q (judge-tools/v1: %s)", tool, strings.Join(AllTools, ", "))
 }
 
@@ -209,8 +260,16 @@ func CleanPath(p string) (string, error) {
 		return "", fmt.Errorf("path %q refused: repository-relative paths only", p)
 	}
 	c := path.Clean(p)
-	if c == ".." || strings.HasPrefix(c, "../") || c == ".git" || strings.HasPrefix(c, ".git/") {
+	if c == ".." || strings.HasPrefix(c, "../") {
 		return "", fmt.Errorf("path %q refused: outside the worktree", p)
+	}
+	if strings.HasPrefix(c, "-") { // "./-x" cleans to "-x": never an option to git
+		return "", fmt.Errorf("path %q refused: repository-relative paths only", p)
+	}
+	for _, seg := range strings.Split(c, "/") {
+		if seg == ".git" { // exactly ".git": ".github", ".gitignore" are ordinary paths
+			return "", fmt.Errorf("path %q refused: .git is not readable (use git_log, git_show, git_changes)", p)
+		}
 	}
 	return c, nil
 }

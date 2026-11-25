@@ -9,6 +9,7 @@
 //	                                    reviewed backlog → findings/v1 JSON
 //	docsp extract [repo]                dump what the extractors found (extract/v1)
 //	docsp validate FILE                 validate a findings/v1 document
+//	docsp judge-tools-mcp -spec FILE    (internal) serve the read-only judge-tools over MCP stdio
 //	docsp version
 package main
 
@@ -20,7 +21,7 @@ import (
 )
 
 // version is set at build time (-ldflags "-X main.version=...").
-var version = "0.3.0"
+var version = "0.4.0"
 
 // exit codes.
 const (
@@ -55,6 +56,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		code, err = cmdExtract(args[1:], stdout, stderr)
 	case "validate":
 		code, err = cmdValidate(args[1:], stdout)
+	case "judge-tools-mcp":
+		code, err = cmdJudgeToolsMCP(ctx, args[1:], os.Stdin, stdout, stderr)
 	case "version", "--version":
 		_, err = fmt.Fprintln(stdout, "docsp", version)
 	case "help", "-h", "--help":

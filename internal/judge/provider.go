@@ -143,6 +143,11 @@ func dryRun(req *judgev1.Request, m judgev1.Model, billing string, price *instan
 const (
 	estJudgeOutput = 700
 	estDraftOutput = 1000
+	// agentic: tokens per tool step (result plus the turn around it) and the final answer
+	estToolTokens     = 2500
+	estAgenticOutput  = 2500
+	estDriftNewTokens = 1500
+	estDriftOutput    = 6000
 )
 
 // EstimateUsage estimates input and output tokens of one request; overhead is the provider's
@@ -154,5 +159,36 @@ func EstimateUsage(req *judgev1.Request, overhead int) (int, int) {
 	if req.Task.Type == judgev1.TaskDraftEdit {
 		out = estDraftOutput
 	}
+	if req.Mode == judgev1.ModeAgentic {
+		// every turn re-reads the conversation; tool results average a few thousand tokens
+		in += agenticSteps(req) * estToolTokens
+		out = estAgenticOutput
+	}
 	return in, out
+}
+
+// agenticEstimate splits an agentic request's expected tokens (for dry runs) into fresh
+// input, cache reads (each turn re-reads the conversation so far, a cached prefix) and
+// output. Calibrated against the prototype run the agentic design was evaluated with: about
+// $0.04 per line and $0.15-0.25 per drift scan on Sonnet; a drift scan reads large commits
+// (new context every turn) and writes a long list.
+func agenticEstimate(req *judgev1.Request, overhead int) (int, int, int) {
+	in := judgev1.EstimateTokens(req.Prompt.System) + judgev1.EstimateTokens(req.Prompt.User) +
+		judgev1.EstimateTokens(string(req.Prompt.ReplySchema)) + overhead
+	steps := agenticSteps(req)
+	if req.Task.Type == judgev1.TaskRepoDrift {
+		return in + steps*estDriftNewTokens, steps * estToolTokens, estDriftOutput
+	}
+	return in, steps * estToolTokens, estAgenticOutput
+}
+
+// agenticSteps is the step budget of an agentic request.
+func agenticSteps(req *judgev1.Request) int {
+	if req.Tools != nil && req.Tools.Limits.MaxSteps > 0 {
+		return req.Tools.Limits.MaxSteps
+	}
+	if req.Limits.MaxTurns > 0 {
+		return req.Limits.MaxTurns
+	}
+	return DefaultMaxSteps
 }

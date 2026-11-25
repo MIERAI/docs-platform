@@ -12,7 +12,10 @@ import (
 )
 
 // readOnlyGit lists the only git sub-commands docs-platform may run against an inspected repo.
-var readOnlyGit = map[string]bool{"diff": true, "log": true, "rev-parse": true, "ls-files": true, "show": true}
+var readOnlyGit = map[string]bool{
+	"diff": true, "log": true, "rev-parse": true, "ls-files": true, "show": true,
+	"blame": true, "merge-base": true, // the agentic judge's changes_since and drift validation
+}
 
 // refPattern accepts branch names, tags, SHAs and rev expressions like HEAD~1 or origin/main,
 // and nothing that git could read as an option.

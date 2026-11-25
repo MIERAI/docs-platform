@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -25,6 +26,9 @@ type ClaudeCodeConfig struct {
 	PassEnv        []string
 	Timeout        time.Duration
 	MaxConcurrency int
+	// ToolsProgram serves the read-only judge-tools to the CLI over MCP in agentic mode
+	// (`<program> judge-tools-mcp -spec FILE`); default: this docsp binary.
+	ToolsProgram string
 }
 
 // ClaudeCode answers each request with one non-interactive `claude -p` run using the
@@ -88,8 +92,10 @@ func (*ClaudeCode) Billing() string { return judgev1.BillingSubscription }
 // Overhead is the CLI's fixed prompt in tokens (for estimates).
 func (*ClaudeCode) Overhead() int { return claudeCodeOverhead }
 
-// Modes implements Provider: snippet mode only (agentic mode is being evaluated separately).
-func (*ClaudeCode) Modes() []string { return snippetOnly }
+// Modes implements Provider. In agentic mode the CLI gets no built-in tools at all: its only
+// tools are docsp's read-only judge-tools, served over MCP by a docsp child process confined
+// to the worktree (and to public paths, the CLI being a cloud provider).
+func (*ClaudeCode) Modes() []string { return []string{judgev1.ModeSnippet, judgev1.ModeAgentic} }
 
 // Close implements Provider.
 func (*ClaudeCode) Close() error { return nil }
@@ -105,8 +111,44 @@ func (c *ClaudeCode) Args(req *judgev1.Request) []string {
 	if c.cfg.Effort != "" {
 		args = append(args, "--effort", c.cfg.Effort)
 	}
-	if r := req.Limits.BudgetRemainingUSD; r != nil && *r > 0 {
-		args = append(args, "--max-budget-usd", fmt.Sprintf("%.4f", *r))
+	if usd, ok := requestCap(req); ok {
+		args = append(args, "--max-budget-usd", fmt.Sprintf("%.4f", usd))
+	}
+	return args
+}
+
+// requestCap is the smaller of the run's remaining budget and the request's own cap.
+func requestCap(req *judgev1.Request) (float64, bool) {
+	r, c := req.Limits.BudgetRemainingUSD, req.Limits.MaxRequestUSD
+	switch {
+	case r != nil && *r > 0 && c != nil && *c > 0:
+		return min(*r, *c), true
+	case r != nil && *r > 0:
+		return *r, true
+	case c != nil && *c > 0:
+		return *c, true
+	}
+	return 0, false
+}
+
+// AgenticArgs is the argv (without the program) of one agentic run: no built-in tools, only
+// the docsp MCP server described by mcpConfig, at most max_turns turns. The request's system
+// prompt is appended to the CLI's own agent prompt (the configuration the agentic design was
+// evaluated with) instead of replacing it.
+func (c *ClaudeCode) AgenticArgs(req *judgev1.Request, mcpConfig string) []string {
+	args := c.Args(req)
+	for i, a := range args {
+		if a == "--system-prompt" {
+			args[i] = "--append-system-prompt"
+		}
+	}
+	allowed := make([]string, 0, len(AllTools))
+	for _, n := range AllTools {
+		allowed = append(allowed, "mcp__"+MCPServerName+"__"+n)
+	}
+	args = append(args, "--mcp-config", mcpConfig, "--allowedTools", strings.Join(allowed, ","))
+	if req.Limits.MaxTurns > 0 {
+		args = append(args, "--max-turns", strconv.Itoa(req.Limits.MaxTurns))
 	}
 	return args
 }
@@ -127,7 +169,11 @@ func (c *ClaudeCode) Judge(ctx context.Context, req *judgev1.Request) (*judgev1.
 	ctx, cancel := context.WithTimeout(ctx, c.cfg.Timeout)
 	defer cancel()
 	start := time.Now()
-	cmd := exec.CommandContext(ctx, c.cfg.Program, c.Args(req)...) //nolint:gosec // operator-configured absolute path, argv vector, no shell
+	args, transcript, err := c.argv(ctx, req, dir)
+	if err != nil {
+		return nil, err
+	}
+	cmd := exec.CommandContext(ctx, c.cfg.Program, args...) //nolint:gosec // operator-configured absolute path, argv vector, no shell
 	cmd.Dir = dir
 	cmd.Env = childEnv(c.cfg.PassEnv)
 	cmd.Stdin = strings.NewReader(req.Prompt.User)
@@ -141,10 +187,52 @@ func (c *ClaudeCode) Judge(ctx context.Context, req *judgev1.Request) (*judgev1.
 	}
 	resp := ParseClaudeOutput(req, out.Bytes(), m)
 	resp.LatencyMS = time.Since(start).Milliseconds()
+	if transcript != "" {
+		resp.Transcript = ReadTranscript(transcript)
+	}
 	if runErr != nil && resp.Error == nil {
 		resp = judgev1.Failure(req, m, judgev1.ErrCodeTransport, "claude -p exited with an error")
 	}
 	return resp, nil
+}
+
+// argv returns the run's arguments and, in agentic mode, the tool server's transcript file.
+func (c *ClaudeCode) argv(ctx context.Context, req *judgev1.Request, dir string) ([]string, string, error) {
+	if req.Mode != judgev1.ModeAgentic {
+		return c.Args(req), "", nil
+	}
+	cfg, tr, err := c.mcpSetup(ToolsFrom(ctx), dir)
+	if err != nil {
+		return nil, "", err
+	}
+	return c.AgenticArgs(req, cfg), tr, nil
+}
+
+// mcpSetup writes the tool server's spec into the run's private directory and returns the
+// CLI's MCP configuration (a JSON string) and the transcript file.
+func (c *ClaudeCode) mcpSetup(t *Tools, dir string) (string, string, error) {
+	if t == nil {
+		return "", "", errors.New("claude-code: agentic mode needs the worktree tools")
+	}
+	prog := c.cfg.ToolsProgram
+	if prog == "" {
+		exe, err := os.Executable()
+		if err != nil {
+			return "", "", fmt.Errorf("claude-code: locate docsp for the tool server: %w", err)
+		}
+		prog = exe
+	}
+	spec, transcript := filepath.Join(dir, "tools.json"), filepath.Join(dir, "transcript.jsonl")
+	if err := WriteMCPSpec(t, spec, transcript); err != nil {
+		return "", "", err
+	}
+	cfg, err := json.Marshal(map[string]any{"mcpServers": map[string]any{MCPServerName: map[string]any{
+		"type": "stdio", "command": prog, "args": []string{"judge-tools-mcp", "-spec", spec},
+	}}})
+	if err != nil {
+		return "", "", fmt.Errorf("claude-code: encode MCP config: %w", err)
+	}
+	return string(cfg), transcript, nil
 }
 
 // cliResult is the part of `claude -p --output-format json` docs-platform reads. Other
@@ -178,6 +266,14 @@ func ParseClaudeOutput(req *judgev1.Request, b []byte, m judgev1.Model) *judgev1
 			m.ID = id
 		}
 	}
+	u := judgev1.Usage{
+		InputTokens: r.Usage.InputTokens, OutputTokens: r.Usage.OutputTokens,
+		CacheReadInputTokens: r.Usage.CacheReadInputTokens, CacheCreationInputTokens: r.Usage.CacheCreationInputTokens,
+		CostUSD: r.TotalCostUSD, Billing: judgev1.BillingSubscription,
+	}
+	if judgev1.Structured(req.Task.Type) {
+		return structuredClaudeOutput(req, &r, m, u)
+	}
 	if r.IsError || r.Subtype != "success" {
 		code := judgev1.ErrCodeTransport
 		if strings.Contains(r.Subtype, "budget") {
@@ -193,11 +289,39 @@ func ParseClaudeOutput(req *judgev1.Request, b []byte, m judgev1.Model) *judgev1
 	if err != nil {
 		return judgev1.Failure(req, m, judgev1.ErrCodeBadReply, err.Error())
 	}
-	return judgev1.NewResponse(req, a, m, judgev1.Usage{
-		InputTokens: r.Usage.InputTokens, OutputTokens: r.Usage.OutputTokens,
-		CacheReadInputTokens: r.Usage.CacheReadInputTokens, CacheCreationInputTokens: r.Usage.CacheCreationInputTokens,
-		CostUSD: r.TotalCostUSD, Billing: judgev1.BillingSubscription,
-	})
+	return judgev1.NewResponse(req, a, m, u)
+}
+
+// structuredClaudeOutput reads a structured task's answer: the CLI's schema-enforced
+// structured_output, else the tolerant parser on the result text. Running out of turns or of
+// the request's own budget ends this request without an answer (a parse failure), not the
+// run; only the run's budget is a budget error.
+func structuredClaudeOutput(req *judgev1.Request, r *cliResult, m judgev1.Model, u judgev1.Usage) *judgev1.Response {
+	obj, parse := judgev1.ParseObject(r.StructuredOutput, r.Result)
+	if obj != nil {
+		return judgev1.NewStructuredResponse(req, obj, parse, m, u)
+	}
+	if strings.Contains(r.Subtype, "budget") && !requestCapBinding(req) {
+		f := judgev1.Failure(req, m, judgev1.ErrCodeBudget, "claude -p reported "+cutASCII(r.Subtype, 60))
+		f.Usage = u
+		return f
+	}
+	resp := judgev1.NewStructuredResponse(req, nil, judgev1.ParseFailed, m, u)
+	if r.Subtype != "success" {
+		resp.Error.Message = "no answer object; claude -p reported " + cutASCII(r.Subtype, 60)
+	}
+	return resp
+}
+
+// requestCapBinding reports whether the request's own cap (not the run's budget) was the
+// limit passed to the CLI.
+func requestCapBinding(req *judgev1.Request) bool {
+	c := req.Limits.MaxRequestUSD
+	if c == nil || *c <= 0 {
+		return false
+	}
+	r := req.Limits.BudgetRemainingUSD
+	return r == nil || *r <= 0 || *c <= *r
 }
 
 func cutASCII(s string, n int) string {

@@ -19,3 +19,9 @@
 ./internal/judge FuzzCleanPath
 ./internal/judge FuzzToolCall
 ./internal/evalmodel FuzzParseSet
+./judgev1 FuzzParseObject
+./internal/agentic FuzzParseLineAnswer
+./internal/agentic FuzzParseDocAnswer
+./internal/agentic FuzzParseDriftAnswer
+./internal/judge FuzzCompileScope
+./internal/judge FuzzMCPServer

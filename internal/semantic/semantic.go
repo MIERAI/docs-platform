@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/MIERAI/docs-platform/internal/agentic"
 	"github.com/MIERAI/docs-platform/internal/extract/comments"
 	"github.com/MIERAI/docs-platform/internal/judge"
 	"github.com/MIERAI/docs-platform/internal/model"
@@ -37,6 +38,11 @@ type Options struct {
 	MaxQuestions int
 	// Ignore reports whether a finding on path:line is suppressed by the user.
 	Suppressed map[string]bool
+	// Agentic, when set, judges the queued claims in agentic mode (drift scan + per-line
+	// fact checking through read-only tools) instead of the snippet protocol; AgenticGroup
+	// is its grouping (line or doc).
+	Agentic      *agentic.Runner
+	AgenticGroup string
 }
 
 // Stats describe one audit run.
@@ -55,6 +61,13 @@ type Stats struct {
 	ModelSeconds                  float64
 	Seconds                       float64
 	ByRule                        map[string]int
+	// Agentic mode: lines per derived category, drift list size, structured answers that
+	// could not be parsed.
+	AgenticCategories map[string]int
+	DriftEntries      int
+	DriftValidated    int
+	DriftCached       bool
+	ParseFailures     int
 }
 
 // Result of one audit.
@@ -98,6 +111,9 @@ func Run(ctx context.Context, r *repo.Repo, inv *scan.Inventory, o Options) (*Re
 		c.check(&claims[i])
 	}
 	res.Stats.Candidates = len(c.pending)
+	if o.Agentic != nil && o.Judge == nil {
+		return nil, errAgenticWithoutJudge
+	}
 	if o.Judge != nil {
 		if err := c.askAll(); err != nil {
 			return nil, err
@@ -171,7 +187,7 @@ func (c *checker) check(cl *claim.Claim) {
 	if len(paths) == 0 {
 		paths = c.ix.Search(claimTokens(cl.Text), maxSnippets)
 	}
-	if len(paths) > 0 {
+	if len(paths) > 0 || c.opt.Agentic != nil { // the agentic judge finds its own evidence
 		c.addQuestion(cl, paths, stale)
 	}
 }

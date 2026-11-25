@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/MIERAI/docs-platform/internal/agentic"
 	"github.com/MIERAI/docs-platform/internal/instance"
 	"github.com/MIERAI/docs-platform/internal/judge"
 	"github.com/MIERAI/docs-platform/judgev1"
@@ -29,6 +30,16 @@ type Scores struct {
 	UnknownRate        *float64 `json:"unknown_rate,omitempty"`
 	QuoteRejectionRate *float64 `json:"quote_rejection_rate,omitempty"`
 	BySplit            []Slice  `json:"by_split,omitempty"`
+
+	// Agentic (1.1): items per derived category; unverifiable_in_repo is reported here and
+	// in unverifiable_rate, not as unknown and not as an error; evidence_rejection_rate is
+	// the share of the model's evidence the harness could not validate; parse failures (no
+	// answer object at all) and fallbacks (tolerant parser) are counted apart from errors.
+	Categories            map[string]int `json:"categories,omitempty"`
+	UnverifiableRate      *float64       `json:"unverifiable_rate,omitempty"`
+	EvidenceRejectionRate *float64       `json:"evidence_rejection_rate,omitempty"`
+	ParseFailures         int            `json:"parse_failures,omitempty"`
+	ParseFallbacks        int            `json:"parse_fallbacks,omitempty"`
 
 	Drafted        int      `json:"drafted,omitempty"`
 	SupportedRate  *float64 `json:"supported_rate,omitempty"`
@@ -90,7 +101,31 @@ func score(task string, rs []ItemResult, st judge.Stats, dry bool) Scores {
 		return s
 	}
 	scoreJudge(&s, rs)
+	s.ParseFailures, s.ParseFallbacks = st.ParseFailures, st.ParseFallbacks
+	scoreCategories(&s, rs)
 	return s
+}
+
+func scoreCategories(s *Scores, rs []ItemResult) {
+	cats := map[string]int{}
+	unver, ev, evOK := 0, 0, 0
+	for _, r := range rs {
+		if r.Category == "" {
+			continue
+		}
+		cats[r.Category]++
+		if r.Category == agentic.UnverifiableInRepo {
+			unver++
+		}
+		ev += r.Evidence
+		evOK += r.EvidenceOK
+	}
+	if len(cats) == 0 {
+		return
+	}
+	s.Categories = cats
+	s.UnverifiableRate = ratio(unver, len(rs))
+	s.EvidenceRejectionRate = ratio(ev-evOK, ev)
 }
 
 func scoreJudge(s *Scores, rs []ItemResult) {
@@ -113,7 +148,7 @@ func scoreJudge(s *Scores, rs []ItemResult) {
 		default:
 			s.TrueNegatives++
 		}
-		if r.Verdict == judgev1.Unknown {
+		if r.Verdict == judgev1.Unknown && r.Category != agentic.UnverifiableInRepo {
 			unknown++
 		}
 	}

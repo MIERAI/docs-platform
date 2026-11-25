@@ -1,6 +1,8 @@
 package judgev1
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -83,6 +85,50 @@ func FuzzParseAnswer(f *testing.F) {
 			default:
 				t.Fatalf("verdict %q", a.Verdict)
 			}
+		}
+	})
+}
+
+func TestParseObject(t *testing.T) {
+	tests := []struct {
+		name, structured, text, want, parse string
+	}{
+		{"structured output", `{"a":1}`, "ignored", `{"a":1}`, ParseSchema},
+		{"structured null falls back", `null`, `{"a":2}`, `{"a":2}`, ParseFallback},
+		{"fenced", ``, "Answer:\n```json\n{\"a\": [1, 2]}\n```\nbye", `{"a":[1,2]}`, ParseFallback},
+		{"prose around", ``, `I checked. {"a":"}"} Hope that helps}`, `{"a":"}"}`, ParseFallback},
+		{"think block", ``, `<think>{"no":1}</think>{"a":3}`, `{"a":3}`, ParseFallback},
+		{"stray brace repaired", ``, `{"lines":[{"f":{"c":1}}}, {"x":1}]}`, `{"lines":[{"f":{"c":1}},{"x":1}]}`, ParseRepaired},
+		{"array is not an object", ``, `[{"a":1}]`, `{"a":1}`, ParseFallback},
+		{"nothing", ``, `no json here`, ``, ParseFailed},
+		{"broken", ``, `{"a":`, ``, ParseFailed},
+	}
+	for _, tt := range tests {
+		obj, parse := ParseObject(json.RawMessage(tt.structured), tt.text)
+		if string(obj) != tt.want || parse != tt.parse {
+			t.Errorf("%s: %s %s, want %s %s", tt.name, obj, parse, tt.want, tt.parse)
+		}
+	}
+}
+
+func FuzzParseObject(f *testing.F) {
+	for _, s := range []string{`{"a":1}`, "```json\n{}\n```", "{", "}{", `{"a":[{"b":{}}}, {}]}`, "<think>", strings.Repeat("}", 100)} {
+		f.Add(s)
+	}
+	f.Fuzz(func(t *testing.T, s string) {
+		obj, parse := ParseObject(nil, s)
+		switch parse {
+		case ParseFailed:
+			if obj != nil {
+				t.Fatal("failed parse returned an object")
+			}
+		case ParseFallback, ParseRepaired:
+			var m map[string]any
+			if err := json.Unmarshal(obj, &m); err != nil {
+				t.Fatalf("%s returned a non-object %q", parse, obj)
+			}
+		default:
+			t.Fatalf("parse %q", parse)
 		}
 	})
 }
