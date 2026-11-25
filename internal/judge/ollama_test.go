@@ -1,15 +1,17 @@
-package ai
+package judge
 
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/MIERAI/docs-platform/internal/instance"
+	"github.com/MIERAI/docs-platform/judgev1"
 )
 
 func TestIsLocalIP(t *testing.T) {
@@ -37,15 +39,19 @@ func TestNewOllamaValidation(t *testing.T) {
 			t.Errorf("NewOllama(%+v) accepted", c)
 		}
 	}
-	if a, err := NewAsker("none", OllamaConfig{}); a != nil || err != nil {
-		t.Errorf("none: %v %v", a, err)
+	if p, err := New(instance.Task{Provider: "none"}); p != nil || err != nil {
+		t.Errorf("none: %v %v", p, err)
 	}
-	if _, err := NewAsker("cloud", OllamaConfig{}); err == nil {
+	if _, err := New(instance.Task{Provider: "cloud"}); err == nil {
 		t.Error("unknown providers must be rejected")
 	}
 }
 
-func TestAskProtocol(t *testing.T) {
+func ollamaReq() *judgev1.Request {
+	return NewRequest("o", judgev1.TaskClaimContradiction, judgev1.Claim{Path: "a.md", Text: "c"}, nil, "")
+}
+
+func TestJudgeProtocol(t *testing.T) {
 	var got genRequest
 	var calls atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -57,30 +63,26 @@ func TestAskProtocol(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
 			t.Error(err)
 		}
-		_, _ = w.Write([]byte(`{"model":"m","response":"{\"answer\":\"no\",\"quote\":\"\"}"}`))
+		_, _ = w.Write([]byte(`{"model":"m","response":"{\"verdict\":\"no\",\"quote\":\"\"}","prompt_eval_count":12,"eval_count":3}`))
 	}))
 	defer srv.Close()
-	o, err := NewOllama(OllamaConfig{Endpoint: srv.URL, Model: "m", MaxRequests: 2})
+	o, err := NewOllama(OllamaConfig{Endpoint: srv.URL, Model: "m"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	r, err := o.Ask(context.Background(), Question{System: "s", Prompt: "p", Schema: json.RawMessage(`{"type":"object"}`)})
-	if err != nil || r.Text == "" {
-		t.Fatalf("Ask: %v %+v", err, r)
+	r, err := o.Judge(context.Background(), ollamaReq())
+	if err != nil || r.Verdict != "no" || r.Usage.InputTokens != 12 || r.Usage.OutputTokens != 3 {
+		t.Fatalf("Judge: %v %+v", err, r)
 	}
 	if got.Think || got.Stream || got.Options.Temperature != 0 || got.Options.Seed != DefaultSeed || got.Model != "m" || len(got.Format) == 0 {
 		t.Errorf("request not deterministic/structured: %+v", got)
 	}
-	_, _ = o.Ask(context.Background(), Question{Prompt: "p"})
-	if _, err := o.Ask(context.Background(), Question{Prompt: "p"}); !errors.Is(err, ErrBudget) {
-		t.Errorf("budget not enforced: %v", err)
-	}
-	if o.Used() != 2 || calls.Load() != 2 {
-		t.Errorf("used %d calls %d", o.Used(), calls.Load())
+	if o.Cloud() || calls.Load() != 1 {
+		t.Errorf("cloud %v calls %d", o.Cloud(), calls.Load())
 	}
 }
 
-func TestAskRetriesAndErrors(t *testing.T) {
+func TestJudgeRetriesAndErrors(t *testing.T) {
 	var calls atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		if calls.Add(1) == 1 {
@@ -94,7 +96,7 @@ func TestAskRetriesAndErrors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := o.Ask(context.Background(), Question{Prompt: "p"}); err == nil || calls.Load() != 2 {
+	if _, err := o.Judge(context.Background(), ollamaReq()); err == nil || calls.Load() != 2 {
 		t.Errorf("want a retry after 503 then a non-retryable error, got %v after %d calls", err, calls.Load())
 	}
 }
@@ -112,7 +114,7 @@ func TestRefusesPublicAddress(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	if _, err := o.Ask(ctx, Question{Prompt: "p"}); err == nil {
+	if _, err := o.Judge(ctx, ollamaReq()); err == nil {
 		t.Error("TEST-NET address must be refused")
 	}
 }

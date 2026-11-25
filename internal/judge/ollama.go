@@ -1,4 +1,4 @@
-package ai
+package judge
 
 import (
 	"bytes"
@@ -10,38 +10,11 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"sync/atomic"
 	"syscall"
 	"time"
+
+	"github.com/MIERAI/docs-platform/judgev1"
 )
-
-// Question is one small, verifiable question for a judge model. System and Prompt are built by
-// the caller; repository content inside them is untrusted data. Schema, when set, is a JSON
-// Schema the reply must follow (structured output).
-type Question struct {
-	System string
-	Prompt string
-	Schema json.RawMessage
-}
-
-// Reply is the raw model answer.
-type Reply struct {
-	Text  string
-	Model string
-}
-
-// Asker is a provider that answers small questions. Only local models are built in: repository
-// content must never leave the operator's machines.
-type Asker interface {
-	Name() string
-	Model() string
-	Ask(ctx context.Context, q Question) (Reply, error)
-	// Used reports how many requests were sent (successful or not).
-	Used() int
-}
-
-// ErrBudget is returned once the per-run request budget is spent.
-var ErrBudget = errors.New("AI request budget exhausted")
 
 // OllamaConfig configures the ollama provider. All values come from instance configuration;
 // nothing about the endpoint is built into the product.
@@ -51,7 +24,6 @@ type OllamaConfig struct {
 	Timeout        time.Duration // per request
 	Retries        int           // extra attempts on transport errors and 5xx
 	MaxConcurrency int           // requests in flight (the GPU is usually shared)
-	MaxRequests    int           // per-run budget
 	Seed           int
 	NumCtx         int
 	NumPredict     int
@@ -65,14 +37,12 @@ type Ollama struct {
 	base   *url.URL
 	client *http.Client
 	sem    chan struct{}
-	used   atomic.Int64
 }
 
-// Defaults for unset OllamaConfig fields.
+// Ollama defaults for unset fields.
 const (
 	DefaultTimeout     = 60 * time.Second
 	DefaultConcurrency = 2
-	DefaultMaxRequests = 300
 	DefaultSeed        = 42
 	DefaultNumCtx      = 8192
 	DefaultNumPredict  = 256
@@ -110,7 +80,6 @@ func fillDefaults(c *OllamaConfig) {
 		c.Timeout = DefaultTimeout
 	}
 	def(&c.MaxConcurrency, DefaultConcurrency)
-	def(&c.MaxRequests, DefaultMaxRequests)
 	def(&c.Seed, DefaultSeed)
 	def(&c.NumCtx, DefaultNumCtx)
 	def(&c.NumPredict, DefaultNumPredict)
@@ -140,18 +109,25 @@ func IsLocalIP(ip net.IP) bool {
 	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || cgnat.Contains(ip)
 }
 
-// Name implements Asker.
+// Name implements Provider.
 func (*Ollama) Name() string { return "ollama" }
 
-// Model implements Asker.
+// Model implements Provider.
 func (o *Ollama) Model() string { return o.cfg.Model }
 
-// Used implements Asker.
-func (o *Ollama) Used() int { return int(o.used.Load()) }
+// Cloud implements Provider: the dialer only reaches local addresses.
+func (*Ollama) Cloud() bool { return false }
 
-// Propose implements Provider: proposals (layer ④b) are not built for local judges yet.
-func (*Ollama) Propose(context.Context, Request) ([]Proposal, error) {
-	return nil, errors.New("ollama provider answers audit questions only; proposals are not implemented")
+// Billing implements Provider.
+func (*Ollama) Billing() string { return judgev1.BillingNone }
+
+// Modes implements Provider: snippet mode only (agentic mode is being evaluated separately).
+func (*Ollama) Modes() []string { return snippetOnly }
+
+// Close implements Provider.
+func (o *Ollama) Close() error {
+	o.client.CloseIdleConnections()
+	return nil
 }
 
 type genRequest struct {
@@ -172,43 +148,62 @@ type genOptions struct {
 }
 
 type genResponse struct {
-	Model    string `json:"model"`
-	Response string `json:"response"`
-	Error    string `json:"error"`
+	Model           string `json:"model"`
+	Response        string `json:"response"`
+	Error           string `json:"error"`
+	PromptEvalCount int    `json:"prompt_eval_count"`
+	EvalCount       int    `json:"eval_count"`
 }
 
-// Ask implements Asker: deterministic options (temperature 0, fixed seed), thinking off,
-// bounded concurrency, a per-run budget and retries on transient errors.
-func (o *Ollama) Ask(ctx context.Context, q Question) (Reply, error) {
+// Judge implements Provider: deterministic options (temperature 0, fixed seed), thinking off,
+// bounded concurrency and retries on transient errors.
+func (o *Ollama) Judge(ctx context.Context, req *judgev1.Request) (*judgev1.Response, error) {
+	m := judgev1.Model{Provider: o.Name(), ID: o.cfg.Model}
+	if req.DryRun {
+		return dryRun(req, m, judgev1.BillingNone, nil), nil
+	}
 	body, err := json.Marshal(genRequest{
-		Model: o.cfg.Model, System: q.System, Prompt: q.Prompt, Format: q.Schema,
+		Model: o.cfg.Model, System: req.Prompt.System, Prompt: req.Prompt.User, Format: req.Prompt.ReplySchema,
 		Options: genOptions{Seed: o.cfg.Seed, NumCtx: o.cfg.NumCtx, NumPredict: o.cfg.NumPredict},
 	})
 	if err != nil {
-		return Reply{}, fmt.Errorf("encode request: %w", err)
+		return nil, fmt.Errorf("encode request: %w", err)
 	}
 	select {
 	case o.sem <- struct{}{}:
 	case <-ctx.Done():
-		return Reply{}, fmt.Errorf("ollama: %w", ctx.Err())
+		return nil, fmt.Errorf("ollama: %w", ctx.Err())
 	}
 	defer func() { <-o.sem }()
 	var last error
 	for attempt := 0; attempt <= o.cfg.Retries; attempt++ {
-		if int(o.used.Add(1)) > o.cfg.MaxRequests {
-			o.used.Add(-1)
-			return Reply{}, ErrBudget
+		g, retry, err := o.once(ctx, body)
+		if err == nil {
+			return o.response(req, g), nil
 		}
-		r, retry, err := o.once(ctx, body)
-		if err == nil || !retry {
-			return r, err
+		if !retry {
+			return nil, err
 		}
 		last = err
 		if err := sleep(ctx, time.Duration(attempt+1)*500*time.Millisecond); err != nil {
-			return Reply{}, err
+			return nil, err
 		}
 	}
-	return Reply{}, last
+	return nil, last
+}
+
+func (o *Ollama) response(req *judgev1.Request, g genResponse) *judgev1.Response {
+	m := judgev1.Model{Provider: o.Name(), ID: g.Model}
+	if m.ID == "" {
+		m.ID = o.cfg.Model
+	}
+	a, err := judgev1.ParseAnswer(req.Task.Type, g.Response)
+	if err != nil {
+		return judgev1.Failure(req, m, judgev1.ErrCodeBadReply, err.Error())
+	}
+	return judgev1.NewResponse(req, a, m, judgev1.Usage{
+		InputTokens: g.PromptEvalCount, OutputTokens: g.EvalCount, Billing: judgev1.BillingNone,
+	})
 }
 
 func sleep(ctx context.Context, d time.Duration) error {
@@ -218,35 +213,35 @@ func sleep(ctx context.Context, d time.Duration) error {
 	case <-t.C:
 		return nil
 	case <-ctx.Done():
-		return fmt.Errorf("ollama: %w", ctx.Err())
+		return fmt.Errorf("judge: %w", ctx.Err())
 	}
 }
 
 // once sends one request; retry reports whether a failure is transient.
-func (o *Ollama) once(ctx context.Context, body []byte) (Reply, bool, error) {
+func (o *Ollama) once(ctx context.Context, body []byte) (genResponse, bool, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, o.base.JoinPath("api", "generate").String(), bytes.NewReader(body))
 	if err != nil {
-		return Reply{}, false, fmt.Errorf("ollama request: %w", err)
+		return genResponse{}, false, fmt.Errorf("ollama request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := o.client.Do(req)
 	if err != nil {
-		return Reply{}, ctx.Err() == nil, fmt.Errorf("ollama: %w", err)
+		return genResponse{}, ctx.Err() == nil, fmt.Errorf("ollama: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	b, err := io.ReadAll(io.LimitReader(resp.Body, maxReplyBytes))
 	if err != nil {
-		return Reply{}, true, fmt.Errorf("ollama read: %w", err)
+		return genResponse{}, true, fmt.Errorf("ollama read: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return Reply{}, resp.StatusCode >= 500, fmt.Errorf("ollama: HTTP %d", resp.StatusCode)
+		return genResponse{}, resp.StatusCode >= 500, fmt.Errorf("ollama: HTTP %d", resp.StatusCode)
 	}
 	var g genResponse
 	if err := json.Unmarshal(b, &g); err != nil {
-		return Reply{}, false, fmt.Errorf("ollama decode: %w", err)
+		return genResponse{}, false, fmt.Errorf("ollama decode: %w", err)
 	}
 	if g.Error != "" {
-		return Reply{}, false, fmt.Errorf("ollama: %s", g.Error)
+		return genResponse{}, false, fmt.Errorf("ollama: %s", g.Error)
 	}
-	return Reply{Text: g.Response, Model: g.Model}, false, nil
+	return g, false, nil
 }

@@ -1,0 +1,3 @@
+version: 1
+ai:
+  judge: {provider: openai, model: m}

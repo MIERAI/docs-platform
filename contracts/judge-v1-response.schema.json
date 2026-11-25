@@ -1,0 +1,222 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/MIERAI/docs-platform/contracts/judge-v1-response.schema.json",
+  "title": "docs-platform/judge/v1 response",
+  "description": "A provider's answer to one judge/v1 request. The verdict is a proposal; the core verifies the quote verbatim against the evidence it sent and discards a yes whose quote it cannot find.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "id",
+    "verdict",
+    "quote",
+    "model",
+    "prompt_hash",
+    "usage"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^1\\.[0-9]+$"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._:-]{1,128}$"
+    },
+    "verdict": {
+      "type": "string",
+      "enum": [
+        "yes",
+        "no",
+        "unknown"
+      ],
+      "description": "For draft_edit: yes when a draft is returned, unknown otherwise."
+    },
+    "quote": {
+      "type": "string",
+      "maxLength": 5000,
+      "description": "Required field: one evidence line copied verbatim when verdict is yes and require_quote is true; empty otherwise."
+    },
+    "quote_evidence_id": {
+      "type": "string",
+      "pattern": "^(E[0-9]{1,3})?$"
+    },
+    "confidence": {
+      "type": "number",
+      "description": "0..1, the model's own; informational only."
+    },
+    "rationale": {
+      "type": "string",
+      "maxLength": 5000
+    },
+    "draft": {
+      "type": "object",
+      "required": [
+        "text"
+      ],
+      "additionalProperties": false,
+      "description": "draft_edit only: the proposed replacement text for the claim. Never applied automatically.",
+      "properties": {
+        "text": {
+          "type": "string",
+          "maxLength": 20000
+        }
+      }
+    },
+    "model": {
+      "type": "object",
+      "required": [
+        "provider",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "provider": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "id": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "The model that actually answered (may differ from the requested one, e.g. after a server-side fallback)."
+        }
+      }
+    },
+    "prompt_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{16}$"
+    },
+    "usage": {
+      "type": "object",
+      "required": [
+        "input_tokens",
+        "output_tokens",
+        "cost_usd"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "input_tokens": {
+          "type": "integer"
+        },
+        "output_tokens": {
+          "type": "integer"
+        },
+        "cache_read_input_tokens": {
+          "type": "integer"
+        },
+        "cache_creation_input_tokens": {
+          "type": "integer"
+        },
+        "cost_usd": {
+          "type": "number",
+          "description": "List-price cost of this call; 0 for local models. For subscription-billed CLIs it is the CLI's own notional figure."
+        },
+        "estimated": {
+          "type": "boolean",
+          "description": "true when the numbers are an estimate (dry run, or the provider cannot report usage)."
+        },
+        "billing": {
+          "type": "string",
+          "enum": [
+            "none",
+            "api",
+            "subscription"
+          ]
+        }
+      }
+    },
+    "latency_ms": {
+      "type": "integer"
+    },
+    "error": {
+      "type": "object",
+      "required": [
+        "code",
+        "message"
+      ],
+      "additionalProperties": false,
+      "description": "Set when no answer was produced; verdict is then unknown.",
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": [
+            "budget",
+            "refused",
+            "rate_limited",
+            "transport",
+            "bad_reply",
+            "timeout",
+            "config",
+            "classification"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "maxLength": 2000
+        }
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "description": "agentic mode: the evidence list. The core verifies every quote at path:line±2 (in the worktree, or at rev) and downgrades the verdict to unknown if any quote cannot be verified or a yes has none.",
+      "items": {
+        "type": "object",
+        "required": [
+          "path",
+          "line",
+          "quote"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "line": {
+            "type": "integer"
+          },
+          "quote": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "rev": {
+            "type": "string",
+            "maxLength": 200
+          }
+        }
+      }
+    },
+    "transcript": {
+      "type": "array",
+      "description": "agentic mode: tool steps (arguments and result sizes only, never contents).",
+      "items": {
+        "type": "object",
+        "required": [
+          "n",
+          "tool",
+          "args",
+          "result_bytes"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "n": {
+            "type": "integer"
+          },
+          "tool": {
+            "type": "string"
+          },
+          "args": {
+            "type": "object"
+          },
+          "result_bytes": {
+            "type": "integer"
+          },
+          "error": {
+            "type": "string",
+            "maxLength": 500
+          }
+        }
+      }
+    }
+  }
+}

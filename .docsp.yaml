@@ -18,3 +18,13 @@ impact:
     - name: action
       code: ["action.yml"]
       docs: ["README.md"]
+    - name: models
+      code: ["internal/judge/**", "internal/instance/**", "internal/evalmodel/**", "judgev1/**", "providers/**"]
+      docs: ["README.md", "docs/design.md", "docs/contracts.md"]
+ignore:
+  - kind: env_var
+    text: DOCSP_FAKE
+    reason: test-only switch that turns the test binary into a fake provider process
+  - kind: env_var
+    text: CLAUDE_CODE_OAUTH_TOKEN
+    reason: Claude Code's own CI token variable (external); docs-platform only passes it through by name

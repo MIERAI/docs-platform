@@ -93,6 +93,9 @@ type DocsAttributes struct {
 	Model      string `json:"model,omitempty"`
 	PromptHash string `json:"prompt_hash,omitempty"`
 	Votes      string `json:"votes,omitempty"`
+	// Imported backlog (detector_layer "review") only.
+	Actual string `json:"actual,omitempty"`
+	GTType string `json:"gt_type,omitempty"`
 }
 
 // Location is a doc or code position.

@@ -42,7 +42,10 @@ type Report struct {
 	Rules         []RuleResult `json:"rules"`
 	WaiverReason  string       `json:"waiver_reason,omitempty"`
 	Verdict       string       `json:"verdict"`
-	Metrics       []Metric     `json:"metrics,omitempty"`
+	// Sections are the doc sections the change affects, derived from the reference graph
+	// (advisory: they never change the verdict, which only the explicit rules decide).
+	Sections []SectionResult `json:"sections,omitempty"`
+	Metrics  []Metric        `json:"metrics,omitempty"`
 }
 
 // Tool identifies the producer.
@@ -165,6 +168,18 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return strings.ToValidUTF8(s[:n], "")
+}
+
+// AddSections attaches derived sections and their metric to a report.
+func (rep *Report) AddSections(s []SectionResult) {
+	rep.Sections = s
+	n := map[string]int{SectionReread: 0, SectionUpdated: 0}
+	for _, x := range s {
+		n[x.Status]++
+	}
+	for _, st := range []string{SectionReread, SectionUpdated} {
+		rep.Metrics = append(rep.Metrics, Metric{Name: "docs_impact_sections", Value: float64(n[st]), Labels: map[string]string{"status": st}})
+	}
 }
 
 func metrics(rep *Report) []Metric {

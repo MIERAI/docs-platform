@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/MIERAI/docs-platform/internal/ai"
 	"github.com/MIERAI/docs-platform/internal/config"
 	"github.com/MIERAI/docs-platform/internal/extract/comments"
 	"github.com/MIERAI/docs-platform/internal/extract/golang"
@@ -21,6 +20,8 @@ import (
 	"github.com/MIERAI/docs-platform/internal/extract/shell"
 	"github.com/MIERAI/docs-platform/internal/extract/yamlcfg"
 	"github.com/MIERAI/docs-platform/internal/findings"
+	"github.com/MIERAI/docs-platform/internal/instance"
+	"github.com/MIERAI/docs-platform/internal/judge"
 	"github.com/MIERAI/docs-platform/internal/match"
 	"github.com/MIERAI/docs-platform/internal/model"
 	"github.com/MIERAI/docs-platform/internal/plugin"
@@ -205,9 +206,14 @@ func repoName(o Options) string {
 	if o.RepoName != "" {
 		return o.RepoName
 	}
-	abs, err := filepath.Abs(o.Root)
+	return RepoName(o.Root)
+}
+
+// RepoName is the default logical repository name: the directory name.
+func RepoName(root string) string {
+	abs, err := filepath.Abs(root)
 	if err != nil {
-		return filepath.Base(o.Root)
+		return filepath.Base(root)
 	}
 	return filepath.Base(abs)
 }
@@ -223,8 +229,11 @@ func gaps(g []repo.Gap) []findings.Gap {
 // AuditOptions of one semantic audit (layer ④c).
 type AuditOptions struct {
 	Options
-	// Provider overrides audit.ai.provider from the configuration ("none" or "ollama").
-	Provider string
+	// InstanceFile is the instance configuration (docs-platform/instance/v1): judge provider,
+	// model, budget and data classification. "" = no model.
+	InstanceFile string
+	// NoModel forces deterministic checks only, whatever the instance configures.
+	NoModel bool
 	// MaxQuestions bounds the claims put to the judge model.
 	MaxQuestions int
 }
@@ -248,9 +257,12 @@ func Audit(ctx context.Context, o AuditOptions) (*AuditResult, error) {
 	if err != nil {
 		return nil, err //nolint:wrapcheck // already descriptive
 	}
-	judge, err := newJudge(cfg.Audit, o.Provider)
+	g, err := NewJudge(o.InstanceFile, "judge", o.NoModel)
 	if err != nil {
 		return nil, err
+	}
+	if g != nil {
+		defer func() { _ = g.Close() }()
 	}
 	r, err := repo.Open(o.Root, cfg.Exclude)
 	if err != nil {
@@ -262,7 +274,7 @@ func Audit(ctx context.Context, o AuditOptions) (*AuditResult, error) {
 	}
 	inv := scan.Run(r, exts, scan.Options{Docs: cfg.Docs})
 	res, err := semantic.Run(ctx, r, inv, semantic.Options{
-		StaleCommits: cfg.Audit.StaleCommits, Judge: judge, MaxQuestions: o.MaxQuestions,
+		StaleCommits: cfg.Audit.StaleCommits, Judge: g, MaxQuestions: o.MaxQuestions, Repo: repoName(o.Options),
 		Suppressed: suppressedLines(inv),
 	})
 	if err != nil {
@@ -271,8 +283,8 @@ func Audit(ctx context.Context, o AuditOptions) (*AuditResult, error) {
 	tools := plugin.Versions(exts)
 	tools["semantic"] = semantic.Version
 	name := "none"
-	if judge != nil {
-		name = judge.Name() + ":" + judge.Model()
+	if g != nil {
+		name = g.Name()
 		tools["judge"] = name + " " + semantic.PromptHash()
 	}
 	doc := findings.BuildSemantic(findings.Params{
@@ -282,20 +294,29 @@ func Audit(ctx context.Context, o AuditOptions) (*AuditResult, error) {
 	return &AuditResult{Document: doc, Stats: res.Stats, Judge: name}, nil
 }
 
-func newJudge(a config.Audit, override string) (ai.Asker, error) {
-	provider := a.AI.Provider
-	if override != "" {
-		provider = override
+// NewJudge returns the guarded provider of task ("judge" or "draft") from the instance
+// configuration, or nil when none is configured (or noModel is set).
+func NewJudge(instanceFile, task string, noModel bool) (*judge.Guard, error) {
+	if noModel {
+		return nil, nil
 	}
-	j, err := ai.NewAsker(provider, ai.OllamaConfig{
-		Endpoint: a.AI.Endpoint, Model: a.AI.Model, Timeout: time.Duration(a.AI.TimeoutSeconds) * time.Second,
-		Retries: a.AI.Retries, MaxConcurrency: a.AI.MaxConcurrency, MaxRequests: a.AI.MaxRequests,
-		Seed: a.AI.Seed, NumCtx: a.AI.NumCtx,
-	})
+	in, err := instance.Load(instanceFile)
 	if err != nil {
-		return nil, fmt.Errorf("audit judge: %w", err)
+		return nil, err //nolint:wrapcheck // already descriptive
 	}
-	return j, nil
+	t := in.AI.Judge
+	if task == "draft" {
+		t = in.AI.Draft
+	}
+	p, err := judge.New(t)
+	if err != nil {
+		return nil, fmt.Errorf("%s provider: %w", task, err)
+	}
+	g, err := judge.NewGuard(task, p, in)
+	if err != nil {
+		return nil, fmt.Errorf("%s provider: %w", task, err)
+	}
+	return g, nil
 }
 
 func suppressedLines(inv *scan.Inventory) map[string]bool {

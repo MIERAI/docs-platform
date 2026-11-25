@@ -1,0 +1,289 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/MIERAI/docs-platform/contracts/instance-v1.schema.json",
+  "title": "docs-platform/instance/v1",
+  "description": "Per-installation settings, kept outside every repository (YAML or JSON): which provider and model answer each task, budgets, where credentials live, how inspected content is classified, and the thresholds that decide when a provider replaces another. A repository's .docsp.yaml can never select a model.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "type": "integer",
+      "enum": [
+        1
+      ]
+    },
+    "ai": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "judge": {
+          "$ref": "#/$defs/task",
+          "description": "Does this evidence / change contradict this doc section? (yes/no/unknown + verbatim quote)"
+        },
+        "draft": {
+          "$ref": "#/$defs/task",
+          "description": "Propose a doc edit; only after the judge said yes; a human reviews it."
+        }
+      }
+    },
+    "classification": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "default": {
+          "$ref": "#/$defs/class"
+        },
+        "repos": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/class"
+          }
+        },
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "repo",
+              "glob",
+              "class"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "repo": {
+                "type": "string"
+              },
+              "glob": {
+                "type": "string"
+              },
+              "class": {
+                "$ref": "#/$defs/class"
+              }
+            }
+          }
+        }
+      }
+    },
+    "eval": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "judge": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "min_precision": {
+              "type": "number"
+            },
+            "min_recall": {
+              "type": "number"
+            },
+            "max_unknown_rate": {
+              "type": "number"
+            },
+            "max_quote_rejection_rate": {
+              "type": "number"
+            },
+            "max_usd_per_item": {
+              "type": "number"
+            },
+            "max_p50_latency_ms": {
+              "type": "integer"
+            }
+          }
+        },
+        "draft": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "min_supported_rate": {
+              "type": "number"
+            },
+            "min_similarity": {
+              "type": "number"
+            },
+            "max_usd_per_item": {
+              "type": "number"
+            },
+            "max_p50_latency_ms": {
+              "type": "integer"
+            }
+          }
+        }
+      }
+    },
+    "prices": {
+      "type": "object",
+      "description": "USD per million tokens by model id; overrides the built-in list prices used for estimates.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "input": {
+            "type": "number"
+          },
+          "output": {
+            "type": "number"
+          },
+          "cache_read": {
+            "type": "number"
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "class": {
+      "type": "string",
+      "enum": [
+        "public",
+        "private"
+      ]
+    },
+    "task": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "provider": {
+          "type": "string",
+          "enum": [
+            "none",
+            "ollama",
+            "claude-code",
+            "anthropic",
+            "exec"
+          ]
+        },
+        "model": {
+          "type": "string"
+        },
+        "effort": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ]
+        },
+        "timeout_seconds": {
+          "type": "integer"
+        },
+        "max_concurrency": {
+          "type": "integer"
+        },
+        "max_output_tokens": {
+          "type": "integer"
+        },
+        "budget": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "max_requests": {
+              "type": "integer"
+            },
+            "max_usd": {
+              "type": "number"
+            },
+            "max_tokens": {
+              "type": "integer"
+            }
+          }
+        },
+        "claude_code": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "program": {
+              "type": "string"
+            },
+            "pass_env": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "anthropic": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "program": {
+              "type": "string"
+            },
+            "api_key_file": {
+              "type": "string"
+            },
+            "api_key_env": {
+              "type": "string"
+            },
+            "max_retries": {
+              "type": "integer"
+            },
+            "fallbacks": {
+              "type": "string",
+              "enum": [
+                "default",
+                "none"
+              ]
+            }
+          }
+        },
+        "ollama": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "endpoint": {
+              "type": "string"
+            },
+            "seed": {
+              "type": "integer"
+            },
+            "num_ctx": {
+              "type": "integer"
+            },
+            "num_predict": {
+              "type": "integer"
+            },
+            "retries": {
+              "type": "integer"
+            }
+          }
+        },
+        "exec": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "command": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "local": {
+              "type": "boolean"
+            },
+            "pass_env": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "modes": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "snippet",
+                  "agentic"
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

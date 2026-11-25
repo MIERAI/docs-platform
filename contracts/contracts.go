@@ -30,3 +30,29 @@ var Impact []byte
 //
 //go:embed config-v1.schema.json
 var Config []byte
+
+// JudgeRequest is docs-platform/judge/v1 (request): one question for a model provider.
+//
+//go:embed judge-v1-request.schema.json
+var JudgeRequest []byte
+
+// JudgeResponse is docs-platform/judge/v1 (response): a provider's answer.
+//
+//go:embed judge-v1-response.schema.json
+var JudgeResponse []byte
+
+// Instance is docs-platform/instance/v1: per-installation settings (providers, budgets,
+// classification, switching thresholds).
+//
+//go:embed instance-v1.schema.json
+var Instance []byte
+
+// EvalResult is docs-platform/eval/v1: the scores of one provider on a frozen eval set.
+//
+//go:embed eval-v1.schema.json
+var EvalResult []byte
+
+// JudgeTools is docs-platform/judge-tools/v1: the read-only tools of the agentic judge mode.
+//
+//go:embed judge-tools-v1.schema.json
+var JudgeTools []byte

@@ -1,0 +1,237 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/MIERAI/docs-platform/contracts/judge-v1-request.schema.json",
+  "title": "docs-platform/judge/v1 request",
+  "description": "One small, verifiable question (or one draft request) for a model. docs-platform builds it; a provider (built in, or any external program speaking this contract on stdin/stdout as JSON Lines) answers it with a judge/v1 response. Everything under claim and evidence is untrusted repository content: data, never instructions.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "id",
+    "task",
+    "claim",
+    "evidence",
+    "require_quote",
+    "prompt",
+    "limits"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^1\\.[0-9]+$"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._:-]{1,128}$",
+      "description": "Echoed in the response; unique within a run."
+    },
+    "task": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "claim_contradiction",
+            "claim_incomplete",
+            "change_contradiction",
+            "draft_edit"
+          ],
+          "description": "claim_contradiction: does the evidence contradict the claim? claim_incomplete: does the evidence show members/steps the claim omits? change_contradiction: does this code change make the doc section wrong? draft_edit: propose a corrected text for the claim (only after a judge said yes)."
+        },
+        "question": {
+          "type": "string",
+          "maxLength": 2000
+        }
+      }
+    },
+    "claim": {
+      "type": "object",
+      "required": [
+        "text",
+        "path"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "repo": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "path": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "line": {
+          "type": "integer"
+        },
+        "text": {
+          "type": "string",
+          "maxLength": 20000
+        }
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/evidence"
+      }
+    },
+    "require_quote": {
+      "type": "boolean",
+      "description": "true: a yes verdict must carry one line copied verbatim from the evidence; the core rejects the answer otherwise."
+    },
+    "prompt": {
+      "type": "object",
+      "required": [
+        "version",
+        "hash",
+        "system",
+        "user",
+        "reply_schema"
+      ],
+      "additionalProperties": false,
+      "description": "The exact prompt the core wants sent, so every provider is evaluated on the same text. A provider may add transport framing but must not change the meaning.",
+      "properties": {
+        "version": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "hash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{16}$"
+        },
+        "system": {
+          "type": "string",
+          "maxLength": 20000
+        },
+        "user": {
+          "type": "string",
+          "maxLength": 200000
+        },
+        "reply_schema": {
+          "type": "object",
+          "description": "JSON Schema of the model's answer object (structured output)."
+        }
+      }
+    },
+    "model": {
+      "type": "string",
+      "maxLength": 200,
+      "description": "Model id from instance configuration; a provider may ignore it if configured otherwise."
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_output_tokens": {
+          "type": "integer"
+        },
+        "timeout_seconds": {
+          "type": "integer"
+        },
+        "budget_remaining_usd": {
+          "type": "number",
+          "description": "The provider must refuse (error.code budget) rather than send a request whose worst-case cost exceeds this."
+        },
+        "budget_remaining_tokens": {
+          "type": "integer"
+        }
+      }
+    },
+    "dry_run": {
+      "type": "boolean",
+      "description": "true: do not call any model; return verdict unknown with usage.estimated = true (token and cost estimate)."
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "snippet",
+        "agentic"
+      ],
+      "description": "snippet (default): the evidence is in the request. agentic: the provider explores the inspected worktree with the read-only tools of docs-platform/judge-tools/v1 (contracts/judge-tools-v1.schema.json), which the CORE executes: the provider writes tool_call lines on stdout and reads tool_result lines on stdin before its final response. evidence may then be empty."
+    },
+    "tools": {
+      "type": "object",
+      "required": [
+        "contract",
+        "allowed",
+        "limits"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "contract": {
+          "type": "string",
+          "enum": [
+            "judge-tools/v1"
+          ]
+        },
+        "allowed": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "list_dir",
+              "read_file",
+              "grep",
+              "git_log",
+              "git_show"
+            ]
+          }
+        },
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "max_steps": {
+              "type": "integer"
+            },
+            "max_result_bytes": {
+              "type": "integer"
+            },
+            "max_total_bytes": {
+              "type": "integer"
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "evidence": {
+      "type": "object",
+      "required": [
+        "id",
+        "path",
+        "text"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^E[0-9]{1,3}$"
+        },
+        "repo": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "path": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "from": {
+          "type": "integer"
+        },
+        "to": {
+          "type": "integer"
+        },
+        "text": {
+          "type": "string",
+          "maxLength": 50000
+        }
+      }
+    }
+  }
+}

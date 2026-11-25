@@ -46,21 +46,9 @@ type Config struct {
 type Audit struct {
 	// StaleCommits is how many later commits to a claim's code make the claim "stale".
 	StaleCommits int `yaml:"stale_commits"`
-	AI           AI  `yaml:"ai"`
-}
-
-// AI selects the judge model. Only local providers exist; the endpoint belongs in instance
-// configuration, never in the product.
-type AI struct {
-	Provider       string `yaml:"provider"` // none (default) or ollama
-	Endpoint       string `yaml:"endpoint"`
-	Model          string `yaml:"model"`
-	TimeoutSeconds int    `yaml:"timeout_seconds"`
-	Retries        int    `yaml:"retries"`
-	MaxConcurrency int    `yaml:"max_concurrency"`
-	MaxRequests    int    `yaml:"max_requests"`
-	Seed           int    `yaml:"seed"`
-	NumCtx         int    `yaml:"num_ctx"`
+	// AI is rejected: providers, models and budgets belong to the instance configuration
+	// (docs-platform/instance/v1), never to a repository.
+	AI any `yaml:"ai"`
 }
 
 // Extractors enables/disables plugins and declares external ones.
@@ -116,7 +104,7 @@ func Defaults() *Config {
 		MinConfidence: "medium",
 		Owner:         "unassigned",
 		Impact:        Impact{Trailer: "Docs-Not-Needed"},
-		Audit:         Audit{StaleCommits: 2, AI: AI{Provider: "none", Retries: 2}},
+		Audit:         Audit{StaleCommits: 2},
 	}
 }
 
@@ -216,20 +204,11 @@ func (c *Config) validateGlobs() []error {
 
 func (a Audit) validate() []error {
 	var errs []error
-	switch a.AI.Provider {
-	case "", "none":
-	case "ollama":
-		if a.AI.Endpoint == "" || a.AI.Model == "" {
-			errs = append(errs, errors.New("audit.ai: provider ollama needs endpoint and model"))
-		}
-	default:
-		errs = append(errs, fmt.Errorf("audit.ai.provider %q: want none or ollama (only local models are supported)", a.AI.Provider))
+	if a.AI != nil {
+		errs = append(errs, errors.New("audit.ai: model providers are configured in the instance configuration (docsp ... -instance FILE), not in a repository"))
 	}
 	if a.StaleCommits < 1 {
 		errs = append(errs, errors.New("audit.stale_commits must be at least 1"))
-	}
-	if a.AI.MaxConcurrency < 0 || a.AI.MaxRequests < 0 || a.AI.TimeoutSeconds < 0 || a.AI.Retries < 0 {
-		errs = append(errs, errors.New("audit.ai: limits must not be negative"))
 	}
 	return errs
 }

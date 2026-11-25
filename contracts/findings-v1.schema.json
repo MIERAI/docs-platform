@@ -237,7 +237,8 @@
             "outside_repo",
             "residue",
             "impact_unaccompanied",
-            "semantic"
+            "semantic",
+            "backlog"
           ]
         },
         "ref_kind": {
@@ -265,7 +266,8 @@
             "executable",
             "impact",
             "ai_audit",
-            "semantic"
+            "semantic",
+            "review"
           ]
         },
         "locations": {
@@ -321,6 +323,14 @@
         "votes": {
           "type": "string",
           "description": "self-consistency result, e.g. \"2/3 yes\" (model rule only)"
+        },
+        "actual": {
+          "type": "string",
+          "description": "backlog only: what the code actually does, as written by the reviewer"
+        },
+        "gt_type": {
+          "type": "string",
+          "description": "backlog only: the reviewer's defect type (wrong, obsolete, missing)"
         }
       }
     }

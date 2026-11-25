@@ -1,6 +1,6 @@
 # docs-platform 设计书
 
-状态：v0.2（层③ 引用检查 + 层④a PR 影响分析 + 层④c 语义审计已实现；其余为设计）
+状态：v0.3（层③ 引用检查、层④a 变更时影响推导、层④c 语义审计、模型契约 judge/v1 + 5 种 provider + 按任务路由 + 数据分级、模型评测、历史回放基准、积压导入已实现；agentic 判定模式只有契约；其余为设计）
 读者：产品负责人（本人）。面向用户的说明见 [README](../README.md)，契约细节见 [contracts.md](contracts.md)。
 
 ---
@@ -21,12 +21,12 @@
 | 原则 | 在本产品中的落地 |
 |---|---|
 | 通用核心 + 插件 | 核心只认识 Symbol / Reference / Mention / Finding；语言、文档格式、代码托管、AI 厂商都是插件（`plugin.Extractor`、外部抽取器、`ai.Provider`） |
-| 版本化、语言中立的契约 | `contracts/` 下 4 份 JSON Schema：findings/v1（与 security-platform 共用）、extract/v1、impact/v1、config/v1；各部件只经契约耦合 |
+| 版本化、语言中立的契约 | `contracts/` 下的 JSON Schema：findings/v1（与 security-platform 共用）、extract/v1、impact/v1、config/v1、judge/v1、judge-tools/v1、instance/v1、eval/v1；各部件只经契约耦合 |
 | 各部件独立升级 | 每个抽取器有自己的 name/version，写入 findings 的 `collector.tools`；外部抽取器是独立进程，任意语言 |
 | 产品仓库不含环境信息 | 仓库里没有任何主机、仓库名、人名；`related_repos`、denylist、基准用的实例配置都在仓库外 |
-| "不优秀就活不长" | golangci-lint 严格配置（函数 ≤50 行、认知复杂度、gosec、wrapcheck…）、表驱动测试、每个外部输入解析器都有 fuzz、golden 测试、契约测试、govulncheck、唯一第三方依赖 yaml |
+| "不优秀就活不长" | golangci-lint 严格配置（函数 ≤50 行、认知复杂度、gosec、wrapcheck…）、表驱动测试、每个外部输入解析器都有 fuzz、golden 测试、契约测试、govulncheck；核心唯一第三方依赖 yaml（Anthropic SDK 在独立模块 `providers/anthropic`） |
 | 平台自身安全 | 对被检仓库只读（`os.Root` 防越界读、git 子命令白名单、无 shell、无执行仓库内容）；私密文件只读 0600；输出文件 0600 |
-| AI 只提议 | `ai.Provider` 只返回 Proposal；默认 provider = `none`；状态变更（关闭/接受 finding、合并 PR）只有人能做 |
+| AI 只提议、模型可换 | 模型只经 judge/v1 契约接入；provider/模型/预算只来自实例配置，换模型 = 改配置；默认 `none`；判定与草稿都是提议；状态变更（关闭/接受 finding、合并 PR）只有人能做 |
 
 ## 3. 四层检测
 
@@ -35,7 +35,7 @@
 | ① 生成的参考文档 | CLI 帮助、配置项表、指标表、环境变量表由代码生成，CI 比对 | 确定性（diff） | 每个 PR | 设计 |
 | ② 可执行文档 | 文档里的 shell 代码块在 CI 沙箱里真跑 | 确定性（退出码/输出） | 每个 PR / 每夜 | 设计 |
 | ③ 引用检查 | 文档提到的标识符必须存在；公开符号必须有文档 | 确定性（符号表对账）+ 置信度 | 每个 PR + 定期 | **已实现** |
-| ④ 语义 | (a) PR 影响分析 (b) 合并后 AI 提议文档 PR (c) 定期语义审计 → findings | (a) 确定性映射；(b) AI 提议 + 人审；(c) 确定性语义检查 + 本地弱模型的可验证小问题 + 人审 | PR / 合并后 / 每周 | **(a)(c) 已实现**；(b) 接口 |
+| ④ 语义 | (a) 变更时影响：从引用图推导该重读的段落 (b) 模型判定"这次变更是否与该段矛盾"+ 草拟修改 (c) 定期语义审计 → findings | (a) 确定性；(b) 模型提议 + 人审；(c) 确定性语义检查 + 可验证的模型小问题 + 人审 | PR / 合并后 / 每周 | **(a)(b)(c) 已实现**（b 为 snippet 模式；agentic 模式待实验结论） |
 
 分层的理由：①②③④a 是确定性的，可以做 CI 闸门；④b/④c 只能产出"提议"，进台账但不阻断。基准结果（§9）显示 ~85% 的人工审出问题属于语义层，这正是为什么 ④ 不能省，也是为什么 ③ 必须把误报压低——否则闸门会被关掉。
 
@@ -82,27 +82,32 @@
 - **残留词检查（residue）**：实例私有的 denylist（0600 文件，不进产品仓库）列出"公开仓库里绝不能出现"的词：无关/私有项目名、内部主机名、个人路径。逐行、大小写不敏感、词边界匹配 → `docs.residue.term`。这是对"public 仓库提到外部项目名"这类人工审出问题的确定性兜底。
 - **注释也是文档**：`comments` 抽取器把 Go/shell/Python/YAML/Terraform/JS 注释里的内联代码和路径当作文档引用检查（基准里 1/3 的问题出在注释里）。注释里的 token 不计入"文档已提及"（反向检查只认真正的文档）。
 
-### 3.4 层④a PR 影响分析（已实现）
+### 3.4 层④a 变更时影响（已实现：`docsp impact`）
 
-- `.docsp.yaml` 的 `impact.rules`：`{name, code: [globs], docs: [globs]}`。
-- `docsp impact --base --head`：`git diff --name-only base...head`（合并基语义，等同 PR 视图）；规则命中代码但未命中文档 → `missing_docs` → 失败。
-- 豁免：提交信息或 PR 描述里的 trailer `Docs-Not-Needed: <理由>`（键名可配）。**没有理由的 trailer 不算豁免**；豁免理由写进 impact/v1 报告，可审计。
-- 指标：每次运行输出 `docs_impact_changes{impacting, with_docs}`，聚合后就是 SLI"影响文档的 PR 中带文档（或带理由豁免）的比例"。
-- 设计取舍：映射是**声明式**的而不是"AI 判断这个 PR 要不要改文档"，因为闸门必须可预测、可复现、可被开发者本地预演；AI 的判断放到 ④b 做提议。
+产品负责人的方向（决定 B）：**在变更发生时发现漂移，而不是事后去找**；用历史回放来度量。
 
-### 3.5 层④b 合并后 AI 提议文档 PR（设计）
+- **引用图**：层③ 已经知道每个文档段落提到了什么。段落 = Markdown 的标题段（到下一个任意级标题为止）或代码里一段连续注释。每段挂上它提到的 Reference（路径、环境变量、flag、命令、配置键、指标、make 目标、形似标识符的 term）。
+- **推导**（`internal/impact/derive.go`，纯函数）：`git diff -U0 base...head` → 变更文件集合 + 变更行（增删两侧）上的标识符 token。段落命中条件：提到的路径与变更文件相等 / 相对文档目录相等 / 后缀相等 / 是其父目录 / 文件名相同（仅带扩展名的名字）；或提到的标识符出现在**另一个文件**的变更行上。输出 `sections[]`：`reread`（段落没改，需要重读）或 `updated`（这次变更已改了该段），附原因（"`APP_PORT` 在 `cmd/tool.go:5` 变了"）。**不需要手写映射。**
+- **显式规则仍是闸门**：`.docsp.yaml` 的 `impact.rules`（code globs → docs globs）+ 带理由的 `Docs-Not-Needed` trailer 决定 pass/fail；规则命中的文档以整篇条目（原因 `rule`）加进段落列表。推导结果是建议性的，不改变 verdict——闸门必须可预测；推导的价值先由历史回放证明（§9.2），之后再决定是否升级为闸门。
+- **模型（可选）**：实例配置里有 judge 时，对每个 `reread` 段落（上限 `--max-judge`，默认 20）问"这次变更是否让该段某句话错误/过时？"，证据 = 原因文件的增删行；判定 yes 且引用核验通过 → 交给 draft provider 起草修改。都只写进 impact/v1 报告，从不应用。
+- 指标：`docs_impact_changes{impacting, with_docs}`（规则 SLI）+ `docs_impact_sections{status}`（每次变更要重读多少段，代价侧）。
 
-触发：PR 合并且 impact 结果为 `waived` 或规则未覆盖但 diff 触及 public symbol（extract/v1 前后对比得到"符号增删改"）。
+### 3.5 层④b 模型层（已实现：契约 + provider + 路由 + 分级 + 评测）
 
-1. 确定性部分先算好上下文：变更的符号（前后两次 extract 的差集）、映射到的文档段落、层③ 在新 head 上的 findings。
-2. `ai.Provider.Propose` 只拿到上述**数据**（仓库内容视为不可信数据，不是指令；提示注入在威胁模型内），返回 Proposal{path, unified diff, rationale, evidence}。
-3. 由代码托管插件（GitHub/Gitea 适配器）以**草稿 PR**形式提交到独立分支，标注"AI 提议，需人审"。适配器凭据来自 0600 文件或环境变量。
-4. 提议本身再跑一遍层③：若引入新的 unresolved 引用，直接丢弃，不打扰人。
-5. 永不自动合并；台账里 AI 不能把任何 finding 标为 fixed/accepted。
+产品负责人的决定 A：**目前判定用强模型（Claude），但模型部分必须随时可换**——本地模型够强时只改配置即可替换。设计：
+
+1. **契约 judge/v1**（`contracts/judge-v1-*.schema.json`，语言中立、版本化）：请求 = 任务类型（`claim_contradiction` / `claim_incomplete` / `change_contradiction` / `draft_edit`）、断言、带 id 的证据片段（E1…）、必须的逐字引用、核心给定的**完整提示词**（版本 + 16 位哈希 + system + user + 回答的 JSON Schema，所有 provider 吃同一段文字，评测才公平）、模型、限额（剩余 USD/token：provider 必须拒绝而不是超支）、dry_run；1.1 增加 `mode: snippet | agentic` 与工具声明。回答 = verdict（yes/no/unknown）、quote、confidence、实际作答的模型 id、prompt_hash、token/成本计量（含 billing: none/api/subscription）、延迟、错误码；1.1 增加 agentic 的证据列表 `evidence[{path,line,quote,rev}]` 与工具调用记录 `transcript`。Go 类型在公开包 `judgev1`（只用标准库，外部 provider 可直接 import）。
+2. **Provider 插件**（`internal/judge`）：`none`；`ollama`（本地，拨号时只允许本地地址）；`claude-code`（第一强模型选项：`claude -p` 非交互、argv 无 shell、`--tools ""`、无 MCP/settings/会话落盘、空临时目录、`--json-schema` 结构化输出；凭据完全依赖 CLI 自身登录或 CI 的 `CLAUDE_CODE_OAUTH_TOKEN`（按名透传），docsp 不读不打印不复制）；`anthropic`（第二选项：独立模块 `providers/anthropic` 的 `docsp-judge-anthropic`，官方 Go SDK，经 exec 协议接入，key 只来自 0600 文件或配置里点名的环境变量，HTTP 只允许 `https://api.anthropic.com`）；`exec`（任意讲 judge/v1 JSON Lines 的程序，任何未来的模型/运行时不改产品即可接入；默认视为云端，除非声明 `local: true`）。
+3. **按任务路由**：实例配置 `ai.judge` 与 `ai.draft` 各自独立选择 provider/模型/预算，各自评测、各自切换。draft 只在 judge 判 yes 且引用核验通过之后才调用。仓库的 `.docsp.yaml` 不能选模型（`audit.ai` 现在是错误）。
+4. **Guard**（所有 provider 共用）：数据分级（见 5）→ 预算（请求数/token/USD，发送前按"本请求最坏情况"预判，超出即硬停）→ 调用 → 用 judge/v1 schema 校验回答、核对 id → 计量 → 引用核验（snippet：在某一证据行里逐字出现、长度 ≥10、不是抄断言、与断言有共同词；agentic：每条证据在 worktree 的 path:line±2 找到）→ 核验失败的 yes 降为 unknown 并计入引用拒绝率。
+5. **数据分级（安全）**：实例配置给每个仓库/路径 `public` / `private`（默认 private，路径规则可覆盖仓库）。云端 provider（claude-code、anthropic、未声明 local 的 exec）只能收到 public 内容——在代码里强制：请求被拒绝、计数，审计里生成 `docs.semantic.classification_refused` finding，impact 里在 judgement.error 里说明。agentic 的工具结果同样过分级（私有路径的 read/grep/list 结果不返回）。
+6. **温度**：负责人要求 temperature 0；但当前强模型（Opus 5.5 / Sonnet 5.5）**已不接受采样参数**（发送即 400）。可复现性改由固定提示词 + 结构化回答 + 引用核验 + 冻结评测集保证；ollama 仍用 temperature 0 + 固定 seed。
+7. **默认模型**：实例配置示例用 `claude-opus-5-5`（claude-api 参考的当前默认模型；判定需要读懂叙述与代码的关系，且"不为省钱降级"由负责人决定）。Sonnet 5.5 价格一半，是否换由评测数据决定（§9.3 的估算两者并列）。
+8. **agentic 模式（契约已定，实现待实验）**：试点显示"固定小片段 + yes/no"会饿死强模型（漏判全是"证据不在片段里"），而自由探索的 agent 找到了 147 条 GT。所以 judge/v1 1.1 预留 `mode: agentic`：provider 通过 **judge-tools/v1**（`list_dir`/`read_file`/`grep`/`git_log`/`git_show`）探索仓库，工具**由核心执行**（provider 永远碰不到文件系统）：`os.Root` 限定在被检 worktree、拒绝绝对路径/`..`/`.git`/符号链接越界、单结果 32KiB、每请求 20 步 / 512KiB、未知参数报错、修订号校验防选项注入、私有路径对云端拒绝；exec 协议里 provider 先输出若干 `tool_call` 行、读 `tool_result` 行，最后输出 judge/v1 回答。各 provider 声明自己支持的 mode（目前内置的都只声明 snippet；exec 可在配置里声明 agentic）。最佳 agentic 配置由另一个实验决定，落地后只需实现 provider 端，核心不用改。snippet 模式的提示词不再调优。
 
 ### 3.6 层④c 语义审计（已实现：`docsp audit`）
 
-产品负责人的硬约束：**只用弱的本地模型**（不用强模型/云端）。理由：基准 ground truth 本身就是强 AI 对照代码读文档产出的，用强 AI 复现它什么也证明不了；产品也不能依赖强 AI；代码和文档不得离开负责人的机器。所以设计原则是**确定性部分干重活，模型只回答小而可验证的问题**。
+v0.2 时的约束是"只用本地弱模型"；v0.3 起按决定 A 改为"强模型优先、随时可换"，并由数据分级保证私有内容不出机器（§3.5）。不变的原则：**确定性部分干重活，模型只回答小而可验证的问题**；用强模型对照"强 AI 产出的 GT"得到的只是一致率，不是准确率（§3.7）。
 
 流水线（`internal/semantic`）：
 
@@ -112,10 +117,20 @@
    - value：`value_mismatch`（只认句中代码段点名的键，单位归一后比较；同名键散在 3 个以上文件且无一相等 → 交给模型）、`schedule_mismatch` / `schedule_disabled`（时区换算；cron 被注释掉 = 停用）、`version_unreleased`（HEAD 可达的 tag 之间不存在的版本；之前/之后的版本不报）、`version_mismatch`、`list_incomplete`（列表 ≥60% 是某集合的成员且覆盖集合 ≥50% 才比较；带"例如/等/such as"的列表不比）。
    - state：`state_contradiction`（句子说"还没有/计划"，而句中标识符**在所有定义处**都是这句话写下之后才加进代码的）、`status_stale`（状态行之后，文档引用的代码有 N 次提交且有新文件，或状态行与实现同一个提交合入）、`role_contradiction`（"人写 X" 而 X 下 ≥80% 文件带生成标记）。
    - staleness：`stale_claim`（句子最后一次修改之后，它点名的代码又被改了 ≥N 次；`git log -L` / `git log A..HEAD`，经白名单 git 包装器）。弱信号，只给 low。
-4. **模型**（`ai.Provider` `ollama`，可选）：只问一个问题"证据是否直接与断言矛盾？yes/no/unknown"，结构化输出（JSON schema），必须附上从证据里**逐字复制**的一行；引用在片段里找不到（或只是抄了断言本身）→ 丢弃。自洽：最多 3 次、片段顺序不同，2 票 yes 才算（全票 → medium，2/3 → low），其余为 unknown，不报。temperature 0、固定 seed、think 关、每次运行请求预算、并发上限（实例配置，默认 2）、重试、超时。HTTP 客户端在拨号时检查解析后的地址，只允许 loopback / 私网 / CGNAT（tailnet）/ link-local——配错端点也不会把仓库内容发到公网。
+4. **模型**（实例配置的 judge，经 §3.5 的 Guard，可选）：只问一个问题"证据是否直接与断言矛盾？yes/no/unknown"（judge/v1 `claim_contradiction`），结构化输出，必须附上从证据里**逐字复制**的一行；引用核验不过 → 丢弃。自洽：最多 3 次、片段顺序不同，2 票 yes 才算（全票 → medium，2/3 → low），其余为 unknown，不报。私有内容 + 云端 provider → 不发送，报 `classification_refused`。
 5. **findings**：collector `docs-audit`，check `docs.semantic.<rule>`，`attributes.docs.detector_layer = semantic`，带 rule / sub_layer / claim / quote（模型：model + prompt_hash + votes）和证据位置；`needs_human = true`，severity 最高 low。
 
 问题优先级（预算有限时先问哪些）：陈旧且带状态词或数值的句子 → 状态词 → 其他陈旧句子 → 数值与列表。
+
+### 3.7 模型评测（已实现：`docsp eval-model`）
+
+- **冻结评测集**：`bench replay -eval-out` 从历史一次性生成（JSON Lines，sha256 记进每次结果），之后不改。来源两类：
+  - 正例（期望 yes）：147 条 GT 中能定位到文档行与证据的 129 条，断言 = 固定版本上的那一行，证据 = GT 的 evidence_paths 在固定版本上的片段（按断言用词取窗口，≤3 段 × 2.4KB）。**标签 = "与强 AI 审计一致"，不是准确率**：GT 是强 AI 做的，强模型在它上面得分会虚高，报告里每次都写明。
+  - 反例（期望 no）：同一行，对照**写下这一行的那次提交**时的同一批证据文件（假设作者写时与代码一致）——94 条（证据文件当时不存在的跳过）。
+  - draft 任务：129 条正例的断言 + 证据，参考答案 = GT 的 fix + actual（只用于打分，从不发给模型）。
+- **打分（按任务分开）**：judge → precision、recall、unknown 率、引用拒绝率、按 dev/test 拆分；draft → "无捏造率"（草稿里每个标识符/路径/数字都必须出现在断言或证据里）+ 与参考修复的词重叠（廉价的采纳代理）；两者都有 token、成本、每条成本、p50 延迟。结果写成 eval/v1 JSON，按时间比较。
+- **切换规则**：候选 provider 在冻结集上满足实例配置里该任务的全部阈值（`eval.judge`：min_precision / min_recall / max_unknown_rate / max_quote_rejection_rate / max_usd_per_item / max_p50_latency_ms；`eval.draft`：min_supported_rate / min_similarity / 成本 / 延迟）且没有未答项，才可替换当前 provider；不满足退出码 1。生产切换只改实例配置；`--model/--provider` 只用于评测候选。
+- `--dry-run` 不调用任何模型，按提示词长度 + provider 固定开销 + 输出假设（judge 700、draft 1000 token，含自适应思考）估算调用数、token 与成本。
 
 ## 4. 架构
 
@@ -169,7 +184,9 @@ type Extractor interface {
 | 命令 | 作用 | 退出码 |
 |---|---|---|
 | `docsp check` | 层③ → findings/v1 + 摘要 | 0；`--fail-on` 命中 → 1；用法/运行错误 → 2 |
-| `docsp impact` | 层④a → impact/v1 | 通过/豁免/不适用 → 0；缺文档 → 1 |
+| `docsp impact` | 层④a → impact/v1（规则闸门 + 推导的重读段落 + 可选判定/草稿） | 通过/豁免/不适用 → 0；缺文档 → 1 |
+| `docsp eval-model` | 按任务在冻结集上评测 provider → eval/v1；`--dry-run` 估算 | 达到切换阈值/估算 → 0；未达到 → 1；错误 → 2 |
+| `docsp import-findings` | 已审阅的积压（GT 格式 JSONL）→ findings/v1（collector `docs-backlog`，id 稳定、coverage 为空所以导入永不"修复"任何 finding） | 0 |
 | `docsp audit` | 层④c → findings/v1（提议） | 0（不因 finding 失败）；用法/运行错误 → 2 |
 | `docsp extract` | 输出 extract/v1（调试、写插件） | 0 |
 | `docsp validate` | 校验 findings 文档 | 0 / 1 |
@@ -235,6 +252,11 @@ type Extractor interface {
 | 外部抽取器 | 绝对路径、无 shell、最小环境、超时、输出上限、契约校验 |
 | 秘密泄露 | 秘密/私密文件只读 0600（`internal/secret`）；错误信息不含内容；输出文件 0600 |
 | 提示注入（④b/④c） | 仓库内容是数据不是指令；AI 只产出提议；提议再过层③；状态变更只有人能做 |
+| 私有内容外发到云端模型 | 实例配置分级（默认 private）；Guard 在发送前拒绝含 private 路径的请求并报 finding；agentic 工具结果同样过滤；exec provider 默认视为云端 |
+| 模型凭据泄露 | Anthropic key 只从 0600 文件（否则拒绝）或点名的环境变量读取，不写日志、不回显、错误信息不含 key；claude-code 只用 CLI 自身登录，docsp 不读凭据，CLI 的 stderr 与原始输出不落日志；子进程只拿到 PATH/HOME/USER/TMPDIR 与点名透传的变量 |
+| 模型端点被改向 | Anthropic 客户端的 transport 只放行 `https://api.anthropic.com`，不跟随重定向；ollama 只能拨本地地址 |
+| agentic 模型越界读取 | 工具由核心执行，`os.Root` 限定 worktree，拒绝绝对路径/`..`/`.git`/符号链接越界，大小与步数上限，git 只允许 log/show 且修订号校验 |
+| 成本失控 | 每任务每次运行的硬预算（请求数/token/USD），发送前按最坏情况预判；dry-run 先估算 |
 | findings 本身敏感（私有仓库结构、denylist 命中） | findings 视为私有数据，存放在实例的私有数据仓库，不进产品仓库 |
 
 ## 9. 基准与当前效果（2026-11-25）
@@ -288,6 +310,44 @@ type Extractor interface {
 
 Ground truth 质量抽查（15 条分歧：10 条工具漏掉的 GT + 5 条 GT 未收录的工具 finding，逐条对照代码）：GT 明显错误 1 条（`loadtest/README.md:21` 的项目名在固定版本 25db814 已被删除），可商榷 3 条（hardening.md:153 与 bottlenecks.md:15 是历史记录而非现状陈述；infrastructure-live README.md:39 的"遗漏"属主观完整性），其余 6 条 GT 正确；5 条工具 finding 中 2 条是 GT 漏收的真实漂移（itest.go 注释、storefront 示例 README 的生成物列表漏了 `Dockerfile`），3 条是工具误报。
 
+### 9.2 历史回放：变更发生时有没有标出来（2026-11-25，主指标，与模型无关）
+
+方法（`go run ./bench replay`，provider none，纯确定性）：对每条 GT，`git blame` 找到最后写下那一行文档的提交 Cd；Cd 之后（first-parent）修改过该条 evidence_paths（不含文档本身）的提交 = **致因提交**。每个致因提交都按它自己的 diff、在它自己的树上（`git archive` 物化到临时目录）跑与 `docsp impact` 相同的推导；那一行所在的段落以 `reread` 出现在列表里 = 命中（这次变更自己改过的 `updated` 段不算）。首个致因提交 = "变旧的那一刻"的最佳估计；"任一"给出上界。开发集 api-factory，测试集 gitops-manifests + infrastructure-live（推导规则在看测试集之前已定，未按测试集调过）。
+
+| 切片 | GT 条数 | 可评分 | 无致因提交 | 首个致因提交即标出 | 任一致因提交标出 | 命中经路径 / 标识符 |
+|---|---|---|---|---|---|---|
+| dev（api-factory） | 74 | 60 | 14 | 21/60（35%） | 32/60（53%） | 13 / 19 |
+| **test（gitops + infra，留出）** | 73 | 61 | 12 | **32/61（52%）** | **41/61（67%）** | 29 / 12 |
+| test / wrong | 13 | 10 | 3 | 6/10 | 8/10 | |
+| test / obsolete | 34 | 30 | 4 | 10/30 | 14/30 | |
+| test / missing | 26 | 21 | 5 | 16/21 | 19/21 | |
+
+代价（每次被回放的变更要重读多少段）：dev 81 个提交，平均 36.9 段（中位 18，p90 96），占全部段落的 2.0%（树里平均 2549 段）；test 134 个提交，平均 11.0 段（中位 8，p90 30），占 5.3%（平均 257 段）。随机挑同样多的段落，命中概率 ≈ 2–5%，所以 35–52% 的首提交命中率是实打实的信号。
+
+无致因提交的 26 条单独列出（报告里逐条写原因）：多数是 evidence_paths 只有文档本身（注释类 GT，代码与注释在同一文件）、或证据文件在文档那一行写下之后再没变过（"写下时就是错的"或证据在别处）；1 条 GT 的行号超出文件（`.gitignore:46`，文件只有 40 行）。
+
+解读：
+
+- **变更时检测是可行的**：测试集上一半以上的漂移在"让它变旧的那次提交"就能把正确的段落列出来，不需要模型、不需要手写映射。路径提及是测试集的主要来源（29/41），标识符是开发集的主要来源（19/32）。
+- 召回漏掉的主要是：段落没有提到被改的文件或标识符（叙述性描述、README 第 1 行这种整篇性的"遗漏"）；以及 obsolete 类（测试集 14/30）——文档描述的是"一组东西"，变更新增了一个成员但没出现旧名字。
+- **噪声是 api-factory 的问题**：大仓库里一次变更平均要重读 37 段，p90 近百段，直接做 PR 评论会被忽略。下一步（只在开发集上调）：term 类标识符按 IDF 降权、同一段多理由排序、每次只展示前 N 段。
+- 推导结果目前只作建议；升级为闸门之前，先要在负责人的 PR 上跑 ≥2 周看采纳率。
+
+### 9.3 模型评测就绪度与成本（2026-11-25）
+
+- 冻结集：`<草稿目录>/replay/evalset.jsonl`，judge 223 条（正 129：dev 68 / test 61；反 94：dev 43 / test 51），draft 129 条。
+- 端到端冒烟（claude-code，`claude-opus-5-5`，公开仓库内容，共 4 次真实调用）：1 正 + 1 反判定正确（yes 的引用通过核验），1 条草稿无捏造、与参考修复词重叠 0.33；每次判定实测约 2.1k 输入 / 0.56k 输出 token、6–9.5 秒。
+- 全量估算（`--dry-run`，不调用模型；claude-code 的固定开销按实测 ~1.3k token/次计入；输出假设 judge 700、draft 1000 token）：
+
+| 任务 | 调用数 | 输入 token | 输出 token | Opus 5.5 标价 | Sonnet 5.5 标价 |
+|---|---|---|---|---|---|
+| judge | 223 | 543k | 156k | $5.30 | $2.65 |
+| draft | 129 | 310k | 129k | $3.82 | $1.91 |
+| 合计 | 352 | 853k | 285k | **$9.11** | **$4.56** |
+
+  claude-code 走订阅：不产生 API 账单，但消耗订阅额度（上表为标价折算的名义成本）；anthropic provider 走 API 时少了 CLI 开销，Opus 约 $7.3、Sonnet 约 $3.6。冒烟实测每条判定 $0.025 / 草稿 $0.019，与估算（$0.024 / $0.030）一致或更低。
+- **注意**：这个评测集是 snippet 模式的。§3.5-8 的 agentic 模式落地后，需要用同一批 GT 重建 agentic 版评测集（断言 + worktree 修订号，不带片段）。
+
 ## 10. 路线图
 
 | 阶段 | 内容 | 退出条件 |
@@ -296,7 +356,7 @@ Ground truth 质量抽查（15 条分歧：10 条工具漏掉的 GT + 5 条 GT �
 | P1 | security-platform 合并 findings 1.3 扩展；docs findings 进同一 ledger 与看板；SLO 规则由 slo-platform 生成 | 3 个仓库每日检查 ≥ 2 周，新鲜度 SLO 达标 |
 | P2 | 层① 生成器（CLI flag 表、环境变量表、指标表）；PR 评论适配器（GitHub/Gitea） | 至少 1 个仓库的参考表由生成器维护 |
 | P3 | 层② 可执行文档（一次性容器执行器） | 标注块在 CI 中稳定运行 |
-| P4 | ④b 合并后 AI 提议（草稿 PR）；④c 周期审计 findings（带证据，人确认才计入 SLO）——④c 第一版已实现（§3.6、§9.1） | 在 ground truth 上语义类召回 ≥ 50%，被人采纳率 ≥ 60%（当前测试集 15%，未达到） |
+| P4 | ④b 模型判定 + 草稿（已实现，snippet 模式）；agentic 模式按实验结论实现 provider 端；④c 周期审计 findings——第一版已实现（§3.5–3.7、§9） | 历史回放测试集首提交命中 ≥ 60%（当前 52%）且每次变更重读段数中位 ≤ 10；judge 在冻结集上达到实例配置阈值 |
 | P5 | 更多抽取器（Java/Kotlin、Rust、OpenAPI、Helm 模板引用、Ansible tag）；外部抽取器样例仓库 | 每个新抽取器自带 fixture + fuzz |
 
 ## 11. 待产品负责人决定的事项
@@ -307,6 +367,8 @@ Ground truth 质量抽查（15 条分歧：10 条工具漏掉的 GT + 5 条 GT �
 4. **注释算不算文档**：现在注释里的路径/标识符会被检查（基准里 1/3 的问题在注释里），但也引入了更多 low 置信度噪声。是否保持默认开启？
 5. **闸门阈值**：CI 默认 `fail-on medium`（只挡高置信度的 wrong/obsolete）是否合适？
 6. **残留词 denylist 的存放位置**：放在私有数据仓库（与 findings 同级，0600），由实例配置指向；是否接受？
-7. **AI provider**：已决定——只用本地弱模型（Ollama），产品里没有云端 provider，客户端拒绝非本地地址。待定：每周审计的请求预算（现默认 300 次/仓库）与是否把 `stale_claim` 放进台账（精度 6–20%，建议只做看板信号，不进 SLO）。
+7. **AI provider**：已按决定 A 改为"强模型优先、可换"（§3.5）。待定：(a) 何时跑全量评测（估算见 §9.3，需负责人放行）；(b) judge 的默认模型 Opus 5.5 还是 Sonnet 5.5——等评测数据；(c) anthropic provider 默认开启 server-side refusal fallback（被拒时由其他模型作答，回答里记录实际模型），是否保留；(d) 每周审计的请求预算（默认 300 次/任务）与 `stale_claim` 是否进台账。
+10. **变更时推导何时升级为闸门**：目前只建议；建议在负责人的 PR 上影子运行 ≥2 周、测采纳率后再定。
+11. **积压导入**：147 条 GT 导入共用 ledger 之前需要 findings 1.3（第 1 项）落地；在此之前导入结果只存私有数据仓库。
 9. **④c 的下一步**：P4 退出条件（语义召回 ≥ 50%）用弱模型 + 当前问题形式达不到。可选：(a) 增加确定性规则覆盖（叙述性"过时"大多是"文档描述的计划已合入"——可以用提交信息/PR 标题与文档标题的对应来判定）；(b) 换问题形式（"证据里有没有断言没提到的成员"之类的补全问题，同样要求逐字引用）；(c) 接受 ④c 只是"低成本的提示器"，召回目标下调。
 8. **发布**：仓库何时公开、许可证 Apache-2.0 是否最终确定、模块路径 `github.com/MIERAI/docs-platform` 是否沿用。

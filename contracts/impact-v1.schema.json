@@ -3,36 +3,226 @@
   "$id": "docs-platform/impact/v1",
   "title": "docs-platform PR impact report v1 (one docsp impact run)",
   "type": "object",
-  "required": ["schema_version", "tool", "base", "head", "changed_files", "rules", "verdict"],
+  "required": [
+    "schema_version",
+    "tool",
+    "base",
+    "head",
+    "changed_files",
+    "rules",
+    "verdict"
+  ],
   "properties": {
-    "schema_version": {"type": "string", "pattern": "^1\\.[0-9]+$"},
-    "tool": {"type": "object", "required": ["name", "version"],
-             "properties": {"name": {"type": "string"}, "version": {"type": "string"}}},
-    "base": {"type": "string"},
-    "head": {"type": "string"},
-    "changed_files": {"type": "integer"},
+    "schema_version": {
+      "type": "string",
+      "pattern": "^1\\.[0-9]+$"
+    },
+    "tool": {
+      "type": "object",
+      "required": [
+        "name",
+        "version"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    "base": {
+      "type": "string"
+    },
+    "head": {
+      "type": "string"
+    },
+    "changed_files": {
+      "type": "integer"
+    },
     "rules": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["name", "status"],
+        "required": [
+          "name",
+          "status"
+        ],
         "properties": {
-          "name": {"type": "string"},
-          "status": {"enum": ["not_triggered", "docs_updated", "missing_docs", "waived"]},
-          "code_changed": {"type": "array", "items": {"type": "string"}},
-          "docs_expected": {"type": "array", "items": {"type": "string"}},
-          "docs_changed": {"type": "array", "items": {"type": "string"}}
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "not_triggered",
+              "docs_updated",
+              "missing_docs",
+              "waived"
+            ]
+          },
+          "code_changed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "docs_expected": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "docs_changed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
         }
       }
     },
-    "waiver_reason": {"type": "string", "maxLength": 1000},
-    "verdict": {"enum": ["pass", "fail", "waived", "not_applicable"]},
+    "waiver_reason": {
+      "type": "string",
+      "maxLength": 1000
+    },
+    "verdict": {
+      "enum": [
+        "pass",
+        "fail",
+        "waived",
+        "not_applicable"
+      ]
+    },
     "metrics": {
       "type": "array",
-      "items": {"type": "object", "required": ["name", "value"],
-                "properties": {"name": {"type": "string", "pattern": "^docs_[a-z0-9_]+$"},
-                               "value": {"type": "number"},
-                               "labels": {"type": "object", "additionalProperties": {"type": "string"}}}}
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "value"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^docs_[a-z0-9_]+$"
+          },
+          "value": {
+            "type": "number"
+          },
+          "labels": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "sections": {
+      "type": "array",
+      "description": "(1.1) Doc sections the change affects, derived from layer ③'s reference graph (section → paths and identifiers it mentions) plus explicit rules. Advisory: the verdict is decided by the explicit rules only. judgement/draft appear only when a model is configured and are proposals.",
+      "items": {
+        "type": "object",
+        "required": [
+          "path",
+          "heading",
+          "from",
+          "to",
+          "status",
+          "reasons"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "heading": {
+            "type": "string"
+          },
+          "from": {
+            "type": "integer"
+          },
+          "to": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "reread",
+              "updated"
+            ]
+          },
+          "reasons": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "kind",
+                "subject",
+                "changed"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "path",
+                    "identifier",
+                    "rule"
+                  ]
+                },
+                "subject": {
+                  "type": "string"
+                },
+                "changed": {
+                  "type": "string"
+                },
+                "doc_line": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "judgement": {
+            "type": "object",
+            "required": [
+              "verdict",
+              "model",
+              "prompt_hash"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "verdict": {
+                "type": "string",
+                "enum": [
+                  "yes",
+                  "no",
+                  "unknown"
+                ]
+              },
+              "quote": {
+                "type": "string"
+              },
+              "quote_rejected": {
+                "type": "boolean"
+              },
+              "model": {
+                "type": "string"
+              },
+              "prompt_hash": {
+                "type": "string"
+              },
+              "error": {
+                "type": "string"
+              }
+            }
+          },
+          "draft": {
+            "type": "string"
+          }
+        }
+      }
     }
   }
 }

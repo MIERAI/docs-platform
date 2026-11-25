@@ -1,0 +1,3 @@
+version: 1
+ai:
+  judge: {provider: ollama, model: m}

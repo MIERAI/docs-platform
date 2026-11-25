@@ -4,6 +4,9 @@
 //	docsp impact --base REF [--head REF] [flags] [repo]
 //	                                    layer ④(a) PR impact check → impact/v1 JSON
 //	docsp audit [flags] [repo]          layer ④(c) semantic audit → findings/v1 JSON (proposals)
+//	docsp eval-model -set FILE [flags]  score a model provider per task on a frozen eval set
+//	docsp import-findings -repo-name N FILE.jsonl
+//	                                    reviewed backlog → findings/v1 JSON
 //	docsp extract [repo]                dump what the extractors found (extract/v1)
 //	docsp validate FILE                 validate a findings/v1 document
 //	docsp version
@@ -17,7 +20,7 @@ import (
 )
 
 // version is set at build time (-ldflags "-X main.version=...").
-var version = "0.1.0"
+var version = "0.3.0"
 
 // exit codes.
 const (
@@ -44,6 +47,10 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		code, err = cmdImpact(ctx, args[1:], stdout, stderr)
 	case "audit":
 		code, err = cmdAudit(ctx, args[1:], stdout, stderr)
+	case "eval-model":
+		code, err = cmdEvalModel(ctx, args[1:], stdout, stderr)
+	case "import-findings":
+		code, err = cmdImportFindings(args[1:], stdout, stderr)
 	case "extract":
 		code, err = cmdExtract(args[1:], stdout, stderr)
 	case "validate":
@@ -70,8 +77,11 @@ func usage(w io.Writer) {
 
 commands:
   check      that documentation references exist in code and public symbols are documented
-  audit      semantic audit: claims in the docs vs the code (deterministic checks + optional local judge)
-  impact     check that a change touching mapped code also touches its docs (or carries a waiver)
+  audit      semantic audit: claims in the docs vs the code (deterministic checks + optional judge model)
+  impact     doc sections a change affects (derived from the reference graph) + explicit rules / waivers
+  eval-model score a model provider per task (judge, draft) on a frozen eval set; -dry-run estimates cost
+  import-findings
+             turn a reviewed backlog (JSON Lines) into findings/v1 for the ledger
   extract    print what the extractors found (docs-platform/extract/v1)
   validate   a findings/v1 document
   version    print the version

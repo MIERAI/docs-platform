@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/MIERAI/docs-platform/contracts/judge-tools-v1.schema.json",
+  "title": "docs-platform/judge-tools/v1",
+  "description": "Read-only tools an agentic judge may call. The CORE executes every call (never the provider), confined to the inspected worktree: paths are repository-relative, absolute paths, '..' segments and symlinks out of the tree are refused (os.Root); results are size-capped; git is limited to log and show of validated revisions; private paths are refused for cloud providers (data classification). A provider writes one tool_call per line on stdout and reads one tool_result per line on stdin, then writes its judge/v1 response.",
+  "oneOf_note": "a line is either a toolCall or a toolResult; validate against $defs",
+  "type": "object",
+  "$defs": {
+    "toolCall": {
+      "type": "object",
+      "required": ["type", "id", "call", "tool", "args"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {"type": "string", "enum": ["tool_call"]},
+        "id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]{1,128}$", "description": "the judge request id"},
+        "call": {"type": "string", "pattern": "^[A-Za-z0-9._:-]{1,64}$"},
+        "tool": {"type": "string", "enum": ["list_dir", "read_file", "grep", "git_log", "git_show"]},
+        "args": {"type": "object"}
+      }
+    },
+    "toolResult": {
+      "type": "object",
+      "required": ["type", "id", "call", "ok"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {"type": "string", "enum": ["tool_result"]},
+        "id": {"type": "string"},
+        "call": {"type": "string"},
+        "ok": {"type": "boolean"},
+        "content": {"description": "tool-specific result (see the *Result defs)"},
+        "truncated": {"type": "boolean"},
+        "error": {"type": "string", "maxLength": 500}
+      }
+    },
+    "listDirArgs": {"type": "object", "additionalProperties": false, "properties": {"path": {"type": "string", "description": "'' or '.' = repository root"}}},
+    "listDirResult": {"type": "object", "properties": {"entries": {"type": "array", "items": {"type": "object", "properties": {"name": {"type": "string"}, "type": {"type": "string", "enum": ["file", "dir"]}, "size": {"type": "integer"}}}}}},
+    "readFileArgs": {"type": "object", "required": ["path"], "additionalProperties": false, "properties": {"path": {"type": "string"}, "from_line": {"type": "integer"}, "to_line": {"type": "integer"}}},
+    "readFileResult": {"type": "object", "properties": {"path": {"type": "string"}, "from_line": {"type": "integer"}, "to_line": {"type": "integer"}, "total_lines": {"type": "integer"}, "lines": {"type": "array", "items": {"type": "string"}}}},
+    "grepArgs": {"type": "object", "required": ["pattern"], "additionalProperties": false, "properties": {"pattern": {"type": "string", "description": "RE2 regular expression"}, "path": {"type": "string", "description": "file or directory prefix; '' = whole tree"}, "max_results": {"type": "integer"}}},
+    "grepResult": {"type": "object", "properties": {"matches": {"type": "array", "items": {"type": "object", "properties": {"path": {"type": "string"}, "line": {"type": "integer"}, "text": {"type": "string"}}}}}},
+    "gitLogArgs": {"type": "object", "additionalProperties": false, "properties": {"path": {"type": "string"}, "max_count": {"type": "integer"}}},
+    "gitLogResult": {"type": "object", "properties": {"commits": {"type": "array", "items": {"type": "object", "properties": {"sha": {"type": "string"}, "date": {"type": "string"}, "subject": {"type": "string"}}}}}},
+    "gitShowArgs": {"type": "object", "required": ["rev"], "additionalProperties": false, "properties": {"rev": {"type": "string"}, "path": {"type": "string", "description": "with path: the file at rev (lines); without: the commit's message and diff"}}},
+    "gitShowResult": {"type": "object", "properties": {"rev": {"type": "string"}, "path": {"type": "string"}, "lines": {"type": "array", "items": {"type": "string"}}, "text": {"type": "string"}}}
+  }
+}

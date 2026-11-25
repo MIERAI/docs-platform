@@ -31,13 +31,15 @@ const (
 	RuleRoleContradiction  = "role_contradiction"
 	RuleStaleClaim         = "stale_claim"
 	RuleModelContradiction = "model_contradiction"
+	// RuleClassificationRefused: private content was not sent to a cloud judge.
+	RuleClassificationRefused = "classification_refused"
 )
 
 var subLayerOf = map[string]string{
 	RuleValueMismatch: SubValue, RuleScheduleMismatch: SubValue, RuleScheduleDisabled: SubValue,
 	RuleVersionUnreleased: SubValue, RuleVersionMismatch: SubValue, RuleListIncomplete: SubValue,
 	RuleStateContradiction: SubState, RuleStatusStale: SubState, RuleRoleContradiction: SubState,
-	RuleStaleClaim: SubStaleness, RuleModelContradiction: SubModel,
+	RuleStaleClaim: SubStaleness, RuleModelContradiction: SubModel, RuleClassificationRefused: SubModel,
 }
 
 // SubLayer returns the sub-layer of a rule.

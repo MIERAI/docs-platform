@@ -1,0 +1,2 @@
+{"repo": "o/demo", "file": "README.md", "line": 3, "claim": "The port is 8080", "actual": "main.go uses 9090", "type": "wrong", "fix": "say 9090", "evidence_paths": ["main.go"]}
+{"repo": "o/demo", "file": "docs/ops.md", "line": null, "claim": "lists two jobs", "actual": "three jobs", "type": "missing", "fix": "add the third", "evidence_paths": ["ci.yml"]}

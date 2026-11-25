@@ -5,9 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/MIERAI/docs-platform/contracts"
+	"github.com/MIERAI/docs-platform/internal/jsonschema"
 )
 
 const fixture = "../../testdata/fixtures/basic"
@@ -34,9 +38,15 @@ func TestRunCommands(t *testing.T) {
 		{"extract", []string{"extract", fixture}, exitOK, `"kind": "cli_flag"`},
 		{"validate golden", []string{"validate", "../../testdata/golden/basic-low.findings.json"}, exitOK, "valid findings/v1"},
 		{"check help", []string{"check", "-h"}, exitOK, ""},
-		{"audit none", []string{"audit", "-ai", "none", fixture}, exitOK, `"name": "docs-audit"`},
-		{"audit cloud refused", []string{"audit", "-ai", "openai", fixture}, exitUsage, ""},
-		{"audit ollama needs endpoint", []string{"audit", "-ai", "ollama", fixture}, exitUsage, ""},
+		{"import backlog", []string{"import-findings", "-repo-name", "demo", "-repo", "o/demo", "../../testdata/backlog/backlog.jsonl"}, exitOK, `"check": "docs.backlog.wrong"`},
+		{"import needs repo-name", []string{"import-findings", "../../testdata/backlog/backlog.jsonl"}, exitUsage, ""},
+		{"eval dry run", []string{"eval-model", "-set", "../../testdata/evalset/mini.jsonl", "-instance-config", "../../testdata/instance/claude-code-dry.yaml", "-task", "both", "-dry-run"}, exitOK, "dry run (estimate): task draft, claude-code:claude-opus-5-5, 1 items"},
+		{"eval needs a provider", []string{"eval-model", "-set", "../../testdata/evalset/mini.jsonl"}, exitUsage, ""},
+		{"eval bad task", []string{"eval-model", "-set", "../../testdata/evalset/mini.jsonl", "-instance-config", "../../testdata/instance/claude-code-dry.yaml", "-task", "poem", "-dry-run"}, exitUsage, ""},
+		{"audit none", []string{"audit", "-no-model", fixture}, exitOK, `"name": "docs-audit"`},
+		{"audit no instance = no model", []string{"audit", fixture}, exitOK, `"name": "docs-audit"`},
+		{"audit unknown provider", []string{"audit", "-instance-config", "../../testdata/instance/bad-provider.yaml", fixture}, exitUsage, ""},
+		{"audit ollama needs endpoint", []string{"audit", "-instance-config", "../../testdata/instance/ollama-no-endpoint.yaml", fixture}, exitUsage, ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -72,5 +82,60 @@ func TestCheckOutFileIsPrivate(t *testing.T) {
 	}
 	if !strings.Contains(se.String(), "docsp:") {
 		t.Errorf("summary line missing on stderr: %q", se.String())
+	}
+}
+
+func gitT(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", append([]string{"-C", dir, "-c", "user.name=t", "-c", "user.email=t@e"}, args...)...)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v: %v %s", args, err, out)
+	}
+}
+
+func TestImpactDerivesSections(t *testing.T) {
+	dir := t.TempDir()
+	write := func(p, c string) {
+		full := filepath.Join(dir, p)
+		if err := os.MkdirAll(filepath.Dir(full), 0o750); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(c), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("README.md", "# Demo\n\n## Running\n\nSet `APP_PORT` and run `cmd/tool.go`.\n\n## Other\n\nNothing here.\n")
+	write("cmd/tool.go", "package main\n\nimport \"os\"\n\nvar port = os.Getenv(\"APP_PORT\")\n")
+	gitT(t, dir, "init", "-q")
+	gitT(t, dir, "add", "-A")
+	gitT(t, dir, "commit", "-qm", "one")
+	write("cmd/tool.go", "package main\n\nimport \"os\"\n\nvar port = os.Getenv(\"APP_LISTEN\")\n")
+	gitT(t, dir, "commit", "-qam", "rename env")
+	var out, errb bytes.Buffer
+	code := run(context.Background(), []string{"impact", "-base", "HEAD~1", dir}, &out, &errb)
+	if code != exitOK {
+		t.Fatalf("exit %d: %s", code, errb.String())
+	}
+	var rep struct {
+		Sections []struct {
+			Path, Heading, Status string
+			Reasons               []struct{ Kind, Subject, Changed string }
+		}
+	}
+	if err := json.Unmarshal(out.Bytes(), &rep); err != nil {
+		t.Fatal(err)
+	}
+	sch, err := jsonschema.Compile(contracts.Impact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if errs := sch.ValidateJSON(out.Bytes()); len(errs) > 0 {
+		t.Fatalf("impact/v1 contract: %v", errs)
+	}
+	if len(rep.Sections) != 1 || rep.Sections[0].Heading != "Running" || rep.Sections[0].Status != "reread" {
+		t.Fatalf("sections %+v", rep.Sections)
+	}
+	if !strings.Contains(errb.String(), `re-read README.md:3 "Running"`) {
+		t.Errorf("summary %q", errb.String())
 	}
 }

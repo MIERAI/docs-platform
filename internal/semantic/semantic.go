@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/MIERAI/docs-platform/internal/ai"
 	"github.com/MIERAI/docs-platform/internal/extract/comments"
+	"github.com/MIERAI/docs-platform/internal/judge"
 	"github.com/MIERAI/docs-platform/internal/model"
 	"github.com/MIERAI/docs-platform/internal/repo"
 	"github.com/MIERAI/docs-platform/internal/scan"
@@ -29,8 +29,10 @@ const DefaultMaxQuestions = 150
 type Options struct {
 	// StaleCommits is how many later commits to a claim's code make the claim stale.
 	StaleCommits int
-	// Judge is the local model; nil means deterministic checks only (provider none).
-	Judge ai.Asker
+	// Judge is the guarded judge provider; nil means deterministic checks only (provider none).
+	Judge *judge.Guard
+	// Repo is the logical repository name (data classification is per repository and path).
+	Repo string
 	// MaxQuestions bounds how many claims are put to the judge (each costs 2-3 requests).
 	MaxQuestions int
 	// Ignore reports whether a finding on path:line is suppressed by the user.
@@ -47,6 +49,9 @@ type Stats struct {
 	QuotesRejected                int // answers discarded because the quote was not in the evidence
 	Answers                       int // parsed answers
 	ModelErrors                   int
+	Refused                       int // claims not sent: private content, cloud provider
+	ModelUSD                      float64
+	ModelTokens                   int
 	ModelSeconds                  float64
 	Seconds                       float64
 	ByRule                        map[string]int

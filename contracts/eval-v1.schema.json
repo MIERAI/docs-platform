@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/MIERAI/docs-platform/contracts/eval-v1.schema.json",
+  "title": "docs-platform/eval/v1",
+  "description": "Scores of one provider/model on one frozen eval set, per task. Stored as JSON so runs can be compared over time. Items labelled from the strong-AI ground truth measure AGREEMENT with a strong-AI audit, not accuracy.",
+  "type": "object",
+  "required": ["schema_version", "set", "task", "provider", "model", "prompt_template_hash", "started_at", "dry_run", "scores"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"type": "string", "pattern": "^1\\.[0-9]+$"},
+    "set": {
+      "type": "object",
+      "required": ["path", "sha256", "items"],
+      "additionalProperties": false,
+      "properties": {"path": {"type": "string"}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "items": {"type": "integer"}}
+    },
+    "task": {"type": "string", "enum": ["judge", "draft"]},
+    "provider": {"type": "string"},
+    "model": {"type": "string"},
+    "prompt_template_hash": {"type": "string", "pattern": "^[0-9a-f]{16}$"},
+    "started_at": {"type": "string"},
+    "dry_run": {"type": "boolean"},
+    "scores": {"type": "object", "description": "Task-specific scores: judge = precision, recall, unknown_rate, quote_rejection_rate; draft = supported_rate, similarity; both = cost_usd, usd_per_item, p50_latency_ms, tokens. Per-source breakdown under by_source."},
+    "switch": {
+      "type": "object",
+      "required": ["qualifies", "failed"],
+      "additionalProperties": false,
+      "properties": {"qualifies": {"type": "boolean"}, "failed": {"type": "array", "items": {"type": "string"}}}
+    },
+    "items": {"type": "array", "items": {"type": "object"}}
+  }
+}

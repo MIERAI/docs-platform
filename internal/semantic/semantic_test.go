@@ -10,12 +10,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MIERAI/docs-platform/internal/ai"
 	"github.com/MIERAI/docs-platform/internal/extract/markdown"
+	"github.com/MIERAI/docs-platform/internal/instance"
+	"github.com/MIERAI/docs-platform/internal/judge"
 	"github.com/MIERAI/docs-platform/internal/plugin"
 	"github.com/MIERAI/docs-platform/internal/repo"
 	"github.com/MIERAI/docs-platform/internal/scan"
 	"github.com/MIERAI/docs-platform/internal/semantic/claim"
+	"github.com/MIERAI/docs-platform/judgev1"
 )
 
 func TestCronMatches(t *testing.T) {
@@ -42,30 +44,6 @@ func TestCronMatches(t *testing.T) {
 	}
 }
 
-func TestParseReplyAndQuote(t *testing.T) {
-	snips := []snippet{{Path: "a.go", From: 1, Text: "const keep = 30 * 24 * time.Hour\nfunc x() {}"}}
-	cases := []struct {
-		reply, ans string
-		verified   bool
-	}{
-		{`{"answer":"yes","quote":"const keep = 30 * 24 * time.Hour"}`, "yes", true},
-		{`{"answer":"yes","quote":"func x() {}"}`, "yes", false},   // shares no word with the claim
-		{`{"answer":"yes","quote":"keep = 3 days"}`, "yes", false}, // not in the evidence
-		{`{"answer":"yes","quote":"func x"}`, "yes", false},        // too short
-		{`{"answer":"yes","quote":"retention (keep) is 3 days"}`, "yes", false},
-		{`{"answer":"NO","quote":""}`, "no", false},
-		{`answer: unknown`, "unknown", false},
-		{`garbage`, "unknown", false},
-	}
-	for _, c := range cases {
-		ans, q := parseReply(c.reply)
-		_, ok := verifyQuote(q, "retention (keep) is 3 days", snips)
-		if ans != c.ans || ok != c.verified {
-			t.Errorf("%s: answer %q verified %v", c.reply, ans, ok)
-		}
-	}
-}
-
 func TestRotate(t *testing.T) {
 	s := []snippet{{Path: "a"}, {Path: "b"}, {Path: "c"}}
 	seen := map[string]bool{}
@@ -84,26 +62,42 @@ func TestRotate(t *testing.T) {
 	}
 }
 
-// fakeJudge answers from a function and counts calls.
+// fakeJudge is an in-process provider that answers from a function and counts calls.
 type fakeJudge struct {
 	mu    sync.Mutex
 	n     int
+	cloud bool
 	reply func(prompt string) string
 }
 
-func (*fakeJudge) Name() string  { return "fake" }
-func (*fakeJudge) Model() string { return "m" }
-func (f *fakeJudge) Used() int {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return f.n
-}
-
-func (f *fakeJudge) Ask(_ context.Context, q ai.Question) (ai.Reply, error) {
+func (*fakeJudge) Name() string    { return "fake" }
+func (*fakeJudge) Model() string   { return "m" }
+func (f *fakeJudge) Cloud() bool   { return f.cloud }
+func (*fakeJudge) Billing() string { return judgev1.BillingNone }
+func (*fakeJudge) Close() error    { return nil }
+func (*fakeJudge) Modes() []string { return []string{judgev1.ModeSnippet} }
+func (f *fakeJudge) Judge(_ context.Context, r *judgev1.Request) (*judgev1.Response, error) {
 	f.mu.Lock()
 	f.n++
 	f.mu.Unlock()
-	return ai.Reply{Text: f.reply(q.Prompt)}, nil
+	a, err := judgev1.ParseAnswer(r.Task.Type, f.reply(r.Prompt.User))
+	if err != nil {
+		return judgev1.Failure(r, judgev1.Model{Provider: "fake", ID: "m"}, judgev1.ErrCodeBadReply, err.Error()), nil
+	}
+	return judgev1.NewResponse(r, a, judgev1.Model{Provider: "fake", ID: "m"}, judgev1.Usage{}), nil
+}
+
+func guard(t *testing.T, p judge.Provider, inst string) *judge.Guard {
+	t.Helper()
+	in, err := instance.Parse([]byte("version: 1\n" + inst))
+	if err != nil {
+		t.Fatal(err)
+	}
+	g, err := judge.NewGuard("judge", p, in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return g
 }
 
 func git(t *testing.T, dir string, args ...string) {
@@ -168,7 +162,7 @@ func fixtureRepo(t *testing.T) string {
 	return dir
 }
 
-func runFixture(t *testing.T, judge ai.Asker) *Result {
+func runFixture(t *testing.T, g *judge.Guard) *Result {
 	t.Helper()
 	dir := fixtureRepo(t)
 	r, err := repo.Open(dir, nil)
@@ -176,7 +170,7 @@ func runFixture(t *testing.T, judge ai.Asker) *Result {
 		t.Fatal(err)
 	}
 	inv := scan.Run(r, []plugin.Extractor{markdown.Extractor{}}, scan.Options{Docs: []string{"*.md"}})
-	res, err := Run(context.Background(), r, inv, Options{StaleCommits: 2, Judge: judge})
+	res, err := Run(context.Background(), r, inv, Options{StaleCommits: 2, Judge: g, Repo: "demo"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -209,9 +203,9 @@ func TestRunDeterministic(t *testing.T) {
 func TestRunJudge(t *testing.T) {
 	// The judge claims a contradiction with a quote that is in the evidence: accepted.
 	good := &fakeJudge{reply: func(string) string {
-		return `{"answer":"yes","quote":"const Window = 1000"}`
+		return `{"verdict":"yes","quote":"const Window = 1000"}`
 	}}
-	res := runFixture(t, good)
+	res := runFixture(t, guard(t, good, ""))
 	var model *Issue
 	for i := range res.Issues {
 		if res.Issues[i].Rule == RuleModelContradiction {
@@ -222,8 +216,8 @@ func TestRunJudge(t *testing.T) {
 		t.Fatalf("model issue %+v (all %+v)", model, res.Issues)
 	}
 	// A hallucinated quote is discarded: no model finding, rejections counted.
-	bad := &fakeJudge{reply: func(string) string { return `{"answer":"yes","quote":"const Window = 5"}` }}
-	res = runFixture(t, bad)
+	bad := &fakeJudge{reply: func(string) string { return `{"verdict":"yes","quote":"const Window = 5"}` }}
+	res = runFixture(t, guard(t, bad, ""))
 	for _, is := range res.Issues {
 		if is.Rule == RuleModelContradiction {
 			t.Fatalf("unverified quote accepted: %+v", is)
@@ -241,17 +235,22 @@ func TestPromptHashStable(t *testing.T) {
 	}
 }
 
-func FuzzParseReply(f *testing.F) {
-	f.Add(`{"answer":"yes","quote":"const Window = 1000"}`, "claim")
-	f.Add(`answer: maybe`, "")
-	f.Fuzz(func(t *testing.T, reply, claimText string) {
-		ans, q := parseReply(reply)
-		if ans != "yes" && ans != "no" && ans != "unknown" && ans != "" && !strings.Contains(strings.ToLower(reply), ans) {
-			t.Fatalf("answer %q not from reply", ans)
-		}
-		s := []snippet{{Path: "x", From: 1, Text: "const Window = 1000"}}
-		if got, ok := verifyQuote(q, claimText, s); ok && !strings.Contains(got.Text, strings.TrimSpace(q)) {
-			t.Fatalf("verified quote %q not in snippet", q)
-		}
-	})
+func TestCloudJudgeNeverSeesPrivateContent(t *testing.T) {
+	cloud := &fakeJudge{cloud: true, reply: func(string) string { return `{"verdict":"no","quote":""}` }}
+	res := runFixture(t, guard(t, cloud, "classification: {default: private}\n"))
+	if cloud.n != 0 {
+		t.Fatalf("cloud provider received %d private requests", cloud.n)
+	}
+	found := false
+	for _, is := range res.Issues {
+		found = found || is.Rule == RuleClassificationRefused
+	}
+	if !found || res.Stats.Refused == 0 {
+		t.Fatalf("refusal not reported: %+v", res.Stats)
+	}
+	public := &fakeJudge{cloud: true, reply: func(string) string { return `{"verdict":"no","quote":""}` }}
+	runFixture(t, guard(t, public, "classification: {repos: {demo: public}}\n"))
+	if public.n == 0 {
+		t.Fatal("public content was not sent")
+	}
 }

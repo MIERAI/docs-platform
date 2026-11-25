@@ -169,51 +169,6 @@
           "type": "integer",
           "minimum": 1,
           "description": "later commits to a claim's code that make it stale (default 2)"
-        },
-        "ai": {
-          "type": "object",
-          "additionalProperties": false,
-          "description": "Judge model. Local providers only; the endpoint belongs in instance configuration.",
-          "properties": {
-            "provider": {
-              "enum": [
-                "none",
-                "ollama"
-              ]
-            },
-            "endpoint": {
-              "type": "string",
-              "description": "http(s)://host:port; must resolve to a loopback, private, CGNAT or link-local address"
-            },
-            "model": {
-              "type": "string"
-            },
-            "timeout_seconds": {
-              "type": "integer",
-              "minimum": 0
-            },
-            "retries": {
-              "type": "integer",
-              "minimum": 0
-            },
-            "max_concurrency": {
-              "type": "integer",
-              "minimum": 0,
-              "description": "requests in flight (default 2)"
-            },
-            "max_requests": {
-              "type": "integer",
-              "minimum": 0,
-              "description": "per-run budget (default 300)"
-            },
-            "seed": {
-              "type": "integer"
-            },
-            "num_ctx": {
-              "type": "integer",
-              "minimum": 0
-            }
-          }
         }
       }
     }

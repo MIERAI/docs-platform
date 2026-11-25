@@ -1,6 +1,10 @@
 // Command bench measures docsp against human-confirmed ground truth.
 //
 //	go run ./bench -gt DIR -work DIR [-pin name=rev ...] [-denylist FILE] [-md report.md] [-json report.json]
+//	go run ./bench replay -gt DIR -work DIR [-pin name=rev ...] [-eval-out set.jsonl] [-md ...] [-json ...]
+//
+// The second form is the history replay benchmark (the primary metric of change-time
+// detection): see replay.go.
 //
 // For every repository named in the ground-truth JSON Lines it makes a read-only clone
 // (https://github.com/<repo>) under -work, runs docsp check in-process at the lowest confidence,
@@ -43,12 +47,19 @@ var (
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "replay" {
+		if err := runReplay(context.Background(), os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, "bench replay:", err)
+			os.Exit(1)
+		}
+		return
+	}
 	gt := flag.String("gt", "", "directory of ground-truth *.jsonl files")
 	work := flag.String("work", "", "scratch directory for read-only clones")
 	deny := flag.String("denylist", "", "optional private denylist file (mode 0600) for the residue check")
 	cfgDir := flag.String("config-dir", "", "optional directory of instance configs named <repo>.docsp.yaml")
 	audit := flag.Bool("audit", false, "also run the semantic audit (layer ④c) and score it")
-	provider := flag.String("ai", "", "override audit.ai.provider of the instance config: none or ollama")
+	instFile := flag.String("instance-config", "", "instance configuration (judge provider, model, budget, classification); empty = deterministic only")
 	maxQ := flag.Int("max-questions", 0, "claims put to the judge per repository (0 = default)")
 	md := flag.String("md", "", "write a Markdown report here")
 	js := flag.String("json", "", "write a JSON report here")
@@ -61,7 +72,7 @@ func main() {
 	}
 	if err := run(context.Background(), opts{
 		gt: *gt, work: *work, deny: *deny, cfgDir: *cfgDir, md: *md, js: *js, pins: p,
-		audit: *audit, provider: *provider, maxQ: *maxQ,
+		audit: *audit, instance: *instFile, maxQ: *maxQ,
 	}); err != nil {
 		fmt.Fprintln(os.Stderr, "bench:", err)
 		os.Exit(1)
@@ -72,7 +83,7 @@ type opts struct {
 	gt, work, deny, cfgDir, md, js string
 	pins                           pins
 	audit                          bool
-	provider                       string
+	instance                       string
 	maxQ                           int
 }
 
@@ -133,7 +144,7 @@ func auditRepo(ctx context.Context, out *repoResult, dir string, o opts) error {
 		Options: check.Options{
 			Root: dir, RepoName: base, Version: "bench", ConfigFile: instanceConfig(o.cfgDir, base),
 		},
-		Provider: o.provider, MaxQuestions: o.maxQ,
+		InstanceFile: o.instance, MaxQuestions: o.maxQ,
 	})
 	if err != nil {
 		return fmt.Errorf("audit: %w", err)
