@@ -255,7 +255,17 @@ func writeAgentic(w io.Writer, res *evalmodel.Result) {
 		if d.Cached {
 			state = "cached"
 		}
-		_, _ = fmt.Fprintf(w, "  drift %s @%.12s: %s, %d entries, %d validated, $%.4f%s\n", d.Repo, d.Head, state, d.Raw, d.Validated, d.CostUSD, errSuffix(d.Error))
+		_, _ = fmt.Fprintf(w, "  drift %s @%.12s: %s, %d entries, %d validated, %d tool steps, $%.4f%s\n", d.Repo, d.Head, state, d.Raw, d.Validated, d.ToolSteps, d.CostUSD, errSuffix(d.Error))
+	}
+	steps, n := 0, 0
+	for _, it := range res.Items {
+		if it.Category != "" {
+			steps += it.ToolSteps
+			n++
+		}
+	}
+	if n > 0 {
+		_, _ = fmt.Fprintf(w, "  tool steps per item: mean %.1f\n", float64(steps)/float64(n))
 	}
 	s := res.Scores
 	if len(s.Categories) > 0 {

@@ -11,6 +11,7 @@ import (
 	"github.com/MIERAI/docs-platform/internal/agentic"
 	"github.com/MIERAI/docs-platform/internal/instance"
 	"github.com/MIERAI/docs-platform/internal/judge"
+	"github.com/MIERAI/docs-platform/judgev1"
 )
 
 // Agentic configures an agentic-mode eval: every judge item becomes a claim_facts request
@@ -36,6 +37,9 @@ type DriftSummary struct {
 	Parse     string  `json:"parse,omitempty"`
 	CostUSD   float64 `json:"cost_usd"`
 	Error     string  `json:"error,omitempty"`
+	// ToolSteps and Transcript (1.1) record the scan's tool use (arguments and sizes only).
+	ToolSteps  int            `json:"tool_steps"`
+	Transcript []judgev1.Step `json:"transcript,omitempty"`
 }
 
 var reRevision = regexp.MustCompile(`^[0-9a-f]{7,40}$`)
@@ -136,6 +140,7 @@ func driftSummary(ctx context.Context, repo string, r *agentic.Runner) DriftSumm
 		return s
 	}
 	s.Head, s.Raw, s.Validated, s.Cached, s.Parse, s.CostUSD, s.Error = d.Head, len(d.Raw), len(d.Entries), d.Cached, d.Parse, d.CostUSD, d.Error
+	s.ToolSteps, s.Transcript = len(d.Transcript), d.Transcript
 	return s
 }
 
@@ -200,7 +205,7 @@ func fromLine(it *Item, lr agentic.LineResult) ItemResult {
 	r.Verdict, r.Category, r.Claimed, r.Parse = lr.Verdict, lr.Category, lr.Claimed, lr.Parse
 	r.Evidence, r.EvidenceOK, r.GroupSize, r.ToolSteps = lr.Derivation.Evidence, lr.EvidenceOK, lr.GroupSize, lr.ToolSteps
 	r.Model, r.InputTokens, r.OutputTokens, r.CostUSD, r.LatencyMS = lr.Model, lr.InputTokens, lr.OutputTokens, lr.CostUSD, lr.LatencyMS
-	r.Error, r.Facts, r.Reason = lr.Error, lr.Facts, lr.Reason
+	r.Error, r.Facts, r.Reason, r.Transcript = lr.Error, lr.Facts, lr.Reason, lr.Transcript
 	if strings.Contains(lr.Error, judge.ErrBudget.Error()) {
 		r.Error = judge.ErrBudget.Error()
 	}

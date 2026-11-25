@@ -21,7 +21,7 @@ import (
 )
 
 // version is set at build time (-ldflags "-X main.version=...").
-var version = "0.4.0"
+var version = "0.4.1"
 
 // exit codes.
 const (

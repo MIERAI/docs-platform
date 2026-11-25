@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.4.1 - 2026-11-26
+
+The first paid TEST run of 0.4.0 (Sonnet) scored recall 22/30 against the prototype's 24/30,
+with 2.8 tool steps per line against 5.4. Cause: the tools showed the model something
+different from what the prototype's model saw.
+
+### Fixed
+- `read_file` returned file lines as an unnumbered JSON array, so the model had to count
+  lines: its quotes landed on the wrong line and were rejected (every one of the 5 rejected
+  drift entries of the run had the right text at a line 4-29 off, among them the two
+  watcher entries two lost positives depended on). Tool results now reach the model as
+  plain text the way its own file tools show them: `12: text` lines, `path:line: text`
+  matches, one entry per line, "[more: read from_line N]" and a truncation note.
+- Results were JSON with HTML escaping, so `<name>`, `&&` and `->` arrived as `\u003c...`:
+  no quote of such a line could match. Results are encoded without escaping.
+- Lines were cut at 400 characters (now 2000, as a model's own reader).
+
+### Added
+- judge-tools/v1 **1.2**: `tool_result.text`, the model-ready rendering (MCP and Ollama
+  show it; exec providers should); tools `outline` and `config_value` (ported from the
+  prototype's helpers).
+- Agentic prompt `docsp-agentic/2` (tool list with the new tools; drift caches of 0.4.0 are
+  not reused).
+- eval/v1: per item `transcript` (tool, arguments, result size, error - never contents),
+  per drift scan `tool_steps` and `transcript`; `eval-model` prints the mean tool steps.
+
 ## 0.4.0 - 2026-11-26
 
 Direction: the per-line snippet judge starved a strong model (27% recall on a held-out TEST

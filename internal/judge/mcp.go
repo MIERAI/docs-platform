@@ -194,9 +194,5 @@ func callResult(ctx context.Context, t *Tools, params json.RawMessage) map[strin
 	if !res.OK {
 		return map[string]any{"content": []mcpContent{{Type: "text", Text: "error: " + res.Error}}, "isError": true}
 	}
-	text := string(res.Content)
-	if res.Truncated {
-		text += "\n(truncated: narrow the request)"
-	}
-	return map[string]any{"content": []mcpContent{{Type: "text", Text: text}}}
+	return map[string]any{"content": []mcpContent{{Type: "text", Text: res.Text}}}
 }

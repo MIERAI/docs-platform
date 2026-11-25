@@ -233,6 +233,9 @@ const (
 	ToolChangesSince   = "changes_since"
 	ToolFindReferences = "find_references"
 	ToolCheckQuote     = "check_quote"
+	// judge-tools/v1 1.2
+	ToolOutline     = "outline"
+	ToolConfigValue = "config_value"
 )
 
 // ToolCall is a provider's request to run one tool (a line on the provider's stdout, in
@@ -254,6 +257,10 @@ type ToolResult struct {
 	Content   json.RawMessage `json:"content,omitempty"`
 	Truncated bool            `json:"truncated,omitempty"`
 	Error     string          `json:"error,omitempty"`
+	// Text (judge-tools/v1 1.2) is the same result rendered for a model: numbered file lines
+	// ("12: text"), "path:line: text" matches, one entry per line, no escaping. Providers
+	// should show the model Text, not Content: line numbers must be read, never counted.
+	Text string `json:"text,omitempty"`
 }
 
 // Draft is a proposed replacement text (never applied automatically).

@@ -126,6 +126,8 @@ type LineResult struct {
 	PromptHash   string  `json:"prompt_hash,omitempty"`
 	GroupSize    int     `json:"group_size"`
 	ToolSteps    int     `json:"tool_steps"`
+	// Transcript is the tool steps of the request (arguments and result sizes, never contents).
+	Transcript []judgev1.Step `json:"transcript,omitempty"`
 }
 
 // Verdict maps a category to a judge/v1 verdict.
@@ -175,7 +177,7 @@ func (r *Runner) scan(ctx context.Context) (*DriftList, error) {
 		return nil, fmt.Errorf("drift scan: %w", err)
 	}
 	resp := out.Response
-	d.CostUSD, d.Parse = resp.Usage.CostUSD, resp.AnswerParse
+	d.CostUSD, d.Parse, d.Transcript = resp.Usage.CostUSD, resp.AnswerParse, resp.Transcript
 	if resp.Error != nil || r.o.DryRun {
 		if resp.Error != nil {
 			d.Error = resp.Error.Code + ": " + resp.Error.Message
@@ -302,7 +304,7 @@ func (r *Runner) ask(ctx context.Context, req *judgev1.Request, res *LineResult)
 	resp := out.Response
 	res.CostUSD, res.LatencyMS, res.Model = resp.Usage.CostUSD, resp.LatencyMS, resp.Model.ID
 	res.InputTokens = resp.Usage.InputTokens + resp.Usage.CacheReadInputTokens + resp.Usage.CacheCreationInputTokens
-	res.OutputTokens, res.Parse, res.ToolSteps = resp.Usage.OutputTokens, resp.AnswerParse, len(resp.Transcript)
+	res.OutputTokens, res.Parse, res.ToolSteps, res.Transcript = resp.Usage.OutputTokens, resp.AnswerParse, len(resp.Transcript), resp.Transcript
 	if resp.Error != nil {
 		res.Error = resp.Error.Code + ": " + resp.Error.Message
 		return nil, false

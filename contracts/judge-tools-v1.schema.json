@@ -14,7 +14,7 @@
         "type": {"type": "string", "enum": ["tool_call"]},
         "id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]{1,128}$", "description": "the judge request id"},
         "call": {"type": "string", "pattern": "^[A-Za-z0-9._:-]{1,64}$"},
-        "tool": {"type": "string", "enum": ["list_dir", "read_file", "grep", "git_log", "git_show", "search", "glob", "git_changes", "changes_since", "find_references", "check_quote"], "description": "1.1 adds search, glob, git_changes, changes_since, find_references and check_quote"},
+        "tool": {"type": "string", "enum": ["list_dir", "read_file", "grep", "git_log", "git_show", "search", "glob", "git_changes", "changes_since", "find_references", "check_quote", "outline", "config_value"], "description": "1.1 adds search, glob, git_changes, changes_since, find_references and check_quote; 1.2 adds outline and config_value"},
         "args": {"type": "object"}
       }
     },
@@ -29,7 +29,8 @@
         "ok": {"type": "boolean"},
         "content": {"description": "tool-specific result (see the *Result defs)"},
         "truncated": {"type": "boolean"},
-        "error": {"type": "string", "maxLength": 500}
+        "error": {"type": "string", "maxLength": 500},
+        "text": {"type": "string", "description": "1.2: the result rendered for a model (numbered file lines \"12: text\", \"path:line: text\" matches, no escaping); providers should show this, not content"}
       }
     },
     "listDirArgs": {"type": "object", "additionalProperties": false, "properties": {"path": {"type": "string", "description": "'' or '.' = repository root"}}},
@@ -49,6 +50,8 @@
     "gitChangesResult": {"type": "object", "properties": {"changes": {"type": "array", "items": {"type": "object", "properties": {"sha": {"type": "string"}, "date": {"type": "string"}, "subject": {"type": "string"}, "status": {"type": "string"}, "path": {"type": "string"}, "new_path": {"type": "string"}}}}}},
     "changesSinceArgs": {"type": "object", "required": ["path", "line"], "additionalProperties": false, "properties": {"path": {"type": "string"}, "line": {"type": "integer"}}},
     "findReferencesArgs": {"type": "object", "required": ["name"], "additionalProperties": false, "properties": {"name": {"type": "string"}}},
+    "outlineArgs": {"type": "object", "required": ["path"], "additionalProperties": false, "properties": {"path": {"type": "string"}}, "description": "1.2"},
+    "configValueArgs": {"type": "object", "required": ["key"], "additionalProperties": false, "properties": {"key": {"type": "string"}}, "description": "1.2"},
     "checkQuoteArgs": {"type": "object", "required": ["path", "line", "text"], "additionalProperties": false, "properties": {"path": {"type": "string"}, "line": {"type": "integer"}, "text": {"type": "string"}}},
     "textResult": {"type": "object", "description": "changes_since, find_references and check_quote answer with a text report", "properties": {"text": {"type": "string"}}},
     "gitShowResult": {"type": "object", "properties": {"rev": {"type": "string"}, "path": {"type": "string"}, "lines": {"type": "array", "items": {"type": "string"}}, "text": {"type": "string"}}}

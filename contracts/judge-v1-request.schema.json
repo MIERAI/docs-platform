@@ -172,7 +172,9 @@
               "git_changes",
               "changes_since",
               "find_references",
-              "check_quote"
+              "check_quote",
+              "outline",
+              "config_value"
             ]
           }
         },

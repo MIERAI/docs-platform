@@ -11,9 +11,9 @@ import (
 var toolDefs = []judgev1.ToolDef{
 	{Name: judgev1.ToolListDir, Description: "List a directory of the repository (repository-relative path, \"\" or \".\" = root).",
 		InputSchema: json.RawMessage(`{"type":"object","properties":{"path":{"type":"string"}},"additionalProperties":false}`)},
-	{Name: judgev1.ToolReadFile, Description: "Read lines from_line..to_line of a file (at most 400 lines per call; lines are returned in order starting at from_line).",
+	{Name: judgev1.ToolReadFile, Description: "Read a file: lines from_line..to_line (default the whole file, at most 400 lines per call), each shown as \"<line number>: <text>\". Cite that number as the evidence line.",
 		InputSchema: json.RawMessage(`{"type":"object","properties":{"path":{"type":"string"},"from_line":{"type":"integer"},"to_line":{"type":"integer"}},"required":["path"],"additionalProperties":false}`)},
-	{Name: judgev1.ToolSearch, Description: "Search the tracked files: a case-insensitive fixed string, or with regex=true an RE2 regular expression (case-sensitive). scope is a path glob (\"*\" = everything, \"scripts/*\", \".github/workflows/*\", \"*.go\", or a directory). Returns path, line and text of each match. Absence evidence re-runs exactly this search.",
+	{Name: judgev1.ToolSearch, Description: "Search the tracked files: a case-insensitive fixed string, or with regex=true an RE2 regular expression (case-sensitive). scope is a path glob (\"*\" = everything, \"scripts/*\", \".github/workflows/*\", \"*.go\", or a directory). Returns \"path:line: text\" per match. Absence evidence re-runs exactly this search.",
 		InputSchema: json.RawMessage(`{"type":"object","properties":{"pattern":{"type":"string"},"scope":{"type":"string"},"regex":{"type":"boolean"},"max_results":{"type":"integer"}},"required":["pattern"],"additionalProperties":false}`)},
 	{Name: judgev1.ToolGrep, Description: "Search with an RE2 regular expression (case-sensitive) under a file or directory prefix path.",
 		InputSchema: json.RawMessage(`{"type":"object","properties":{"pattern":{"type":"string"},"path":{"type":"string"},"max_results":{"type":"integer"}},"required":["pattern"],"additionalProperties":false}`)},
@@ -29,6 +29,10 @@ var toolDefs = []judgev1.ToolDef{
 		InputSchema: json.RawMessage(`{"type":"object","properties":{"path":{"type":"string"},"line":{"type":"integer"}},"required":["path","line"],"additionalProperties":false}`)},
 	{Name: judgev1.ToolFindReferences, Description: "Where an identifier, command, flag, config key, env var, file path or metric name is defined and used (definitions first), as path:line.",
 		InputSchema: json.RawMessage(`{"type":"object","properties":{"name":{"type":"string"}},"required":["name"],"additionalProperties":false}`)},
+	{Name: judgev1.ToolOutline, Description: "Structure of a file with line numbers: Markdown headings and tables, YAML key tree, Makefile targets, Go/Python functions, types and constants, Terraform blocks, shell functions. A directory is listed instead.",
+		InputSchema: json.RawMessage(`{"type":"object","properties":{"path":{"type":"string"}},"required":["path"],"additionalProperties":false}`)},
+	{Name: judgev1.ToolConfigValue, Description: "Effective value(s) of a configuration key: a YAML key path (a.b.c) or its last segment, a Go/Python constant, a flag or env default, an HCL/Make variable - each with path:line.",
+		InputSchema: json.RawMessage(`{"type":"object","properties":{"key":{"type":"string"}},"required":["key"],"additionalProperties":false}`)},
 	{Name: judgev1.ToolCheckQuote, Description: "Check that a quote occurs verbatim at path:line (±2 lines) before you use it as evidence.",
 		InputSchema: json.RawMessage(`{"type":"object","properties":{"path":{"type":"string"},"line":{"type":"integer"},"text":{"type":"string"}},"required":["path","line","text"],"additionalProperties":false}`)},
 }

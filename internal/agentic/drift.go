@@ -12,6 +12,7 @@ import (
 
 	"github.com/MIERAI/docs-platform/internal/judge"
 	"github.com/MIERAI/docs-platform/internal/repo"
+	"github.com/MIERAI/docs-platform/judgev1"
 )
 
 // DriftList is the result of one repository drift scan.
@@ -28,6 +29,8 @@ type DriftList struct {
 	CostUSD float64      `json:"cost_usd"`
 	Error   string       `json:"error,omitempty"`
 	Cached  bool         `json:"-"`
+	// Transcript is the scan's tool steps (arguments and result sizes only).
+	Transcript []judgev1.Step `json:"transcript,omitempty"`
 }
 
 // IDs returns the set of validated entry ids.

@@ -165,7 +165,7 @@ and its `modes`; the instance configuration classifies repositories and paths `p
 `private` (default private); a cloud provider is refused any request or tool result touching
 private content.
 
-## judge-tools/v1 (1.1)
+## judge-tools/v1 (1.2)
 
 Read-only tools for the agentic mode, executed by the core: `list_dir {path}`, `read_file
 {path, from_line, to_line}` (≤ 400 lines), `grep {pattern (RE2), path, max_results ≤ 200}`,
@@ -180,6 +180,12 @@ line, text}`. Paths are repository-relative; absolute paths, `..`, any path segm
 are capped (default 32 KiB per result, 512 KiB and 20 steps per request; the agentic judge
 uses 16 steps per line and 45 / 1 MiB for the drift scan); unknown arguments are errors;
 revisions are validated (no option injection).
+
+1.2 adds `outline {path}` and `config_value {key}`, and `tool_result.text`: the result
+rendered for a model (file lines numbered `12: text`, `path:line: text` matches, one entry
+per line, nothing escaped). Line numbers must be read, never counted: a model given the raw
+JSON array cited lines several lines off. MCP and Ollama transports show `text`; exec
+providers should hand `text` to their model.
 
 Transports: exec providers exchange `tool_call` / `tool_result` lines (above). For a CLI
 provider (claude-code) the core starts `docsp judge-tools-mcp -spec FILE` as the CLI's only

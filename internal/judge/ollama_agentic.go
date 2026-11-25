@@ -167,7 +167,7 @@ func (l *agenticLoop) call(ctx context.Context, tc chatToolCall) string {
 	if !res.OK {
 		return "error: " + res.Error
 	}
-	return string(res.Content)
+	return res.Text
 }
 
 func (l *agenticLoop) chat(ctx context.Context, withTools bool, format json.RawMessage) (chatResponse, error) {

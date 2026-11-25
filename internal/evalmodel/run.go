@@ -90,8 +90,9 @@ type ItemResult struct {
 	GroupSize  int    `json:"group_size,omitempty"`
 	ToolSteps  int    `json:"tool_steps,omitempty"`
 	// Facts are the model's facts with the harness's check of every piece of evidence.
-	Facts  []agentic.FactCheck `json:"facts,omitempty"`
-	Reason string              `json:"reason,omitempty"`
+	Facts      []agentic.FactCheck `json:"facts,omitempty"`
+	Reason     string              `json:"reason,omitempty"`
+	Transcript []judgev1.Step      `json:"transcript,omitempty"`
 }
 
 // Run scores the guarded provider on the set.

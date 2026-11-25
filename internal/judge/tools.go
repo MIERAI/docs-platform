@@ -31,7 +31,7 @@ const (
 	maxGrepScanBytes      = 64 << 20
 	maxListEntries        = 500
 	maxReadLines          = 400
-	maxLineChars          = 400
+	maxLineChars          = 2000 // as long as a model's own file reader shows
 	verifySlack           = 2
 )
 
@@ -39,7 +39,7 @@ const (
 var AllTools = []string{
 	judgev1.ToolListDir, judgev1.ToolReadFile, judgev1.ToolGrep, judgev1.ToolGitLog, judgev1.ToolGitShow,
 	judgev1.ToolSearch, judgev1.ToolGlob, judgev1.ToolGitChanges, judgev1.ToolChangesSince,
-	judgev1.ToolFindReferences, judgev1.ToolCheckQuote,
+	judgev1.ToolFindReferences, judgev1.ToolCheckQuote, judgev1.ToolOutline, judgev1.ToolConfigValue,
 }
 
 // Tools executes judge-tools/v1 calls for one agentic request: read-only, confined to one
@@ -153,6 +153,9 @@ func (t *Tools) Call(ctx context.Context, c judgev1.ToolCall) judgev1.ToolResult
 	if err == nil {
 		res.Content, res.Truncated, err = t.encode(content)
 	}
+	if err == nil {
+		res.Text = Render(c.Tool, res.Content, res.Truncated)
+	}
 	if err != nil {
 		res.Error = cutStr(err.Error(), 500)
 	} else {
@@ -175,9 +178,9 @@ func (t *Tools) Call(ctx context.Context, c judgev1.ToolCall) judgev1.ToolResult
 }
 
 func (t *Tools) encode(v any) (json.RawMessage, bool, error) {
-	b, err := json.Marshal(v)
+	b, err := marshalRaw(v)
 	if err != nil {
-		return nil, false, fmt.Errorf("encode result: %w", err)
+		return nil, false, err
 	}
 	if len(b) <= t.limits.MaxResultBytes {
 		return b, false, nil
@@ -187,11 +190,23 @@ func (t *Tools) encode(v any) (json.RawMessage, bool, error) {
 		return nil, false, errors.New("result too large")
 	}
 	for len(b) > t.limits.MaxResultBytes && tr.shrink() {
-		if b, err = json.Marshal(v); err != nil {
-			return nil, false, fmt.Errorf("encode result: %w", err)
+		if b, err = marshalRaw(v); err != nil {
+			return nil, false, err
 		}
 	}
 	return b, true, nil
+}
+
+// marshalRaw encodes a result without HTML escaping: repository text must reach the model
+// verbatim ("<name>", "&&", "->"), or quotes copied from it cannot match the file.
+func marshalRaw(v any) (json.RawMessage, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		return nil, fmt.Errorf("encode result: %w", err)
+	}
+	return bytes.TrimRight(buf.Bytes(), "\n"), nil
 }
 
 // truncater results can drop their tail to fit the size cap.

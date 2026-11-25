@@ -352,7 +352,8 @@ and a tool transcript; 1.2 adds the agentic task types (`repo_drift`, `claim_fac
 `doc_facts`) whose structured `answer` the core validates itself. In agentic mode the provider
 explores the worktree through the read-only tools of `judge-tools/v1` (`list_dir`,
 `read_file`, `grep`, `search`, `glob`, `git_log`, `git_show`, `git_changes`, `changes_since`,
-`find_references`, `check_quote`), which the core executes: confined to the worktree
+`find_references`, `check_quote`, `outline`, `config_value`; results reach the model as plain
+text with real line numbers, unescaped), which the core executes: confined to the worktree
 (absolute paths, `..`, any `.git` segment and symlink escapes are refused), size- and
 step-capped, private paths refused for cloud providers.
 
