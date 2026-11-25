@@ -1,0 +1,91 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  default: standard # errcheck, govet, ineffassign, staticcheck, unused
+  enable:
+    - bodyclose
+    - copyloopvar
+    - dupword
+    - errorlint
+    - exhaustive
+    - forbidigo
+    - funlen
+    - gocognit
+    - gocritic
+    - gocyclo
+    - gosec
+    - intrange
+    - misspell
+    - nakedret
+    - nestif
+    - nolintlint
+    - perfsprint
+    - predeclared
+    - revive
+    - unconvert
+    - unparam
+    - usestdlibvars
+    - wastedassign
+    - wrapcheck
+  settings:
+    funlen:
+      lines: 50
+      statements: 40
+      ignore-comments: true
+    gocognit:
+      min-complexity: 20
+    gocyclo:
+      min-complexity: 15
+    nestif:
+      min-complexity: 5
+    exhaustive:
+      default-signifies-exhaustive: true
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+    forbidigo:
+      forbid:
+        # no shell: every subprocess is an argv vector
+        - pattern: 'exec\.Command(Context)?\(.*"(ba|z)?sh"'
+          msg: "do not shell out; pass an argv vector"
+        - pattern: '^os\.Setenv$'
+          msg: "do not mutate the process environment"
+    gosec:
+      excludes:
+        - G304 # file paths come from the operator or the inspected repo by design; repo reads go through os.Root
+    revive:
+      rules:
+        - name: exported
+        - name: package-comments
+        - name: var-naming
+        - name: indent-error-flow
+        - name: early-return
+        - name: unused-parameter
+        - name: unexported-return
+    wrapcheck:
+      ignore-sig-regexps:
+        - '\.Errorf\('
+        - 'errors\.New\('
+        - 'errors\.Join\('
+  exclusions:
+    generated: strict
+    presets:
+      - std-error-handling
+    rules:
+      - path: _test\.go
+        linters: [funlen, gocognit, gocyclo, wrapcheck, gosec, dupword, maintidx]
+      - path: bench/
+        linters: [forbidigo]
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/MIERAI/docs-platform

@@ -1,0 +1,20 @@
+# docs-platform checks itself (dogfooding). Contract: contracts/config-v1.schema.json
+version: 1
+docs: ["*.md"]
+exclude: ["testdata/", "CHANGELOG*.md", "LICENSE*", "**/testdata/"]
+min_confidence: medium
+impact:
+  trailer: Docs-Not-Needed
+  rules:
+    - name: cli
+      code: ["cmd/docsp/**"]
+      docs: ["README.md", "docs/**"]
+    - name: contracts
+      code: ["contracts/**", "internal/findings/**", "internal/config/**"]
+      docs: ["docs/contracts.md", "docs/design.md"]
+    - name: extractors
+      code: ["internal/extract/**", "internal/refclass/**"]
+      docs: ["README.md", "docs/design.md"]
+    - name: action
+      code: ["action.yml"]
+      docs: ["README.md"]

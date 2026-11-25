@@ -1,0 +1,868 @@
+{
+  "schema_version": "1.3",
+  "collector": {
+    "name": "docs-check",
+    "version": "0.0.0",
+    "tools": {
+      "extract-comments": "0.1.0",
+      "extract-go": "0.1.0",
+      "extract-javascript": "0.1.0",
+      "extract-make": "0.1.0",
+      "extract-markdown": "0.1.0",
+      "extract-python": "0.1.0",
+      "extract-shell": "0.1.0",
+      "extract-terraform": "0.1.0",
+      "extract-yaml": "0.1.0"
+    }
+  },
+  "run": {
+    "started_at": "2026-11-25T00:00:00Z",
+    "finished_at": "2026-11-25T00:00:00Z"
+  },
+  "coverage": [
+    {
+      "asset": "doc:basic",
+      "status": "ok"
+    },
+    {
+      "asset": "code:basic",
+      "status": "ok"
+    }
+  ],
+  "findings": [
+    {
+      "id": "624fd92142d9",
+      "check": "docs.reference.outside_repo",
+      "layer": "docs",
+      "asset": "doc:basic/README.md#file_path:~/notes/tool.md",
+      "title": "README.md refers to ~/notes/tool.md outside the repository",
+      "severity": "info",
+      "evidence": "README.md:22",
+      "remediation": "Readers of this repository cannot follow it: inline the needed information, link a public source, or remove the reference.",
+      "needs_human": true,
+      "owner": "unassigned",
+      "observed_at": "2026-11-25T00:00:00Z",
+      "kind": "compliance",
+      "attributes": {
+        "docs": {
+          "finding_type": "outside_repo",
+          "ref_kind": "file_path",
+          "subject": "~/notes/tool.md",
+          "confidence": "low",
+          "detector_layer": "reference",
+          "locations": [
+            {
+              "path": "README.md",
+              "line": 22,
+              "role": "doc"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "5c39996c9d4c",
+      "check": "docs.symbol.undocumented.workflow_input",
+      "layer": "docs",
+      "asset": "code:basic/workflow_input:dry_run",
+      "title": "Undocumented workflow input dry_run (defined in .github/workflows/release.yml)",
+      "severity": "low",
+      "evidence": ".github/workflows/release.yml:6",
+      "remediation": "Document the workflow input dry_run (defined at .github/workflows/release.yml:6) in the user-facing docs, or add an ignore rule with a reason if it is internal.",
+      "needs_human": false,
+      "owner": "unassigned",
+      "observed_at": "2026-11-25T00:00:00Z",
+      "kind": "compliance",
+      "attributes": {
+        "docs": {
+          "finding_type": "undocumented",
+          "ref_kind": "workflow_input",
+          "subject": "dry_run",
+          "confidence": "high",
+          "detector_layer": "reference",
+          "locations": [
+            {
+              "path": ".github/workflows/release.yml",
+              "line": 6,
+              "role": "code"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "79b005e520e7",
+      "check": "docs.symbol.undocumented.cli_flag",
+      "layer": "docs",
+      "asset": "code:basic/cli_flag:pyapp --dry-run",
+      "title": "Undocumented flag pyapp --dry-run (defined in app.py)",
+      "severity": "info",
+      "evidence": "app.py:7",
+      "remediation": "Document the flag pyapp --dry-run (defined at app.py:7) in the user-facing docs, or add an ignore rule with a reason if it is internal.",
+      "needs_human": true,
+      "owner": "unassigned",
+      "observed_at": "2026-11-25T00:00:00Z",
+      "kind": "compliance",
+      "attributes": {
+        "docs": {
+          "finding_type": "undocumented",
+          "ref_kind": "cli_flag",
+          "subject": "--dry-run",
+          "program": "pyapp",
+          "confidence": "low",
+          "detector_layer": "reference",
+          "locations": [
+            {
+              "path": "app.py",
+              "line": 7,
+              "role": "code"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "2d7a62e9b96a",
+      "check": "docs.symbol.undocumented.config_key",
+      "layer": "docs",
+      "asset": "code:basic/config_key:image.pullPolicy",
+      "title": "Undocumented config key image.pullPolicy (defined in chart/values.yaml)",
+      "severity": "info",
+      "evidence": "chart/values.yaml:4",
+      "remediation": "Document the config key image.pullPolicy (defined at chart/values.yaml:4) in the user-facing docs, or add an ignore rule with a reason if it is internal.",
+      "needs_human": true,
+      "owner": "unassigned",
+      "observed_at": "2026-11-25T00:00:00Z",
+      "kind": "compliance",
+      "attributes": {
+        "docs": {
+          "finding_type": "undocumented",
+          "ref_kind": "config_key",
+          "subject": "image.pullPolicy",
+          "confidence": "medium",
+          "detector_layer": "reference",
+          "locations": [
+            {
+              "path": "chart/values.yaml",
+              "line": 4,
+              "role": "code"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "acbeaf021f4a",
+      "check": "docs.symbol.undocumented.cli_flag",
+      "layer": "docs",
+      "asset": "code:basic/cli_flag:tool --color",
+      "title": "Undocumented flag tool --color (defined in cmd/tool/main.go)",
+      "severity": "low",
+      "evidence": "cmd/tool/main.go:17",
+      "remediation": "Document the flag tool --color (defined at cmd/tool/main.go:17) in the user-facing docs, or add an ignore rule with a reason if it is internal.",
+      "needs_human": false,
+      "owner": "unassigned",
+      "observed_at": "2026-11-25T00:00:00Z",
+      "kind": "compliance",
+      "attributes": {
+        "docs": {
+          "finding_type": "undocumented",
+          "ref_kind": "cli_flag",
+          "subject": "--color",
+          "program": "tool",
+          "confidence": "high",
+          "detector_layer": "reference",
+          "locations": [
+            {
+              "path": "cmd/tool/main.go",
+              "line": 17,
+              "role": "code"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "49c997b0f871",
+      "check": "docs.symbol.undocumented.env_var",
+      "layer": "docs",
+      "asset": "code:basic/env_var:tool TOOL_UNDOCUMENTED",
+      "title": "Undocumented environment variable tool TOOL_UNDOCUMENTED (defined in cmd/tool/main.go)",
+      "severity": "low",
+      "evidence": "cmd/tool/main.go:21",
+      "remediation": "Document the environment variable tool TOOL_UNDOCUMENTED (defined at cmd/tool/main.go:21) in the user-facing docs, or add an ignore rule with a reason if it is internal.",
+      "needs_human": false,
+      "owner": "unassigned",
+      "observed_at": "2026-11-25T00:00:00Z",
+      "kind": "compliance",
+      "attributes": {
+        "docs": {
+          "finding_type": "undocumented",
+          "ref_kind": "env_var",
+          "subject": "TOOL_UNDOCUMENTED",
+          "program": "tool",
+          "confidence": "high",
+          "detector_layer": "reference",
+          "locations": [
+            {
+              "path": "cmd/tool/main.go",
+              "line": 21,
+              "role": "code"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "d22fc01d936a",
+      "check": "docs.symbol.undocumented.env_var",
+      "layer": "docs",
+      "asset": "code:basic/env_var:run RUN_MODE",
+      "title": "Undocumented environment variable run RUN_MODE (defined in scripts/run.sh)",
+      "severity": "low",
+      "evidence": "scripts/run.sh:4",
+      "remediation": "Document the environment variable run RUN_MODE (defined at scripts/run.sh:4) in the user-facing docs, or add an ignore rule with a reason if it is internal.",
+      "needs_human": false,
+      "owner": "unassigned",
+      "observed_at": "2026-11-25T00:00:00Z",
+      "kind": "compliance",
+      "attributes": {
+        "docs": {
+          "finding_type": "undocumented",
+          "ref_kind": "env_var",
+          "subject": "RUN_MODE",
+          "program": "run",
+          "confidence": "high",
+          "detector_layer": "reference",
+          "locations": [
+            {
+              "path": "scripts/run.sh",
+              "line": 4,
+              "role": "code"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "283bf607fb47",
+      "check": "docs.reference.unresolved.cli_flag",
+      "layer": "docs",
+      "asset": "doc:basic/README.md#cli_flag:--colour",
+      "title": "Docs mention flag --colour that does not exist",
+      "severity": "low",
+      "evidence": "README.md:3",
+      "remediation": "README.md at README.md:3 mentions the flag --colour, which this repository does not define. Fix the docs or restore the flag. Did you mean --color?",
+      "needs_human": true,
+      "owner": "unassigned",
+      "observed_at": "2026-11-25T00:00:00Z",
+      "kind": "compliance",
+      "attributes": {
+        "docs": {
+          "finding_type": "wrong_or_obsolete",
+          "ref_kind": "cli_flag",
+          "subject": "--colour",
+          "confidence": "medium",
+          "detector_layer": "reference",
+          "locations": [
+            {
+              "path": "README.md",
+              "line": 3,
+              "role": "doc"
+            }
+          ],
+          "suggestion": "--color"
+        }
+      }
+    },
+    {
+      "id": "471fcb45b25e",
+      "check": "docs.reference.unresolved.cli_flag",
+      "layer": "docs",
+      "asset": "doc:basic/README.md#cli_flag:-n",
+      "title": "Docs mention flag -n that does not exist",
+      "severity": "info",
+      "evidence": "README.md:3",
+      "remediation": "README.md at README.md:3 mentions the flag -n, which this repository does not define. Fix the docs or restore the flag.",
+      "needs_human": true,
+      "owner": "unassigned",
+      "observed_at": "2026-11-25T00:00:00Z",
+      "kind": "compliance",
+      "attributes": {
+        "docs": {
+          "finding_type": "wrong_or_obsolete",
+          "ref_kind": "cli_flag",
+          "subject": "-n",
+          "confidence": "low",
+          "detector_layer": "reference",
+          "locations": [
+            {
+              "path": "README.md",
+              "line": 3,
+              "role": "doc"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "eb50b94ba500",
+      "check": "docs.reference.unresolved.config_key",
+      "layer": "docs",
+      "asset": "doc:basic/README.md#config_key:image.digest",
+      "title": "Docs mention config key image.digest that does not exist",
+      "severity": "info",
+      "evidence": "README.md:27",
+      "remediation": "README.md at README.md:27 mentions the config key image.digest, which this repository does not define. Fix the docs or restore the config key.",
+      "needs_human": true,
+      "owner": "unassigned",
+      "observed_at": "2026-11-25T00:00:00Z",
+      "kind": "compliance",
+      "attributes": {
+        "docs": {
+          "finding_type": "wrong_or_obsolete",
+          "ref_kind": "config_key",
+          "subject": "image.digest",
+          "confidence": "low",
+          "detector_layer": "reference",
+          "locations": [
+            {
+              "path": "README.md",
+              "line": 27,
+              "role": "doc"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "40d3198ed79e",
+      "check": "docs.reference.unresolved.env_var",
+      "layer": "docs",
+      "asset": "doc:basic/README.md#env_var:TOOL_OLD",
+      "title": "Docs mention environment variable TOOL_OLD that does not exist",
+      "severity": "low",
+      "evidence": "README.md:5",
+      "remediation": "README.md at README.md:5 mentions the environment variable TOOL_OLD, which this repository does not define. Fix the docs or restore the environment variable.",
+      "needs_human": true,
+      "owner": "unassigned",
+      "observed_at": "2026-11-25T00:00:00Z",
+      "kind": "compliance",
+      "attributes": {
+        "docs": {
+          "finding_type": "wrong_or_obsolete",
+          "ref_kind": "env_var",
+          "subject": "TOOL_OLD",
+          "confidence": "medium",
+          "detector_layer": "reference",
+          "locations": [
+            {
+              "path": "README.md",
+              "line": 5,
+              "role": "doc"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "f4479d10c1e8",
+      "check": "docs.reference.unresolved.file_path",
+      "layer": "docs",
+      "asset": "doc:basic/README.md#file_path:scripts/gone.sh",
+      "title": "Docs mention path scripts/gone.sh that does not exist",
+      "severity": "medium",
+      "evidence": "README.md:10",
+      "remediation": "README.md at README.md:10 mentions the path scripts/gone.sh, which this repository does not define. Fix the docs or restore the path.",
+      "needs_human": false,
+      "owner": "unassigned",
+      "observed_at": "2026-11-25T00:00:00Z",
+      "kind": "compliance",
+      "attributes": {
+        "docs": {
+          "finding_type": "wrong_or_obsolete",
+          "ref_kind": "file_path",
+          "subject": "scripts/gone.sh",
+          "confidence": "high",
+          "detector_layer": "reference",
+          "locations": [
+            {
+              "path": "README.md",
+              "line": 10,
+              "role": "doc"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "e1e2c4930087",
+      "check": "docs.reference.unresolved.link",
+      "layer": "docs",
+      "asset": "doc:basic/README.md#link:docs/guide.md#no-such-heading",
+      "title": "Docs mention link target docs/guide.md#no-such-heading that does not exist",
+      "severity": "low",
+      "evidence": "README.md:8",
+      "remediation": "README.md at README.md:8 mentions the link target docs/guide.md#no-such-heading, which this repository does not define. Fix the docs or restore the link target.",
+      "needs_human": true,
+      "owner": "unassigned",
+      "observed_at": "2026-11-25T00:00:00Z",
+      "kind": "compliance",
+      "attributes": {
+        "docs": {
+          "finding_type": "wrong_or_obsolete",
+          "ref_kind": "link",
+          "subject": "docs/guide.md#no-such-heading",
+          "confidence": "medium",
+          "detector_layer": "reference",
+          "locations": [
+            {
+              "path": "README.md",
+              "line": 8,
+              "role": "doc"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "244e16c3349c",
+      "check": "docs.reference.unresolved.link",
+      "layer": "docs",
+      "asset": "doc:basic/README.md#link:docs/missing.md",
+      "title": "Docs mention link target docs/missing.md that does not exist",
+      "severity": "medium",
+      "evidence": "README.md:7",
+      "remediation": "README.md at README.md:7 mentions the link target docs/missing.md, which this repository does not define. Fix the docs or restore the link target.",
+      "needs_human": false,
+      "owner": "unassigned",
+      "observed_at": "2026-11-25T00:00:00Z",
+      "kind": "compliance",
+      "attributes": {
+        "docs": {
+          "finding_type": "wrong_or_obsolete",
+          "ref_kind": "link",
+          "subject": "docs/missing.md",
+          "confidence": "high",
+          "detector_layer": "reference",
+          "locations": [
+            {
+              "path": "README.md",
+              "line": 7,
+              "role": "doc"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "ccd9628dc6a5",
+      "check": "docs.reference.unresolved.make_target",
+      "layer": "docs",
+      "asset": "doc:basic/README.md#make_target:make deploy",
+      "title": "Docs mention make target make deploy that does not exist",
+      "severity": "medium",
+      "evidence": "README.md:16",
+      "remediation": "README.md at README.md:16 mentions the make target make deploy, which this repository does not define. Fix the docs or restore the make target.",
+      "needs_human": false,
+      "owner": "unassigned",
+      "observed_at": "2026-11-25T00:00:00Z",
+      "kind": "compliance",
+      "attributes": {
+        "docs": {
+          "finding_type": "wrong_or_obsolete",
+          "ref_kind": "make_target",
+          "subject": "deploy",
+          "program": "make",
+          "confidence": "high",
+          "detector_layer": "reference",
+          "locations": [
+            {
+              "path": "README.md",
+              "line": 16,
+              "role": "doc"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "d653c9244165",
+      "check": "docs.reference.unresolved.metric",
+      "layer": "docs",
+      "asset": "doc:basic/README.md#metric:tool_errors_total",
+      "title": "Docs mention metric tool_errors_total that does not exist",
+      "severity": "low",
+      "evidence": "README.md:12",
+      "remediation": "README.md at README.md:12 mentions the metric tool_errors_total, which this repository does not define. Fix the docs or restore the metric.",
+      "needs_human": true,
+      "owner": "unassigned",
+      "observed_at": "2026-11-25T00:00:00Z",
+      "kind": "compliance",
+      "attributes": {
+        "docs": {
+          "finding_type": "wrong_or_obsolete",
+          "ref_kind": "metric",
+          "subject": "tool_errors_total",
+          "confidence": "medium",
+          "detector_layer": "reference",
+          "locations": [
+            {
+              "path": "README.md",
+              "line": 12,
+              "role": "doc"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "d061d0c3b1f1",
+      "check": "docs.reference.unresolved.file_path",
+      "layer": "docs",
+      "asset": "doc:basic/scripts/run.sh#file_path:docs/removed.md",
+      "title": "Docs mention path docs/removed.md that does not exist",
+      "severity": "medium",
+      "evidence": "scripts/run.sh:2",
+      "remediation": "scripts/run.sh at scripts/run.sh:2 mentions the path docs/removed.md, which this repository does not define. Fix the docs or restore the path.",
+      "needs_human": false,
+      "owner": "unassigned",
+      "observed_at": "2026-11-25T00:00:00Z",
+      "kind": "compliance",
+      "attributes": {
+        "docs": {
+          "finding_type": "wrong_or_obsolete",
+          "ref_kind": "file_path",
+          "subject": "docs/removed.md",
+          "confidence": "high",
+          "detector_layer": "reference",
+          "locations": [
+            {
+              "path": "scripts/run.sh",
+              "line": 2,
+              "role": "doc"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "metrics": [
+    {
+      "name": "docs_public_symbol_coverage_ratio",
+      "value": 0.6111111111111112,
+      "labels": {
+        "repo": "basic"
+      },
+      "help": "Documented / public code symbols"
+    },
+    {
+      "name": "docs_public_symbols",
+      "value": 2,
+      "labels": {
+        "documented": "true",
+        "kind": "cli_command",
+        "repo": "basic"
+      },
+      "help": "Public code symbols by kind and whether documentation mentions them"
+    },
+    {
+      "name": "docs_public_symbols",
+      "value": 2,
+      "labels": {
+        "documented": "false",
+        "kind": "cli_flag",
+        "repo": "basic"
+      },
+      "help": "Public code symbols by kind and whether documentation mentions them"
+    },
+    {
+      "name": "docs_public_symbols",
+      "value": 3,
+      "labels": {
+        "documented": "true",
+        "kind": "cli_flag",
+        "repo": "basic"
+      },
+      "help": "Public code symbols by kind and whether documentation mentions them"
+    },
+    {
+      "name": "docs_public_symbols",
+      "value": 1,
+      "labels": {
+        "documented": "false",
+        "kind": "config_key",
+        "repo": "basic"
+      },
+      "help": "Public code symbols by kind and whether documentation mentions them"
+    },
+    {
+      "name": "docs_public_symbols",
+      "value": 3,
+      "labels": {
+        "documented": "true",
+        "kind": "config_key",
+        "repo": "basic"
+      },
+      "help": "Public code symbols by kind and whether documentation mentions them"
+    },
+    {
+      "name": "docs_public_symbols",
+      "value": 3,
+      "labels": {
+        "documented": "false",
+        "kind": "env_var",
+        "repo": "basic"
+      },
+      "help": "Public code symbols by kind and whether documentation mentions them"
+    },
+    {
+      "name": "docs_public_symbols",
+      "value": 1,
+      "labels": {
+        "documented": "true",
+        "kind": "env_var",
+        "repo": "basic"
+      },
+      "help": "Public code symbols by kind and whether documentation mentions them"
+    },
+    {
+      "name": "docs_public_symbols",
+      "value": 1,
+      "labels": {
+        "documented": "true",
+        "kind": "metric",
+        "repo": "basic"
+      },
+      "help": "Public code symbols by kind and whether documentation mentions them"
+    },
+    {
+      "name": "docs_public_symbols",
+      "value": 1,
+      "labels": {
+        "documented": "false",
+        "kind": "workflow_input",
+        "repo": "basic"
+      },
+      "help": "Public code symbols by kind and whether documentation mentions them"
+    },
+    {
+      "name": "docs_public_symbols",
+      "value": 1,
+      "labels": {
+        "documented": "true",
+        "kind": "workflow_input",
+        "repo": "basic"
+      },
+      "help": "Public code symbols by kind and whether documentation mentions them"
+    },
+    {
+      "name": "docs_reference_resolution_ratio",
+      "value": 0.6551724137931034,
+      "labels": {
+        "repo": "basic"
+      },
+      "help": "Resolved / checkable documentation references"
+    },
+    {
+      "name": "docs_references",
+      "value": 2,
+      "labels": {
+        "kind": "cli_command",
+        "repo": "basic",
+        "status": "external"
+      },
+      "help": "Documentation references by kind and resolution status"
+    },
+    {
+      "name": "docs_references",
+      "value": 3,
+      "labels": {
+        "kind": "cli_command",
+        "repo": "basic",
+        "status": "resolved"
+      },
+      "help": "Documentation references by kind and resolution status"
+    },
+    {
+      "name": "docs_references",
+      "value": 1,
+      "labels": {
+        "kind": "cli_flag",
+        "repo": "basic",
+        "status": "external"
+      },
+      "help": "Documentation references by kind and resolution status"
+    },
+    {
+      "name": "docs_references",
+      "value": 1,
+      "labels": {
+        "kind": "cli_flag",
+        "repo": "basic",
+        "status": "ignored"
+      },
+      "help": "Documentation references by kind and resolution status"
+    },
+    {
+      "name": "docs_references",
+      "value": 4,
+      "labels": {
+        "kind": "cli_flag",
+        "repo": "basic",
+        "status": "resolved"
+      },
+      "help": "Documentation references by kind and resolution status"
+    },
+    {
+      "name": "docs_references",
+      "value": 2,
+      "labels": {
+        "kind": "cli_flag",
+        "repo": "basic",
+        "status": "unresolved"
+      },
+      "help": "Documentation references by kind and resolution status"
+    },
+    {
+      "name": "docs_references",
+      "value": 1,
+      "labels": {
+        "kind": "config_key",
+        "repo": "basic",
+        "status": "resolved"
+      },
+      "help": "Documentation references by kind and resolution status"
+    },
+    {
+      "name": "docs_references",
+      "value": 1,
+      "labels": {
+        "kind": "config_key",
+        "repo": "basic",
+        "status": "unresolved"
+      },
+      "help": "Documentation references by kind and resolution status"
+    },
+    {
+      "name": "docs_references",
+      "value": 1,
+      "labels": {
+        "kind": "env_var",
+        "repo": "basic",
+        "status": "resolved"
+      },
+      "help": "Documentation references by kind and resolution status"
+    },
+    {
+      "name": "docs_references",
+      "value": 1,
+      "labels": {
+        "kind": "env_var",
+        "repo": "basic",
+        "status": "unresolved"
+      },
+      "help": "Documentation references by kind and resolution status"
+    },
+    {
+      "name": "docs_references",
+      "value": 1,
+      "labels": {
+        "kind": "file_path",
+        "repo": "basic",
+        "status": "outside"
+      },
+      "help": "Documentation references by kind and resolution status"
+    },
+    {
+      "name": "docs_references",
+      "value": 5,
+      "labels": {
+        "kind": "file_path",
+        "repo": "basic",
+        "status": "resolved"
+      },
+      "help": "Documentation references by kind and resolution status"
+    },
+    {
+      "name": "docs_references",
+      "value": 2,
+      "labels": {
+        "kind": "file_path",
+        "repo": "basic",
+        "status": "unresolved"
+      },
+      "help": "Documentation references by kind and resolution status"
+    },
+    {
+      "name": "docs_references",
+      "value": 3,
+      "labels": {
+        "kind": "link",
+        "repo": "basic",
+        "status": "resolved"
+      },
+      "help": "Documentation references by kind and resolution status"
+    },
+    {
+      "name": "docs_references",
+      "value": 2,
+      "labels": {
+        "kind": "link",
+        "repo": "basic",
+        "status": "unresolved"
+      },
+      "help": "Documentation references by kind and resolution status"
+    },
+    {
+      "name": "docs_references",
+      "value": 1,
+      "labels": {
+        "kind": "make_target",
+        "repo": "basic",
+        "status": "resolved"
+      },
+      "help": "Documentation references by kind and resolution status"
+    },
+    {
+      "name": "docs_references",
+      "value": 1,
+      "labels": {
+        "kind": "make_target",
+        "repo": "basic",
+        "status": "unresolved"
+      },
+      "help": "Documentation references by kind and resolution status"
+    },
+    {
+      "name": "docs_references",
+      "value": 1,
+      "labels": {
+        "kind": "metric",
+        "repo": "basic",
+        "status": "external"
+      },
+      "help": "Documentation references by kind and resolution status"
+    },
+    {
+      "name": "docs_references",
+      "value": 1,
+      "labels": {
+        "kind": "metric",
+        "repo": "basic",
+        "status": "resolved"
+      },
+      "help": "Documentation references by kind and resolution status"
+    },
+    {
+      "name": "docs_references",
+      "value": 1,
+      "labels": {
+        "kind": "metric",
+        "repo": "basic",
+        "status": "unresolved"
+      },
+      "help": "Documentation references by kind and resolution status"
+    }
+  ]
+}

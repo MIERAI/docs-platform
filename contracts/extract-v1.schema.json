@@ -1,0 +1,212 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "docs-platform/extract/v1",
+  "title": "docs-platform extractor output v1 (what an extractor plugin found in a repository)",
+  "$comment": "Built-in extractors produce this in memory; external extractors print it on stdout. Minor versions only add optional fields; consumers ignore unknown fields.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "extractor",
+    "symbols",
+    "references"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^1\\.[0-9]+$"
+    },
+    "extractor": {
+      "type": "object",
+      "required": [
+        "name",
+        "version",
+        "side"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+$"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+        },
+        "side": {
+          "enum": [
+            "docs",
+            "code"
+          ]
+        }
+      }
+    },
+    "symbols": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "kind",
+          "name",
+          "path",
+          "public",
+          "confidence",
+          "source"
+        ],
+        "properties": {
+          "kind": {
+            "$ref": "#/$defs/kind"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "program": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "line": {
+            "type": "integer"
+          },
+          "public": {
+            "type": "boolean"
+          },
+          "confidence": {
+            "$ref": "#/$defs/confidence"
+          },
+          "source": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "references": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "kind",
+          "text",
+          "path",
+          "line",
+          "confidence",
+          "context",
+          "source"
+        ],
+        "properties": {
+          "kind": {
+            "$ref": "#/$defs/kind"
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "program": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "line": {
+            "type": "integer"
+          },
+          "confidence": {
+            "$ref": "#/$defs/confidence"
+          },
+          "context": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "qualifier": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "mentions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "token",
+          "in_code"
+        ],
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "in_code": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "suppressions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "path",
+          "line",
+          "reason"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "line": {
+            "type": "integer"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "path",
+          "reason"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "kind": {
+      "enum": [
+        "cli_command",
+        "cli_flag",
+        "env_var",
+        "config_key",
+        "metric",
+        "file_path",
+        "link",
+        "anchor",
+        "make_target",
+        "workflow_input",
+        "program",
+        "term"
+      ]
+    },
+    "confidence": {
+      "enum": [
+        "high",
+        "medium",
+        "low"
+      ]
+    }
+  }
+}

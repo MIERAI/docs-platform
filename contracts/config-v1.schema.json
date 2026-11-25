@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "docs-platform/config/v1",
+  "title": ".docsp.yaml - per-repository docs-platform configuration v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "enum": [
+        1
+      ]
+    },
+    "docs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "exclude": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "public_config": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "public_depth": {
+      "type": "integer"
+    },
+    "min_confidence": {
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ]
+    },
+    "owner": {
+      "type": "string"
+    },
+    "extractors": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "disable": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "external": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "command"
+            ],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "command": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "ignore": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "check": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "impact": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "trailer": {
+          "type": "string"
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "code",
+              "docs"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "code": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "docs": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "reverse": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kinds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "disabled": {
+          "type": "boolean"
+        }
+      }
+    },
+    "related_repos": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

@@ -1,0 +1,92 @@
+{
+  "schema_version": "1.3",
+  "collector": {
+    "name": "docs-check",
+    "version": "0.0.0",
+    "tools": {
+      "extract-comments": "0.1.0",
+      "extract-go": "0.1.0",
+      "extract-javascript": "0.1.0",
+      "extract-make": "0.1.0",
+      "extract-markdown": "0.1.0",
+      "extract-python": "0.1.0",
+      "extract-shell": "0.1.0",
+      "extract-terraform": "0.1.0",
+      "extract-yaml": "0.1.0"
+    }
+  },
+  "run": {
+    "started_at": "2026-11-25T00:00:00Z",
+    "finished_at": "2026-11-25T00:00:00Z"
+  },
+  "coverage": [
+    {
+      "asset": "doc:minimal",
+      "status": "ok"
+    },
+    {
+      "asset": "code:minimal",
+      "status": "ok"
+    }
+  ],
+  "findings": [
+    {
+      "id": "5db66f4e4fdc",
+      "check": "docs.reference.unresolved.link",
+      "layer": "docs",
+      "asset": "doc:minimal/README.md#link:nowhere.md",
+      "title": "Docs mention link target nowhere.md that does not exist",
+      "severity": "medium",
+      "evidence": "README.md:3",
+      "remediation": "README.md at README.md:3 mentions the link target nowhere.md, which this repository does not define. Fix the docs or restore the link target.",
+      "needs_human": false,
+      "owner": "unassigned",
+      "observed_at": "2026-11-25T00:00:00Z",
+      "kind": "compliance",
+      "attributes": {
+        "docs": {
+          "finding_type": "wrong_or_obsolete",
+          "ref_kind": "link",
+          "subject": "nowhere.md",
+          "confidence": "high",
+          "detector_layer": "reference",
+          "locations": [
+            {
+              "path": "README.md",
+              "line": 3,
+              "role": "doc"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "metrics": [
+    {
+      "name": "docs_public_symbol_coverage_ratio",
+      "value": 1,
+      "labels": {
+        "repo": "minimal"
+      },
+      "help": "Documented / public code symbols"
+    },
+    {
+      "name": "docs_reference_resolution_ratio",
+      "value": 0,
+      "labels": {
+        "repo": "minimal"
+      },
+      "help": "Resolved / checkable documentation references"
+    },
+    {
+      "name": "docs_references",
+      "value": 1,
+      "labels": {
+        "kind": "link",
+        "repo": "minimal",
+        "status": "unresolved"
+      },
+      "help": "Documentation references by kind and resolution status"
+    }
+  ]
+}

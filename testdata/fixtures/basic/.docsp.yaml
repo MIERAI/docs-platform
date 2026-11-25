@@ -1,0 +1,11 @@
+version: 1
+public_config: ["chart/values.yaml"]
+ignore:
+  - kind: env_var
+    text: PY_*
+    reason: internal knob of the helper script
+impact:
+  rules:
+    - name: cli
+      code: ["cmd/**"]
+      docs: ["README.md", "docs/**"]

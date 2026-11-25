@@ -1,0 +1,9 @@
+# package FuzzTarget — every parser of external input
+./internal/extract/markdown FuzzParse
+./internal/extract/markdown FuzzExtract
+./internal/yamlkeys FuzzParse
+./internal/config FuzzParse
+./internal/refclass FuzzCommandLine
+./internal/extract/golang FuzzExtract
+./internal/extract/comments FuzzSegments
+./internal/plugin FuzzDecodeExternal

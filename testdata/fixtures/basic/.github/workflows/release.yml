@@ -1,0 +1,8 @@
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: release version
+      dry_run:
+        description: do not publish
+jobs: {}

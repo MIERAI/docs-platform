@@ -1,0 +1,65 @@
+name: docs-platform
+description: Keep documentation true to the code - reference check (layer 3) and PR impact check (layer 4a).
+inputs:
+  mode:
+    description: "check, impact or both"
+    default: both
+  path:
+    description: repository path to inspect
+    default: "."
+  config:
+    description: configuration file (default <path>/.docsp.yaml)
+    default: ""
+  min-confidence:
+    description: "report findings at or above: low, medium, high"
+    default: medium
+  fail-on:
+    description: "fail the step on findings of this severity or higher: info, low, medium, high, none"
+    default: medium
+  findings-file:
+    description: where to write the findings/v1 JSON (uploaded by the caller if wanted)
+    default: docsp-findings.json
+outputs:
+  findings-file:
+    description: path of the findings/v1 document
+    value: ${{ inputs.findings-file }}
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+      with:
+        go-version-file: ${{ github.action_path }}/go.mod
+        cache: false
+    - name: build docsp
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: go build -trimpath -o "$RUNNER_TEMP/docsp" ./cmd/docsp
+    - name: reference check
+      if: inputs.mode == 'check' || inputs.mode == 'both'
+      shell: bash
+      env:
+        DOCSP_PATH: ${{ inputs.path }}
+        DOCSP_CONFIG: ${{ inputs.config }}
+        DOCSP_MIN: ${{ inputs.min-confidence }}
+        DOCSP_FAIL: ${{ inputs.fail-on }}
+        DOCSP_OUT: ${{ inputs.findings-file }}
+      run: |
+        args=(check -out "$DOCSP_OUT" -format text -min-confidence "$DOCSP_MIN" -fail-on "$DOCSP_FAIL")
+        [[ -n "$DOCSP_CONFIG" ]] && args+=(-config "$DOCSP_CONFIG")
+        "$RUNNER_TEMP/docsp" "${args[@]}" "$DOCSP_PATH"
+    - name: PR impact check
+      if: (inputs.mode == 'impact' || inputs.mode == 'both') && github.event_name == 'pull_request'
+      shell: bash
+      env:
+        # untrusted PR text reaches the tool only through the environment and a file, never the script
+        PR_BODY: ${{ github.event.pull_request.body }}
+        BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        DOCSP_PATH: ${{ inputs.path }}
+        DOCSP_CONFIG: ${{ inputs.config }}
+      run: |
+        body="$RUNNER_TEMP/docsp-pr-body.txt"
+        printf '%s' "$PR_BODY" > "$body"
+        args=(impact -base "$BASE_SHA" -head "$HEAD_SHA" -pr-body-file "$body" -out "$RUNNER_TEMP/docsp-impact.json")
+        [[ -n "$DOCSP_CONFIG" ]] && args+=(-config "$DOCSP_CONFIG")
+        "$RUNNER_TEMP/docsp" "${args[@]}" "$DOCSP_PATH"

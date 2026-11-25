@@ -1,0 +1,299 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "security-platform/findings/v1",
+  "title": "findings document v1 (one collector run) - 1.3 PROPOSED: adds layer 'docs' and the docs_ metric namespace",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "collector",
+    "run",
+    "coverage",
+    "findings"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^1\\.[0-9]+$"
+    },
+    "collector": {
+      "type": "object",
+      "required": [
+        "name",
+        "version"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+$"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+        },
+        "tools": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "run": {
+      "type": "object",
+      "required": [
+        "started_at",
+        "finished_at"
+      ],
+      "properties": {
+        "started_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "finished_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "instance": {
+          "type": "string"
+        }
+      }
+    },
+    "coverage": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "asset",
+          "status"
+        ],
+        "properties": {
+          "asset": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "gap"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "complete_scope": {
+            "type": "string",
+            "pattern": "^[a-z0-9-]+:"
+          },
+          "checks": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z0-9_.*-]+$"
+            }
+          }
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "check",
+          "layer",
+          "asset",
+          "title",
+          "severity",
+          "evidence",
+          "remediation",
+          "needs_human",
+          "owner",
+          "observed_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{12}$"
+          },
+          "check": {
+            "type": "string",
+            "pattern": "^[a-z0-9_.-]+$"
+          },
+          "layer": {
+            "enum": [
+              "identity",
+              "network",
+              "host",
+              "workload",
+              "supply-chain",
+              "data-secrets",
+              "ai-agents",
+              "detection",
+              "docs"
+            ]
+          },
+          "asset": {
+            "type": "string",
+            "pattern": "^[a-z0-9-]+:.+$"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "severity": {
+            "enum": [
+              "critical",
+              "high",
+              "medium",
+              "low",
+              "info"
+            ]
+          },
+          "evidence": {
+            "type": "string"
+          },
+          "remediation": {
+            "type": "string"
+          },
+          "needs_human": {
+            "type": "boolean"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "observed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "kind": {
+            "enum": [
+              "detection",
+              "vulnerability",
+              "compliance"
+            ]
+          },
+          "refs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "attributes": {
+            "type": "object",
+            "properties": {
+              "docs": {
+                "$ref": "#/$defs/docsAttributes"
+              }
+            }
+          }
+        }
+      }
+    },
+    "metrics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "value"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^(security|docs)_[a-z0-9_]+$"
+          },
+          "value": {
+            "type": "number"
+          },
+          "labels": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "help": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "$comment": "Proposed additive minor 1.3 of security-platform findings/v1 (see docs/contracts.md). Differences from upstream 1.2: layer enum += 'docs'; metrics name pattern accepts the docs_ prefix; attributes.docs documented (attributes was already a free object). Everything else is byte-for-byte upstream.",
+  "$defs": {
+    "docsAttributes": {
+      "type": "object",
+      "required": [
+        "finding_type",
+        "ref_kind",
+        "subject",
+        "confidence",
+        "locations"
+      ],
+      "properties": {
+        "finding_type": {
+          "enum": [
+            "wrong_or_obsolete",
+            "undocumented",
+            "outside_repo",
+            "residue",
+            "impact_unaccompanied",
+            "semantic"
+          ]
+        },
+        "ref_kind": {
+          "type": "string",
+          "pattern": "^[a-z_]+$"
+        },
+        "subject": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "program": {
+          "type": "string"
+        },
+        "confidence": {
+          "enum": [
+            "high",
+            "medium",
+            "low"
+          ]
+        },
+        "detector_layer": {
+          "enum": [
+            "reference",
+            "generated",
+            "executable",
+            "impact",
+            "ai_audit"
+          ]
+        },
+        "locations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "path"
+            ],
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "line": {
+                "type": "integer"
+              },
+              "role": {
+                "enum": [
+                  "doc",
+                  "code"
+                ]
+              }
+            }
+          }
+        },
+        "suggestion": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

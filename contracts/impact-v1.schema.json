@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "docs-platform/impact/v1",
+  "title": "docs-platform PR impact report v1 (one docsp impact run)",
+  "type": "object",
+  "required": ["schema_version", "tool", "base", "head", "changed_files", "rules", "verdict"],
+  "properties": {
+    "schema_version": {"type": "string", "pattern": "^1\\.[0-9]+$"},
+    "tool": {"type": "object", "required": ["name", "version"],
+             "properties": {"name": {"type": "string"}, "version": {"type": "string"}}},
+    "base": {"type": "string"},
+    "head": {"type": "string"},
+    "changed_files": {"type": "integer"},
+    "rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "status"],
+        "properties": {
+          "name": {"type": "string"},
+          "status": {"enum": ["not_triggered", "docs_updated", "missing_docs", "waived"]},
+          "code_changed": {"type": "array", "items": {"type": "string"}},
+          "docs_expected": {"type": "array", "items": {"type": "string"}},
+          "docs_changed": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "waiver_reason": {"type": "string", "maxLength": 1000},
+    "verdict": {"enum": ["pass", "fail", "waived", "not_applicable"]},
+    "metrics": {
+      "type": "array",
+      "items": {"type": "object", "required": ["name", "value"],
+                "properties": {"name": {"type": "string", "pattern": "^docs_[a-z0-9_]+$"},
+                               "value": {"type": "number"},
+                               "labels": {"type": "object", "additionalProperties": {"type": "string"}}}}
+    }
+  }
+}
