@@ -200,6 +200,8 @@ scoped searches of the judgment (recorded with `-footprint weak` on `eval-model`
 newly added sibling of the document or a quoted file (one directory level wildcarded), an
 entry added to or removed from a set an enumerating claim listed (recorded with `-footprint
 members`). Footprints only re-open a claim; they never decide a verdict. Off by default.
+Pinned files (`docsp factory-rules`: the hand-written code a generator's manifest says a rule
+governs) are a footprint that is always on and survives re-judging (`pinned_changed`).
 The ledger is private data (documentation text and paths): mode 0600, never inside an
 inspected repository.
 
@@ -327,8 +329,8 @@ factory's own gates (deterministic generation, an up-to-date check, acceptance b
 design's examples) keep them in step, and re-parsing generated code breaks whenever the
 generator changes its output. Only the escape layer (compute logic, custom handlers,
 `datasource.sql`) is compared. The manifest also maps every business rule of an API with
-hand-written code to that code (`factorymanifest.RuleFootprints`): the prose rules are where a
-design goes stale, and they are judged as claims, not diffed. On a real factory repository
+hand-written code to that code: the prose rules are where a design goes stale, and they are
+judged as claims, not diffed (`docsp factory-rules`, below). On a real factory repository
 (65 operations) the manifest took the report from 75 items (almost all generator-output
 parsing gaps) to 11 informational ones.
 
@@ -376,6 +378,24 @@ groups:
 
 `go run ./bench contract-lab -lab bench/contractlab/lab.json -work DIR` replays the lab of design/§13 (drifts injected into
 pinned public clones, expected detections in `bench/contractlab/lab.json`).
+
+### `docsp factory-rules -factory-manifest FILE -ledger FILE [flags] [repo]`
+
+Puts the business rules of an API factory's escape layer into the ledger. For every API the
+manifest lists with hand-written code (compute logic, a custom handler), each rule line of its
+design or spec is judged against the repository like any documentation line, with the
+hand-written files given to the judge as the place to start (a hint, not evidence). The
+resulting claim pins those files (`evidence.pinned`, their blobs at the judged commit): when
+one of them changes, `docsp stale` re-opens the rule and the per-commit `recheck` judges it
+again; the pins are kept. Tests are not pinned (they are not the implementation), nor is the
+rule's own file (SQL inside a spec: an edit there re-opens the line anyway). Rules of APIs the
+generator guarantees are left out.
+
+Rules already in the ledger with the same pinned files are not judged again, so the command
+can run on every commit and only pays for new or edited rules and a changed set of
+hand-written files. The manifest must be exported from the commit being judged: a rule line
+that is missing or does not contain the rule's condition is an error, not a guess. `-dry-run`
+lists what would be judged without a model; `-out FILE` writes the plan and result as JSON.
 
 ### `docsp extract [--config FILE] [repo]`, `docsp validate FILE`, `docsp version`
 

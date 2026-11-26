@@ -299,6 +299,13 @@
               }
             }
           }
+        },
+        "pinned": {
+          "type": "array",
+          "description": "footprint, not evidence: files a producer of the code declares the claim governs (an API factory's manifest: the hand-written code behind a business rule), with their blobs at verified_ref; a change re-opens the claim; kept across re-judging",
+          "items": {
+            "$ref": "#/$defs/file"
+          }
         }
       }
     },

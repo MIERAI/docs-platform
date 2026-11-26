@@ -12,6 +12,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path"
+	"slices"
 	"strings"
 )
 
@@ -125,24 +127,60 @@ func (m *Manifest) Index() map[string]API {
 	return out
 }
 
-// RuleFootprints maps each business rule ("path:line") of an API with hand-written code to
-// that code: when one of those files changes, the rule may no longer hold. Rules of
-// generator-guaranteed APIs are left out (their behaviour follows the source).
-func (m *Manifest) RuleFootprints() map[string][]string {
-	out := map[string][]string{}
+// EscapedRule is a business rule of an API with hand-written code, and that code.
+type EscapedRule struct {
+	Rule
+	API string
+	// Files are the API's existing hand-written files (tests and the rule's own file left
+	// out): when one of them changes, the rule may no longer hold. A rule whose only
+	// hand-written part is in its own file (SQL in the spec) has none.
+	Files []string
+}
+
+// EscapedRules lists the rules of APIs with hand-written code, in manifest order, with
+// paths relative to the repository root (the manifest's project prefixed). Rules of
+// generator-guaranteed APIs are left out: their behaviour follows the source.
+func (m *Manifest) EscapedRules() []EscapedRule {
+	var out []EscapedRule
 	for _, a := range m.APIs {
 		if !a.Escaped() {
 			continue
 		}
-		var files []string
-		for _, e := range a.Escape {
-			if e.Exists {
-				files = append(files, e.Path)
-			}
-		}
 		for _, r := range a.Rules {
-			k := fmt.Sprintf("%s:%d", r.Path, r.Line)
-			out[k] = append(out[k], files...)
+			r.Path = m.repoPath(r.Path)
+			er := EscapedRule{Rule: r, API: a.ID, Files: []string{}}
+			for _, e := range a.Escape {
+				f := m.repoPath(e.Path)
+				if e.Exists && e.Kind != "test" && f != r.Path && !slices.Contains(er.Files, f) {
+					er.Files = append(er.Files, f)
+				}
+			}
+			out = append(out, er)
+		}
+	}
+	return out
+}
+
+// repoPath prefixes the manifest's project directory (relative to the repository root).
+func (m *Manifest) repoPath(p string) string {
+	if m.Project == "" || m.Project == "." {
+		return p
+	}
+	return path.Join(m.Project, p)
+}
+
+// RuleFootprints maps each escaped rule ("path:line") to its hand-written files (EscapedRules).
+func (m *Manifest) RuleFootprints() map[string][]string {
+	out := map[string][]string{}
+	for _, r := range m.EscapedRules() {
+		k := fmt.Sprintf("%s:%d", r.Path, r.Line)
+		if out[k] == nil {
+			out[k] = []string{}
+		}
+		for _, f := range r.Files {
+			if !slices.Contains(out[k], f) {
+				out[k] = append(out[k], f)
+			}
 		}
 	}
 	return out

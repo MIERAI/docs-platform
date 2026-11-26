@@ -103,7 +103,8 @@
                     "no_evidence",
                     "weak_scope_changed",
                     "sibling_added",
-                    "member_set_changed"
+                    "member_set_changed",
+                    "pinned_changed"
                   ]
                 },
                 "path": {

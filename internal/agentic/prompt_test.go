@@ -129,3 +129,18 @@ func TestClaudeCodeAgenticArgv(t *testing.T) {
 		}
 	}
 }
+
+// A producer's hint names the code to start from; without one the prompt is unchanged
+// (prompt hashes of ordinary claims stay stable).
+func TestCaseBlockHint(t *testing.T) {
+	s := statement{Path: "design/a.yaml", Line: 3, Context: ">> rule"}
+	plain := caseBlock(s)
+	if strings.Contains(plain, "hand-written") {
+		t.Error("no hint: no hint text")
+	}
+	s.Hint = "internal/a_logic.go"
+	h := caseBlock(s)
+	if !strings.HasPrefix(h, plain) || !strings.Contains(h, "internal/a_logic.go") || !strings.Contains(h, "must still rest on what you read") {
+		t.Errorf("hinted block:\n%s", h)
+	}
+}

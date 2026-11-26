@@ -2,6 +2,8 @@ module github.com/MIERAI/docs-platform/providers/anthropic
 
 go 1.27.0
 
+toolchain go1.27.4
+
 require (
 	github.com/MIERAI/docs-platform v0.0.0
 	github.com/anthropics/anthropic-sdk-go/v2 v2.15.0

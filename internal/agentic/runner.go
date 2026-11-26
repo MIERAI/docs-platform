@@ -102,6 +102,11 @@ type Options struct {
 	// External are path globs whose content does not count as evidence (vendored sources,
 	// mirrors, submodules).
 	External []string
+	// Hint names, for a statement, the code it governs when a producer of that code says so
+	// (an API factory's manifest: the hand-written files implementing a business rule). It
+	// is a pointer for the search, not evidence: the verdict still rests on what the tools
+	// find. "" = no hint.
+	Hint func(path string, line int) string
 }
 
 // crossRepo reports whether the documents live in another repository than the tools.
@@ -308,7 +313,11 @@ func (r *Runner) Judge(ctx context.Context, docPath string, lines []int) []LineR
 			out = append(out, LineResult{Path: docPath, Line: n, Category: Unknown, Verdict: judgev1.Unknown, Error: lineErr(err, docPath, n)})
 			continue
 		}
-		sts = append(sts, statement{Path: docPath, Line: n, Context: contextOf(src, n)})
+		st := statement{Path: docPath, Line: n, Context: contextOf(src, n)}
+		if r.o.Hint != nil {
+			st.Hint = r.o.Hint(docPath, n)
+		}
+		sts = append(sts, st)
 	}
 	text := func(n int) string { return src[n-1] }
 	if r.o.Settings.Group != GroupDoc {

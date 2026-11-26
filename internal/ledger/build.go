@@ -52,8 +52,8 @@ func NewTargetBuilder(ctx context.Context, docDir, docRepo, docRef, evDir string
 	return &Builder{Dir: docDir, Repo: docRepo, Tree: et, DocTree: dt, Target: &target, Now: time.Now, docs: map[string][]string{}}, nil
 }
 
-// lineText is line n of a document at the builder's revision.
-func (b *Builder) lineText(ctx context.Context, p string, n int) (string, bool) {
+// LineText is line n of a document at the builder's revision.
+func (b *Builder) LineText(ctx context.Context, p string, n int) (string, bool) {
 	ls, ok := b.docs[p]
 	if !ok {
 		text, found := FileAt(ctx, b.Dir, b.DocTree.Ref, p)
@@ -74,7 +74,7 @@ func (b *Builder) Claim(ctx context.Context, lr *agentic.LineResult) (Claim, boo
 	if lr.Error != "" || lr.Parse == "" || lr.Parse == "failed" {
 		return Claim{}, false
 	}
-	text, ok := b.lineText(ctx, lr.Path, lr.Line)
+	text, ok := b.LineText(ctx, lr.Path, lr.Line)
 	if !ok {
 		return Claim{}, false
 	}
@@ -103,6 +103,32 @@ func (b *Builder) Claim(ctx context.Context, lr *agentic.LineResult) (Claim, boo
 		_ = AddFootprints(&c, lr.Transcript, b.Rules) // no transcript: no footprint
 	}
 	return c, true
+}
+
+// Pin records files the claim governs (Evidence.Pinned) with their blobs at the builder's
+// revision; files absent there and the claim's own document are left out.
+func (b *Builder) Pin(c *Claim, paths []string) {
+	c.Evidence.Pinned = nil
+	seen := map[string]bool{}
+	for _, p := range paths {
+		p, err := judge.CleanPath(p)
+		if err != nil || p == c.Path || seen[p] {
+			continue
+		}
+		seen[p] = true
+		if blob, ok := b.Tree.Blobs[p]; ok {
+			c.Evidence.Pinned = append(c.Evidence.Pinned, File{Path: p, Blob: blob})
+		}
+	}
+}
+
+// PinnedPaths are the paths of a claim's pinned files.
+func PinnedPaths(c *Claim) []string {
+	out := make([]string, 0, len(c.Evidence.Pinned))
+	for _, f := range c.Evidence.Pinned {
+		out = append(out, f.Path)
+	}
+	return out
 }
 
 func (b *Builder) add(c *Claim, doc string, e agentic.Evidence) {

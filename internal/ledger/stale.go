@@ -33,6 +33,7 @@ const (
 	ReasonAbsenceScope      = "absence_scope_changed"
 	ReasonPathAppeared      = "path_appeared"
 	ReasonNoEvidence        = "no_evidence"
+	ReasonPinnedChanged     = "pinned_changed"
 )
 
 // Reason is why a claim is stale (or to be rechecked).
@@ -94,6 +95,9 @@ func InvalidateWith(c *Claim, docCh, ch *Changes, doc func(string) (string, bool
 	}
 	for _, pm := range c.Evidence.PathMissing {
 		rs = append(rs, appearedReasons(ch, pm)...)
+	}
+	for _, f := range c.Evidence.Pinned {
+		rs = append(rs, fileReason(ch, f.Path, ReasonPinnedChanged)...)
 	}
 	if r.Any() {
 		rs = append(rs, footprintReasons(c, ch, r)...)
