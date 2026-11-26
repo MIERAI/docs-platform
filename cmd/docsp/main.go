@@ -51,6 +51,9 @@ var commands = map[string]command{
 	"sample":     cmdSample,
 	"slo":        cmdSLO,
 	"group":      cmdGroup,
+	"report":     cmdReport,
+	"draft":      cmdDraft,
+	"drafts":     cmdDrafts,
 	"import-findings": func(_ context.Context, a []string, out, errw io.Writer) (int, error) {
 		return cmdImportFindings(a, out, errw)
 	},
@@ -99,6 +102,9 @@ commands:
   recheck    judge a schedule's claims again (agentic) and update the ledger
   sample     draw the weekly accuracy sample of the ledger (an eval set for a paid re-audit)
   slo        documentation consistency SLIs (accuracy, freshness, phantom rate), error budget, cost
+  report     validated problems for people: contradicted/dangling at once, the rest in batches; never fails
+  draft      minimal-diff fix proposals for the ledger's problems (checked, logged, never applied)
+  drafts     what became of the drafts: acceptance, revert rate, diff size; docs to generate or link instead
   group      repository groups: plan (doc sets, declared targets, shared drift scans), judge, stale
   stale      claims of the evidence ledger whose line or evidence changed since judged (no model)
   eval-model score a model provider per task (judge, draft) on a frozen eval set; -dry-run estimates cost

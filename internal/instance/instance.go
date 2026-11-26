@@ -15,6 +15,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"go.yaml.in/yaml/v3"
 )
@@ -162,6 +163,23 @@ type Consistency struct {
 	SLO    SLO       `yaml:"slo"`
 	// SampleSize is the size of the weekly accuracy sample (default 30).
 	SampleSize int `yaml:"sample_size"`
+	// BatchDays: outdated_wording and incomplete_list findings are reported in batches this
+	// many days apart (default 7); contradicted and dangling_reference immediately.
+	BatchDays int `yaml:"batch_days"`
+	// Suppressions silence findings; each needs a reason and an expiry date.
+	Suppressions []Suppression `yaml:"suppressions"`
+	// RecommendAfter: a document with this many fix drafts within 90 days gets the
+	// recommendation to generate it, or to link instead of restating (default 3).
+	RecommendAfter int `yaml:"recommend_after"`
+}
+
+// Suppression silences the findings of one claim (by id) or of a document path glob until
+// Expires (YYYY-MM-DD); an expired suppression is inactive and reported as such.
+type Suppression struct {
+	Claim   string `yaml:"claim"`
+	Path    string `yaml:"path"`
+	Reason  string `yaml:"reason"`
+	Expires string `yaml:"expires"`
 }
 
 // ABCClass is one ABC class: by document glob (importance) or by recent churn.
@@ -202,6 +220,8 @@ func (c Consistency) WithDefaults() Consistency {
 	def(&c.MaxAgeDays, 30)
 	def(&c.RunIntervalDays, 1)
 	def(&c.SampleSize, 30)
+	def(&c.BatchDays, 7)
+	def(&c.RecommendAfter, 3)
 	if c.Budget.USDPerClaim <= 0 {
 		c.Budget.USDPerClaim = 0.04
 	}
@@ -215,6 +235,11 @@ func (c Consistency) WithDefaults() Consistency {
 		c.SLO.PhantomRate = 0.01
 	}
 	return c
+}
+
+func (s Suppression) valid() bool {
+	_, err := time.Parse(time.DateOnly, s.Expires)
+	return err == nil && strings.TrimSpace(s.Reason) != "" && (s.Claim == "") != (s.Path == "")
 }
 
 func (s SLO) validate() []error {
@@ -233,6 +258,11 @@ func (c Consistency) validate() []error {
 		errs = append(errs, errors.New("consistency: limits must not be negative"))
 	}
 	errs = append(errs, c.SLO.validate()...)
+	for i, s := range c.Suppressions {
+		if !s.valid() {
+			errs = append(errs, fmt.Errorf("consistency.suppressions[%d]: exactly one of claim or path, a reason and an expiry date (YYYY-MM-DD) are required", i))
+		}
+	}
 	for i, k := range c.Classes {
 		if k.Name == "" || k.MaxAgeDays <= 0 || k.MinCommits90d < 0 {
 			errs = append(errs, fmt.Errorf("consistency.classes[%d]: name and a positive max_age_days are required", i))

@@ -224,6 +224,44 @@
               "maximum": 1
             }
           }
+        },
+        "batch_days": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "outdated_wording / incomplete_list findings are reported in batches this many days apart (default 7); contradicted / dangling_reference immediately"
+        },
+        "recommend_after": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "fix drafts of one document within 90 days after which it is recommended to generate it or link instead (default 3)"
+        },
+        "suppressions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "reason",
+              "expires"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "claim": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string",
+                "description": "document path glob"
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1
+              },
+              "expires": {
+                "type": "string",
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+              }
+            }
+          }
         }
       }
     },

@@ -1,6 +1,6 @@
 # docs-platform 设计书
 
-状态：v0.4（层③ 引用检查、层④a 变更时影响推导、层④c 语义审计（snippet 与 agentic 两种判定模式）、模型契约 judge/v1 1.2 + 5 种 provider + 按任务路由 + 数据分级、模型评测、历史回放基准、积压导入已实现；其余为设计）
+状态：v0.4.2 + 未发布的 §12（层③ 引用检查、层④a 变更时影响推导、层④c 语义审计（snippet 与 agentic 两种判定模式）、模型契约 judge/v1 1.2 + 5 种 provider + 按任务路由 + 数据分级、模型评测、历史回放基准、积压导入已实现；其余为设计）
 读者：产品负责人（本人）。面向用户的说明见 [README](../README.md)，契约细节见 [contracts.md](contracts.md)。
 
 ---
@@ -484,4 +484,13 @@ Ground truth 质量抽查（15 条分歧：10 条工具漏掉的 GT + 5 条 GT �
   - 成本：gitops-manifests 329 个提交，每提交平均使 0.66 条断言 stale（中位 0、p90 2、最多 11），83% 的提交一条都不 stale，平均占存活断言的 5.0%；infrastructure-live 50 个提交，平均 0.80（p90 3），64% 的提交不 stale，占 12.0%。
   - 召回：同一批 25 条可打分正例上，台账在**第一个致因提交**就判 stale 19/25（76%），**任一致因提交** 23/25（92%）；变更时影响选择在同样 25 条上是 9/25（36%）/ 13/25（52%）。
   - **注意（偏乐观）**：证据足迹取自 TEST 时刻的回答——这些回答引用的正是"揭示它已过时"的文件，而致因提交又按 GT 的证据路径定义，两者部分重合。真实台账在文档写下时建立，足迹是"当时证实它的证据"，未必包含后来变化的文件。真正的检验要在 DEV 上于更早的修订号建台账（付费）或从现在起向前跟踪。
+
+### 12.8 实现状态（未发布，见 CHANGELOG "Unreleased"）
+
+| 项 | 命令 / 契约 | 状态 |
+|---|---|---|
+| B1 证据台账与失效 | `docsp stale`；ledger/v1、stale/v1；`bench ledger-replay` | 已实现（§12.7 的离线结果） |
+| B2 循环盘点与 SLO | `docsp schedule / recheck / sample / slo`；schedule/v1、slo/v1；实例 `consistency:` | 已实现；准确率抽样的付费重审由运营者执行 |
+| B3 仓库组与声明修订号 | `docsp group plan / judge / stale`；实例 `groups:`；台账 `target`、`doc_ref` | 已实现；docsp 不改 checkout，目标需在其修订号上有 checkout |
+| B4 不强制更新 | `docsp report / draft / drafts`；report/v1；实例 `batch_days`、`suppressions`、`recommend_after` | 已实现 |
 

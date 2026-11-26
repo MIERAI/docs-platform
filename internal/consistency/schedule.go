@@ -335,6 +335,8 @@ func (k *classifier) commits90(paths []string) int {
 // and a pending full re-audit (written by `docsp slo -apply`).
 type State struct {
 	Docs map[string]DocState `json:"docs"`
+	// Report remembers what `docsp report` already reported, and when the last batch went out.
+	Report ReportState `json:"report"`
 }
 
 // DocState is the state of one documentation set (a document path).

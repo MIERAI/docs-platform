@@ -244,3 +244,52 @@ func TestRecheckRetiresEditedLines(t *testing.T) {
 		t.Fatalf("%+v %+v", res, l.Claims)
 	}
 }
+
+func TestReportSeverityBatchingSuppression(t *testing.T) {
+	cl := func(id, path, cat string) ledger.Claim {
+		return ledger.Claim{ID: id, Repo: "r", Path: path, Line: 1, Text: id, Category: cat,
+			Facts: []ledger.Fact{{Fact: id + " fact", Status: cat, Valid: true}}}
+	}
+	l := &ledger.Ledger{Claims: []ledger.Claim{
+		cl("c1", "a.md", "contradicted"), cl("d1", "a.md", "dangling_reference"), cl("o1", "b.md", "outdated_wording"),
+		cl("i1", "c.md", "incomplete_list"), cl("ok", "a.md", "confirmed"), cl("s1", "legacy/x.md", "contradicted"), cl("s2", "z.md", "contradicted"),
+	}}
+	p := instance.Consistency{BatchDays: 7, Suppressions: []instance.Suppression{
+		{Path: "legacy/**", Reason: "being rewritten", Expires: "2027-01-31"},
+		{Claim: "s2", Reason: "known", Expires: "2026-12-01"},
+	}}
+	st := &ReportState{LastBatch: now.Add(-24 * time.Hour).Format(time.RFC3339)}
+	r := BuildReport(l, p, st, now, false)
+	if ids(findPicks(r.Immediate)) != "c1,d1,s2" || len(r.Batched) != 0 || r.Held != 2 || r.BatchDue || r.NextBatch == "" {
+		t.Fatalf("first: immediate %s batched %d held %d", ids(findPicks(r.Immediate)), len(r.Batched), r.Held)
+	}
+	b, _ := json.Marshal(r)
+	if errs := schema(t, contracts.Report).ValidateJSON(b); len(errs) > 0 {
+		t.Fatalf("report/v1: %v", errs)
+	}
+	if len(r.Suppressed) != 1 || r.Suppressed[0].ID != "s1" || len(r.ExpiredSuppressions) != 1 || r.Immediate[0].Facts[0] != "c1 fact" {
+		t.Fatalf("suppressions %+v %+v", r.Suppressed, r.ExpiredSuppressions)
+	}
+	// reported once: nothing new until the batch is due
+	r = BuildReport(l, p, st, now.Add(time.Hour), false)
+	if len(r.Immediate) != 0 || r.Held != 2 {
+		t.Fatalf("repeat: %+v", r)
+	}
+	r = BuildReport(l, p, st, now.Add(7*24*time.Hour), false)
+	if !r.BatchDue || ids(findPicks(r.Batched)) != "o1,i1" {
+		t.Fatalf("batch: %+v", r.Batched)
+	}
+	// a category change is a new finding
+	l.Claims[2].Category = "contradicted"
+	if r = BuildReport(l, p, st, now.Add(8*24*time.Hour), false); len(r.Immediate) != 1 || r.Immediate[0].ID != "o1" {
+		t.Fatalf("category change: %+v", r.Immediate)
+	}
+}
+
+func findPicks(fs []Finding) []Pick {
+	out := make([]Pick, 0, len(fs))
+	for _, f := range fs {
+		out = append(out, Pick{ID: f.ID})
+	}
+	return out
+}

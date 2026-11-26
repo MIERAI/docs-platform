@@ -227,6 +227,28 @@ consistency:
   accuracy, freshness and phantom rate against their objectives, the error budget, the
   actions a burned budget triggers (full re-audit, halved max age), and the cost (slo/v1).
 
+### No forced updates: `docsp report`, `draft`, `drafts`
+
+- `docsp report -ledger L -instance-config I -state S [-flush] [-drafts LOG] [repo]` (report/v1):
+  the ledger's validated problems for people; exit code 0 whatever it finds.
+  `contradicted` / `dangling_reference` are reported at once, `outdated_wording` /
+  `incomplete_list` in batches every `consistency.batch_days` (default 7); a finding is
+  reported once until its category changes. Suppressions live in the instance configuration
+  and need a reason and an expiry:
+  `consistency.suppressions: [{path: "legacy/**", reason: "being rewritten", expires: 2027-01-31}]`
+  (or `claim: <id>`); expired ones stop silencing and are listed.
+- `docsp draft -ledger L -instance-config I -log LOG [-max N] [repo]`: asks the draft provider for the
+  smallest correction of each problem line, given only the facts validated as wrong; the harness
+  rejects drafts that change nothing, rewrite more than the wrong facts, or add volatile detail
+  (numbers, versions) the evidence does not show; deleting the line (`DELETE`) or linking to the
+  source is preferred. Logged, never applied.
+- `docsp drafts -log LOG [-recommend-after N] [repo]`: what became of the drafts at the current revision (accepted,
+  superseded, reverted): acceptance rate, revert rate, mean diff size, and documents to generate
+  or link instead.
+
+The continuous loop never gates on "code changed, docs untouched"; `docsp impact`'s explicit
+rules stay opt-in.
+
 ### Repository groups: `docsp group plan|judge|stale`
 
 ```yaml

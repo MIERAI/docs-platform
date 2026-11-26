@@ -48,6 +48,24 @@ Design: docs/design.md §12; plan: docs/backlog.md.
   lines) are not judged on their text but at their generator input; submodules and the
   group's external globs never count as evidence. docsp never changes a checkout: a target
   needs a checkout at its revision (`-checkout repo@ref=DIR`), otherwise the plan says so.
+- **No forced updates** (B4):
+  - `docsp report` (report/v1): validated problems only, never an exit-code gate;
+    contradicted / dangling_reference immediately, outdated_wording / incomplete_list in
+    batches (`consistency.batch_days`, default 7; `-flush`); each finding once until its
+    category changes (remembered in the state file); suppressions
+    (`consistency.suppressions`) need a reason and an expiry date, expired ones are inactive
+    and listed.
+  - `docsp draft`: minimal-diff fix proposals from the draft provider, given only the facts
+    validated as wrong and their evidence, told to prefer deleting or linking over restating
+    volatile detail; the harness rejects drafts that change nothing, rewrite more than
+    max(6, half the line's) tokens, or add a number/version the evidence does not show or
+    more volatile tokens than the line had. Proposals are logged (JSON Lines, 0600), never
+    applied.
+  - `docsp drafts`: tracks the logged drafts from later revisions (accepted, superseded,
+    reverted), reports acceptance rate, revert rate, mean diff size, and recommends
+    generating or linking for documents with `recommend_after` (default 3) drafts in 90 days.
+  - The continuous loop never asks "code changed, docs untouched"; `docsp impact`'s explicit
+    rules remain opt-in per repository.
 
 ## 0.4.2 - 2026-11-26
 

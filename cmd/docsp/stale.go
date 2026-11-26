@@ -31,11 +31,7 @@ func cmdStale(ctx context.Context, args []string, stdout, stderr io.Writer) (int
 	root := rootArg(fs)
 	name := *repoName
 	if name == "" {
-		abs, err := filepath.Abs(root)
-		if err != nil {
-			return exitUsage, fmt.Errorf("repo: %w", err)
-		}
-		name = filepath.Base(abs)
+		name = repoBase(root)
 	}
 	l, err := ledger.Load(*file)
 	if err != nil {
@@ -60,6 +56,15 @@ func cmdStale(ctx context.Context, args []string, stdout, stderr io.Writer) (int
 		return exitOK, writeJSON(r, *out, stderr)
 	}
 	return exitOK, nil
+}
+
+// repoBase is the default logical name of a repository: its directory's name.
+func repoBase(root string) string {
+	abs, err := filepath.Abs(root)
+	if err != nil {
+		return filepath.Base(root)
+	}
+	return filepath.Base(abs)
 }
 
 func writeStale(w io.Writer, r *ledger.Report) {

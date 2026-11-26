@@ -224,6 +224,17 @@ note}`; `error_budget {allowed, used, remaining, burned}`; `by_doc[]`; `actions[
 action: full_reaudit, max_age_days, why}]`; `cost {sample_usd, sample_billing,
 scheduled_usd_estimate, scheduled_claims}`.
 
+## report/v1
+
+`immediate[]` and `batched[]` findings `{id, repo, path, line, text, category, severity:
+immediate|batched, target, verified_at, facts}`, `batch_due`, `next_batch`,
+`held_for_next_batch`, `suppressed[]` (finding + reason, expires),
+`expired_suppressions[]`, `recommendations[{repo, path, drafts_90d, advice}]`. The drafts
+log (`docsp draft -log`) is a private JSON Lines file of `{claim_id, repo, path, line,
+category, original, draft, action: replace|delete|link, diff_tokens, model, proposed_at,
+proposed_ref, status: proposed|rejected_by_harness|accepted|superseded|reverted, status_at,
+status_ref, problems}`.
+
 ## instance/v1
 
 The operator's settings (YAML): `ai.judge` and `ai.draft` (provider, model, effort, timeout,

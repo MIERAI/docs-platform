@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/MIERAI/docs-platform/contracts/report-v1.schema.json",
+  "title": "docs-platform/report/v1",
+  "description": "Validated documentation problems for people (docs/design.md §12.5). Never a gate: contradicted and dangling_reference findings are reported at once, outdated_wording and incomplete_list in batches; each finding once (until its category changes); suppressions need a reason and an expiry.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "reported_at",
+    "immediate",
+    "batched",
+    "batch_due",
+    "held_for_next_batch"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^1\\.[0-9]+$"
+    },
+    "reported_at": {
+      "type": "string"
+    },
+    "immediate": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/finding"
+      }
+    },
+    "batched": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/finding"
+      }
+    },
+    "batch_due": {
+      "type": "boolean"
+    },
+    "next_batch": {
+      "type": "string"
+    },
+    "held_for_next_batch": {
+      "type": "integer"
+    },
+    "suppressed": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/finding"
+      }
+    },
+    "expired_suppressions": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "recommendations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "repo",
+          "path",
+          "drafts_90d",
+          "advice"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "repo": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "drafts_90d": {
+            "type": "integer"
+          },
+          "advice": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "finding": {
+      "type": "object",
+      "required": [
+        "id",
+        "repo",
+        "path",
+        "line",
+        "text",
+        "category",
+        "severity",
+        "verified_at"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "repo": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "line": {
+          "type": "integer"
+        },
+        "text": {
+          "type": "string"
+        },
+        "category": {
+          "type": "string",
+          "enum": [
+            "contradicted",
+            "dangling_reference",
+            "incomplete_list",
+            "outdated_wording"
+          ]
+        },
+        "severity": {
+          "type": "string",
+          "enum": [
+            "immediate",
+            "batched"
+          ]
+        },
+        "target": {
+          "type": "object"
+        },
+        "verified_at": {
+          "type": "string"
+        },
+        "facts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "reason": {
+          "type": "string"
+        },
+        "expires": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

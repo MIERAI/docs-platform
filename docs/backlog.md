@@ -49,13 +49,13 @@ classification. Order = implementation order. Every item: tests, docs, no model 
 
 ## B4 No forced updates
 
-- [ ] B4.1 No "code changed, docs untouched" gate in the continuous mode; report validated
+- [x] B4.1 No "code changed, docs untouched" gate in the continuous mode; report validated
       contradictions only.
-- [ ] B4.2 Debounce: judge against declared refs, batch reports.
-- [ ] B4.3 Severity: contradicted / dangling immediate; outdated_wording / incomplete_list
+- [x] B4.2 Debounce: judge against declared refs, batch reports.
+- [x] B4.3 Severity: contradicted / dangling immediate; outdated_wording / incomplete_list
       batched.
-- [ ] B4.4 Suppressions with reason and expiry (expired = inactive).
-- [ ] B4.5 Draft constraints: minimal diff changing only the contradicted facts; prefer delete
+- [x] B4.4 Suppressions with reason and expiry (expired = inactive).
+- [x] B4.5 Draft constraints: minimal diff changing only the contradicted facts; prefer delete
       or link over new volatile detail; measure acceptance rate, revert rate, diff size;
       recommend "generate or link instead" for docs that keep going stale.
 

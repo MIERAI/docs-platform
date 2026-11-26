@@ -76,3 +76,8 @@ var Schedule []byte
 //
 //go:embed slo-v1.schema.json
 var SLO []byte
+
+// Report is docs-platform/report/v1: validated documentation problems for people.
+//
+//go:embed report-v1.schema.json
+var Report []byte

@@ -26,3 +26,4 @@
 ./internal/judge FuzzCompileScope
 ./internal/judge FuzzMCPServer
 ./internal/ledger FuzzParse
+./internal/draft FuzzConstrain
