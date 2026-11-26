@@ -13,8 +13,10 @@ import (
 )
 
 func request(id, task string, claims ...judgev1.Claim) string {
-	r := judgev1.Request{SchemaVersion: judgev1.SchemaVersion, ID: id, Task: judgev1.Task{Type: task}, Claim: claims[0],
-		Mode: judgev1.ModeAgentic, Prompt: judgev1.Prompt{Hash: "0123456789abcdef", User: "u"}}
+	r := judgev1.Request{
+		SchemaVersion: judgev1.SchemaVersion, ID: id, Task: judgev1.Task{Type: task}, Claim: claims[0],
+		Mode: judgev1.ModeAgentic, Prompt: judgev1.Prompt{Hash: "0123456789abcdef", User: "u"},
+	}
 	if task == judgev1.TaskDocFacts {
 		r.Claims = claims
 	}

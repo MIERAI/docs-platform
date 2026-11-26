@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/MIERAI/docs-platform/internal/ledger"
@@ -74,16 +75,17 @@ func writeStale(w io.Writer, r *ledger.Report) {
 		if c.Status != ledger.Stale {
 			continue
 		}
-		why := ""
+		var rb strings.Builder
 		for i, rs := range c.Reasons {
 			if i > 0 {
-				why += "; "
+				rb.WriteString("; ")
 			}
-			why += rs.Kind
+			rb.WriteString(rs.Kind)
 			if rs.Path != "" {
-				why += " " + rs.Path
+				rb.WriteString(" " + rs.Path)
 			}
 		}
+		why := rb.String()
 		_, _ = fmt.Fprintf(w, "stale  %s:%d [%s] %s\n", c.Path, c.Line, c.Category, why)
 	}
 }

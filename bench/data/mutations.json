@@ -1,0 +1,897 @@
+[
+ {
+  "repo": "gitops-manifests",
+  "id": "G1",
+  "op": "rename",
+  "a": "scripts/fork.sh",
+  "b": "scripts/fork-repo.sh",
+  "tokens": [
+   "scripts/fork.sh"
+  ],
+  "affected": [
+   [
+    "README.md",
+    23
+   ]
+  ]
+ },
+ {
+  "repo": "gitops-manifests",
+  "id": "G2",
+  "op": "rename",
+  "a": "scripts/promote.sh",
+  "b": "scripts/promote-version.sh",
+  "tokens": [
+   "scripts/promote.sh"
+  ],
+  "affected": [
+   [
+    "README.md",
+    36
+   ],
+   [
+    "README.md",
+    58
+   ]
+  ]
+ },
+ {
+  "repo": "gitops-manifests",
+  "id": "G3",
+  "op": "delete",
+  "a": "scripts/render.py",
+  "b": null,
+  "tokens": [
+   "scripts/render.py"
+  ],
+  "affected": [
+   [
+    "README.md",
+    37
+   ],
+   [
+    "README.md",
+    59
+   ]
+  ]
+ },
+ {
+  "repo": "gitops-manifests",
+  "id": "G4",
+  "op": "rename",
+  "a": "scripts/validate.sh",
+  "b": "scripts/check-all.sh",
+  "tokens": [
+   "scripts/validate.sh"
+  ],
+  "affected": [
+   [
+    "README.md",
+    60
+   ]
+  ]
+ },
+ {
+  "repo": "gitops-manifests",
+  "id": "G5",
+  "op": "rename",
+  "a": "scripts/alert-report.py",
+  "b": "scripts/alerts-review.py",
+  "tokens": [
+   "scripts/alert-report.py"
+  ],
+  "affected": [
+   [
+    "README.md",
+    61
+   ],
+   [
+    "experiments/README.md",
+    88
+   ],
+   [
+    "experiments/README.md",
+    89
+   ]
+  ]
+ },
+ {
+  "repo": "gitops-manifests",
+  "id": "G6",
+  "op": "rename",
+  "a": "scripts/set-image.sh",
+  "b": "scripts/update-tag.sh",
+  "tokens": [
+   "set-image.sh"
+  ],
+  "affected": [
+   [
+    "README.md",
+    37
+   ],
+   [
+    "README.md",
+    57
+   ]
+  ]
+ },
+ {
+  "repo": "gitops-manifests",
+  "id": "G7",
+  "op": "rename",
+  "a": "reports/alerts",
+  "b": "reports/alerting",
+  "tokens": [
+   "reports/alerts/"
+  ],
+  "affected": [
+   [
+    "README.md",
+    62
+   ],
+   [
+    "experiments/README.md",
+    82
+   ],
+   [
+    "experiments/README.md",
+    88
+   ],
+   [
+    "experiments/README.md",
+    89
+   ],
+   [
+    "experiments/README.md",
+    97
+   ]
+  ]
+ },
+ {
+  "repo": "gitops-manifests",
+  "id": "G8",
+  "op": "replace",
+  "a": "platform/delivery-board/deployment.yaml",
+  "b": [
+   "nodePort: 30090",
+   "nodePort: 30095"
+  ],
+  "tokens": [
+   "30090"
+  ],
+  "affected": [
+   [
+    "README.md",
+    49
+   ]
+  ]
+ },
+ {
+  "repo": "gitops-manifests",
+  "id": "G9",
+  "op": "replace",
+  "a": "api-factory/base/smoke-job.yaml",
+  "b": [
+   "PostSync",
+   "Sync"
+  ],
+  "tokens": [
+   "PostSync"
+  ],
+  "affected": [
+   [
+    "README.md",
+    51
+   ]
+  ]
+ },
+ {
+  "repo": "gitops-manifests",
+  "id": "G10",
+  "op": "rename",
+  "a": "sample-app",
+  "b": "reference-app",
+  "tokens": [
+   "sample-app/base"
+  ],
+  "affected": [
+   [
+    "README.md",
+    53
+   ]
+  ]
+ },
+ {
+  "repo": "gitops-manifests",
+  "id": "G12",
+  "op": "rename",
+  "a": "experiments/api-errors.yaml",
+  "b": "experiments/api-http-errors.yaml",
+  "tokens": [
+   "experiments/api-errors.yaml"
+  ],
+  "affected": [
+   [
+    "experiments/README.md",
+    10
+   ]
+  ]
+ },
+ {
+  "repo": "gitops-manifests",
+  "id": "G13",
+  "op": "delete",
+  "a": "experiments/sample-app-down.yaml",
+  "b": null,
+  "tokens": [
+   "sample-app-down"
+  ],
+  "affected": [
+   [
+    "experiments/README.md",
+    10
+   ],
+   [
+    "experiments/README.md",
+    21
+   ]
+  ]
+ },
+ {
+  "repo": "gitops-manifests",
+  "id": "G14",
+  "op": "rename",
+  "a": "scripts/experiment.py",
+  "b": "scripts/run-experiment.py",
+  "tokens": [
+   "scripts/experiment.py"
+  ],
+  "affected": [
+   [
+    "experiments/README.md",
+    4
+   ],
+   [
+    "experiments/README.md",
+    9
+   ]
+  ]
+ },
+ {
+  "repo": "gitops-manifests",
+  "id": "G15",
+  "op": "rename",
+  "a": "scripts/test_alert_report.py",
+  "b": "scripts/alert_report_test.py",
+  "tokens": [
+   "scripts/test_alert_report.py"
+  ],
+  "affected": [
+   [
+    "experiments/README.md",
+    109
+   ]
+  ]
+ },
+ {
+  "repo": "gitops-manifests",
+  "id": "G16",
+  "op": "rename",
+  "a": "scripts/test_scorecard.py",
+  "b": "tests/test_scorecard.py",
+  "tokens": [
+   "scripts/test_scorecard.py"
+  ],
+  "affected": [
+   [
+    "experiments/README.md",
+    118
+   ]
+  ]
+ },
+ {
+  "repo": "gitops-manifests",
+  "id": "G17",
+  "op": "rename",
+  "a": "scripts/scorecard.py",
+  "b": "scripts/reliability.py",
+  "tokens": [
+   "scripts/scorecard.py"
+  ],
+  "affected": [
+   [
+    "experiments/README.md",
+    121
+   ]
+  ]
+ },
+ {
+  "repo": "gitops-manifests",
+  "id": "G18",
+  "op": "rename",
+  "a": "scripts/experiment-regression.py",
+  "b": "scripts/regression.py",
+  "tokens": [
+   "scripts/experiment-regression.py"
+  ],
+  "affected": [
+   [
+    "experiments/README.md",
+    128
+   ],
+   [
+    "experiments/README.md",
+    135
+   ]
+  ]
+ },
+ {
+  "repo": "gitops-manifests",
+  "id": "G19",
+  "op": "replace",
+  "a": "platform/experiments/cronjob.yaml",
+  "b": [
+   "\"0 9 * * *\"",
+   "\"0 6 * * *\""
+  ],
+  "tokens": [
+   "09:00 JST",
+   "daily regression (09:00)"
+  ],
+  "affected": [
+   [
+    "README.md",
+    15
+   ],
+   [
+    "experiments/README.md",
+    127
+   ]
+  ]
+ },
+ {
+  "repo": "gitops-manifests",
+  "id": "G20",
+  "op": "replace",
+  "a": "*",
+  "b": [
+   "experiment-results",
+   "experiment-outcomes"
+  ],
+  "tokens": [
+   "experiment-results"
+  ],
+  "affected": [
+   [
+    "experiments/README.md",
+    137
+   ],
+   [
+    "experiments/README.md",
+    140
+   ],
+   [
+    "experiments/README.md",
+    141
+   ]
+  ]
+ },
+ {
+  "repo": "gitops-manifests",
+  "id": "G21",
+  "op": "replace",
+  "a": "*",
+  "b": [
+   "experiment-exporter",
+   "slo-experiment-exporter"
+  ],
+  "tokens": [
+   "experiment-exporter"
+  ],
+  "affected": [
+   [
+    "experiments/README.md",
+    140
+   ]
+  ]
+ },
+ {
+  "repo": "gitops-manifests",
+  "id": "G22",
+  "op": "replace",
+  "a": "*",
+  "b": [
+   "slo-experiments",
+   "experiments-ns"
+  ],
+  "tokens": [
+   "slo-experiments"
+  ],
+  "affected": [
+   [
+    "experiments/README.md",
+    136
+   ],
+   [
+    "experiments/README.md",
+    137
+   ],
+   [
+    "experiments/README.md",
+    141
+   ]
+  ]
+ },
+ {
+  "repo": "api-factory",
+  "id": "A1",
+  "op": "rename",
+  "a": "scripts/ci/spec-review.sh",
+  "b": "scripts/ci/review-spec.sh",
+  "tokens": [
+   "scripts/ci/spec-review.sh"
+  ],
+  "affected": [
+   [
+    "README.md",
+    45
+   ],
+   [
+    "README.md",
+    64
+   ]
+  ]
+ },
+ {
+  "repo": "api-factory",
+  "id": "A2",
+  "op": "rename",
+  "a": "scripts/ci/generate.sh",
+  "b": "scripts/ci/gen.sh",
+  "tokens": [
+   "scripts/ci/generate.sh"
+  ],
+  "affected": [
+   [
+    "README.md",
+    46
+   ]
+  ]
+ },
+ {
+  "repo": "api-factory",
+  "id": "A3",
+  "op": "delete",
+  "a": "scripts/ci/margin.sh",
+  "b": null,
+  "tokens": [
+   "scripts/ci/margin.sh"
+  ],
+  "affected": [
+   [
+    "README.md",
+    47
+   ]
+  ]
+ },
+ {
+  "repo": "api-factory",
+  "id": "A4",
+  "op": "rename",
+  "a": "scripts/ci/deploy.sh",
+  "b": "scripts/ci/deploy-run.sh",
+  "tokens": [
+   "scripts/ci/deploy.sh"
+  ],
+  "affected": [
+   [
+    "README.md",
+    50
+   ]
+  ]
+ },
+ {
+  "repo": "api-factory",
+  "id": "A5",
+  "op": "rename",
+  "a": "factory/review/fingerprint.go",
+  "b": "factory/review/fp.go",
+  "tokens": [
+   "fingerprint.go"
+  ],
+  "affected": [
+   [
+    "README.md",
+    56
+   ]
+  ]
+ },
+ {
+  "repo": "api-factory",
+  "id": "A6",
+  "op": "rename",
+  "a": "scripts/ci/review-key.sh",
+  "b": "scripts/ci/review-cache-key.sh",
+  "tokens": [
+   "scripts/ci/review-key.sh"
+  ],
+  "affected": [
+   [
+    "README.md",
+    58
+   ]
+  ]
+ },
+ {
+  "repo": "api-factory",
+  "id": "A7",
+  "op": "rename",
+  "a": "scripts/projects.sh",
+  "b": "scripts/ci/projects.sh",
+  "tokens": [
+   "scripts/projects.sh"
+  ],
+  "affected": [
+   [
+    "README.md",
+    59
+   ]
+  ]
+ },
+ {
+  "repo": "api-factory",
+  "id": "A8",
+  "op": "rename",
+  "a": "Dockerfile.schema",
+  "b": "Dockerfile.migrate",
+  "tokens": [
+   "Dockerfile.schema"
+  ],
+  "affected": [
+   [
+    "README.md",
+    90
+   ]
+  ]
+ },
+ {
+  "repo": "api-factory",
+  "id": "A9",
+  "op": "rename",
+  "a": "scripts/ci/sim.sh",
+  "b": "scripts/ci/simulate.sh",
+  "tokens": [
+   "scripts/ci/sim.sh"
+  ],
+  "affected": [
+   [
+    "README.md",
+    93
+   ]
+  ]
+ },
+ {
+  "repo": "api-factory",
+  "id": "A10",
+  "op": "replace",
+  "a": "*",
+  "b": [
+   "AUTH_MODE",
+   "AUTH_KIND"
+  ],
+  "tokens": [
+   "AUTH_MODE"
+  ],
+  "affected": [
+   [
+    "README.md",
+    95
+   ],
+   [
+    "runtime/README.md",
+    28
+   ]
+  ]
+ },
+ {
+  "repo": "api-factory",
+  "id": "A11",
+  "op": "replace",
+  "a": "*",
+  "b": [
+   "AUTH_TOKEN_SHA256",
+   "AUTH_TOKEN_HASH"
+  ],
+  "tokens": [
+   "AUTH_TOKEN_SHA256"
+  ],
+  "affected": [
+   [
+    "README.md",
+    95
+   ]
+  ]
+ },
+ {
+  "repo": "api-factory",
+  "id": "A12",
+  "op": "rename",
+  "a": "scripts/release.sh",
+  "b": "scripts/ci/release.sh",
+  "tokens": [
+   "scripts/release.sh"
+  ],
+  "affected": [
+   [
+    "README.md",
+    118
+   ],
+   [
+    "README.md",
+    119
+   ]
+  ]
+ },
+ {
+  "repo": "api-factory",
+  "id": "A13",
+  "op": "rename",
+  "a": ".github/workflows/runtime.yml",
+  "b": ".github/workflows/runtime-ci.yml",
+  "tokens": [
+   "workflows/runtime.yml",
+   "`runtime.yml`"
+  ],
+  "affected": [
+   [
+    "README.md",
+    123
+   ],
+   [
+    "runtime/README.md",
+    15
+   ]
+  ]
+ },
+ {
+  "repo": "api-factory",
+  "id": "A14",
+  "op": "rename",
+  "a": "factory/proj",
+  "b": "factory/project",
+  "tokens": [
+   "factory/proj`",
+   "factory/proj/"
+  ],
+  "affected": [
+   [
+    "README.md",
+    136
+   ]
+  ]
+ },
+ {
+  "repo": "api-factory",
+  "id": "A15",
+  "op": "rename",
+  "a": "examples/storefront-v2/GAPS.md",
+  "b": "examples/storefront-v2/KNOWN-GAPS.md",
+  "tokens": [
+   "GAPS.md"
+  ],
+  "affected": [
+   [
+    "README.md",
+    139
+   ]
+  ]
+ },
+ {
+  "repo": "api-factory",
+  "id": "A16",
+  "op": "rename",
+  "a": "factory/acceptgen",
+  "b": "factory/acceptance",
+  "tokens": [
+   "factory/acceptgen"
+  ],
+  "affected": [
+   [
+    "README.md",
+    152
+   ],
+   [
+    "README.md",
+    166
+   ]
+  ]
+ },
+ {
+  "repo": "api-factory",
+  "id": "A17",
+  "op": "rename",
+  "a": "factory/guard",
+  "b": "factory/gate",
+  "tokens": [
+   "factory/guard"
+  ],
+  "affected": [
+   [
+    "README.md",
+    170
+   ]
+  ]
+ },
+ {
+  "repo": "api-factory",
+  "id": "A18",
+  "op": "rename",
+  "a": "runtime/paging",
+  "b": "runtime/pagination",
+  "tokens": [
+   "runtime/paging",
+   "`paging`"
+  ],
+  "affected": [
+   [
+    "README.md",
+    223
+   ],
+   [
+    "runtime/README.md",
+    30
+   ]
+  ]
+ },
+ {
+  "repo": "api-factory",
+  "id": "A19",
+  "op": "rename",
+  "a": "runtime/clock",
+  "b": "runtime/timesource",
+  "tokens": [
+   "runtime/clock",
+   "`clock`"
+  ],
+  "affected": [
+   [
+    "README.md",
+    224
+   ],
+   [
+    "runtime/README.md",
+    33
+   ]
+  ]
+ },
+ {
+  "repo": "api-factory",
+  "id": "A20",
+  "op": "rename",
+  "a": "runtime/conv",
+  "b": "runtime/convert",
+  "tokens": [
+   "`conv`"
+  ],
+  "affected": [
+   [
+    "runtime/README.md",
+    34
+   ]
+  ]
+ },
+ {
+  "repo": "api-factory",
+  "id": "A21",
+  "op": "delete",
+  "a": "runtime/testkit",
+  "b": null,
+  "tokens": [
+   "`testkit`"
+  ],
+  "affected": [
+   [
+    "runtime/README.md",
+    37
+   ]
+  ]
+ },
+ {
+  "repo": "api-factory",
+  "id": "A22",
+  "op": "rename",
+  "a": "runtime/broker",
+  "b": "runtime/amqp",
+  "tokens": [
+   "`broker`"
+  ],
+  "affected": [
+   [
+    "runtime/README.md",
+    42
+   ]
+  ]
+ },
+ {
+  "repo": "api-factory",
+  "id": "A23",
+  "op": "rename",
+  "a": "runtime/tracing/off_test.go",
+  "b": "runtime/tracing/disabled_test.go",
+  "tokens": [
+   "off_test.go"
+  ],
+  "affected": [
+   [
+    "runtime/README.md",
+    52
+   ]
+  ]
+ },
+ {
+  "repo": "api-factory",
+  "id": "A24",
+  "op": "replace",
+  "a": "*",
+  "b": [
+   "SHUTDOWN_TIMEOUT_MS",
+   "SHUTDOWN_GRACE_MS"
+  ],
+  "tokens": [
+   "SHUTDOWN_TIMEOUT_MS"
+  ],
+  "affected": [
+   [
+    "runtime/README.md",
+    171
+   ]
+  ]
+ },
+ {
+  "repo": "api-factory",
+  "id": "A25",
+  "op": "replace",
+  "a": "*",
+  "b": [
+   "RUNTIME_TEST_AMQP",
+   "RUNTIME_TEST_RABBITMQ"
+  ],
+  "tokens": [
+   "RUNTIME_TEST_AMQP"
+  ],
+  "affected": [
+   [
+    "runtime/README.md",
+    21
+   ],
+   [
+    "runtime/README.md",
+    262
+   ],
+   [
+    "runtime/README.md",
+    268
+   ]
+  ]
+ },
+ {
+  "repo": "api-factory",
+  "id": "A26",
+  "op": "rename",
+  "a": "runtime/outbox/perf_gate_test.go",
+  "b": "runtime/outbox/gate_test.go",
+  "tokens": [
+   "perf_gate_test.go"
+  ],
+  "affected": [
+   [
+    "README.md",
+    125
+   ],
+   [
+    "runtime/README.md",
+    15
+   ]
+  ]
+ }
+]

@@ -43,12 +43,15 @@ func (agent) Judge(_ context.Context, r *judgev1.Request) (*judgev1.Response, er
 	var a any
 	quote := func(status, p string, line int, q string) map[string]any {
 		return map[string]any{"facts": []any{map[string]any{"fact": "f", "status": status, "evidence": []any{
-			map[string]any{"kind": "quote", "path": p, "line": line, "quote": q}}}}, "reason": "r"}
+			map[string]any{"kind": "quote", "path": p, "line": line, "quote": q},
+		}}}, "reason": "r"}
 	}
 	switch {
 	case r.Task.Type == judgev1.TaskRepoDrift:
-		a = map[string]any{"drift": []any{map[string]any{"kind": "changed_value", "old": "port 8080", "new": "port 9090", "summary": "s",
-			"evidence": []any{map[string]any{"path": "main.go", "line": 2, "quote": "const port = 9090"}}}}}
+		a = map[string]any{"drift": []any{map[string]any{
+			"kind": "changed_value", "old": "port 8080", "new": "port 9090", "summary": "s",
+			"evidence": []any{map[string]any{"path": "main.go", "line": 2, "quote": "const port = 9090"}},
+		}}}
 	case r.Claim.Line == 1:
 		a = quote(agentic.Contradicted, "main.go", 2, "const port = 9090")
 	case r.Claim.Line == 2:
@@ -80,8 +83,10 @@ func gitRepo(t *testing.T) (string, string) {
 func TestRunAgentic(t *testing.T) {
 	dir, head := gitRepo(t)
 	mk := func(id, repo, rev, expected string, line int) Item {
-		return Item{ID: id, Source: SourceGTPositive, Label: LabelStrongAI, Repo: repo, Split: "test", Revision: rev, Task: TaskJudge,
-			TaskType: judgev1.TaskClaimFacts, Expected: expected, Claim: judgev1.Claim{Repo: repo, Path: "README.md", Line: line, Text: "x"}}
+		return Item{
+			ID: id, Source: SourceGTPositive, Label: LabelStrongAI, Repo: repo, Split: "test", Revision: rev, Task: TaskJudge,
+			TaskType: judgev1.TaskClaimFacts, Expected: expected, Claim: judgev1.Claim{Repo: repo, Path: "README.md", Line: line, Text: "x"},
+		}
 	}
 	items := []Item{
 		mk("p1", "demo", head, judgev1.Yes, 1), mk("n1", "demo", head[:10], judgev1.No, 2), mk("n2", "demo", "HEAD", judgev1.No, 3),
@@ -97,8 +102,10 @@ func TestRunAgentic(t *testing.T) {
 	}
 	in, _ := instance.Parse([]byte("version: 1\nclassification: {repos: {demo: public}}\n"))
 	for _, group := range []string{agentic.GroupLine, agentic.GroupDoc} {
-		res := Run(context.Background(), Options{Set: set, Task: TaskJudge, Guard: guard(t, agent{}), Concurrency: 2,
-			Agentic: &Agentic{Worktrees: map[string]string{"demo": dir}, Class: in.Classification, Settings: agentic.Settings{Group: group}}})
+		res := Run(context.Background(), Options{
+			Set: set, Task: TaskJudge, Guard: guard(t, agent{}), Concurrency: 2,
+			Agentic: &Agentic{Worktrees: map[string]string{"demo": dir}, Class: in.Classification, Settings: agentic.Settings{Group: group}},
+		})
 		s := res.Scores
 		if res.Mode != "agentic" || res.Group != group || res.PromptTemplateHash != agentic.TemplateHash() || len(res.Drift) != 1 || res.Drift[0].Validated != 1 {
 			t.Fatalf("%s: result %+v", group, res)

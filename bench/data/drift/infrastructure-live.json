@@ -1,0 +1,612 @@
+{
+ "repo": "infrastructure-live",
+ "raw": [
+  {
+   "kind": "deleted",
+   "old": "Bootstrap scripts (up.sh, down.sh, secrets.sh, laptop-host.sh, laptop-runner.sh) plus argocd/, bootstrap/root.yaml and kind/cluster.yaml create the platform",
+   "new": "All removed. OpenTofu (tofu/), Ansible (ansible/) and SOPS secrets replace them.",
+   "summary": "The shell bootstrap flow and the manifest directories were deleted in the IaC migration, so any docs that say 'run up.sh' are wrong.",
+   "commits": [
+    "989c73a"
+   ],
+   "evidence": [
+    {
+     "path": "README.md",
+     "line": 12,
+     "quote": "Infrastructure as code with open-source tools only; no bootstrap shell scripts:"
+    },
+    {
+     "path": "README.md",
+     "line": 59,
+     "quote": "tofu -chdir=tofu/kind init && tofu -chdir=tofu/kind apply"
+    }
+   ]
+  },
+  {
+   "kind": "moved",
+   "old": "The cluster's root Application is gitops-manifests (apps/ or clusters/<name>), and gitops-manifests defines everything that runs in the clusters",
+   "new": "The root Application is slo-platform's, pinned at a version in tofu/<cluster>/main.tf. gitops-manifests is now only slo-platform's instance (platform.yaml, applications, extras).",
+   "summary": "The laptop and lab moved to running the platform from the slo-platform product repository, and gitops-manifests became its instance.",
+   "commits": [
+    "95211f4",
+    "f59833d"
+   ],
+   "evidence": [
+    {
+     "path": "README.md",
+     "line": 8,
+     "quote": "clusters after that comes from slo-platform (the product, at the version pinned in `tofu/<cluster>/main.tf`) and"
+    },
+    {
+     "path": "tofu/laptop/main.tf",
+     "line": 39,
+     "quote": "slo_platform = { version = \"v0.1.1\", cluster = \"laptop\", lab = false }"
+    }
+   ]
+  },
+  {
+   "kind": "other",
+   "old": "Only the laptop (and a local kind cluster) exist as clusters",
+   "new": "A second real cluster, 'lab', runs k3s on xiaoxin: Ansible group lab plus tofu/lab. It runs a small platform and the fault experiments.",
+   "summary": "A lab cluster on xiaoxin was added, so docs that describe a single laptop cluster are out of date.",
+   "commits": [
+    "f2fd303"
+   ],
+   "evidence": [
+    {
+     "path": "README.md",
+     "line": 21,
+     "quote": "Two real clusters, both k3s at home: `laptop` (prod, the always-on HP laptop) and `lab` (xiaoxin: fault experiments"
+    }
+   ]
+  },
+  {
+   "kind": "removed_key",
+   "old": "The GKE version (Terraform: VPC, GKE, Cloud SQL, Workload Identity) will replace kind/ / tofu/kind",
+   "new": "There is no cloud code here, and a managed-cloud version is only an idea that was never started. The kind cluster is now used for the demo.",
+   "summary": "The planned GKE migration was dropped from the docs as never started.",
+   "commits": [
+    "f59833d",
+    "989c73a"
+   ],
+   "evidence": [
+    {
+     "path": "README.md",
+     "line": 24,
+     "quote": "path for a week after the switch. There is no cloud code here: a managed-cloud version (GKE, Workload Identity, Secret"
+    }
+   ]
+  },
+  {
+   "kind": "implemented",
+   "old": "Planned: a demo or try-it flow for others; older docs say runs need our keys or tokens",
+   "new": "tofu/demo runs the platform with one command on kind, using throwaway secrets and public applications only. CI runs it weekly and on every change.",
+   "summary": "A keyless public demo environment was added.",
+   "commits": [
+    "225acd0",
+    "6363ada"
+   ],
+   "evidence": [
+    {
+     "path": "README.md",
+     "line": 29,
+     "quote": "Anyone can run the platform locally, without our keys or tokens: [`tofu/demo`](tofu/demo/README.md) (one command;"
+    },
+    {
+     "path": "scripts/env.sh",
+     "line": 4,
+     "quote": "#   TARGET=demo   the demo cluster anyone can build (tofu/demo), context kind-gitops-demo, apps on localhost:28080-28083"
+    }
+   ]
+  },
+  {
+   "kind": "changed_value",
+   "old": "Argo CD chart 10.11.6 (v3.5.6) pinned in the platform module",
+   "new": "Argo CD chart 10.18.3 (v3.6.2) is the module default, and the lab override is gone.",
+   "summary": "The Argo CD version was upgraded.",
+   "commits": [
+    "b1f1e30",
+    "6c40fc7"
+   ],
+   "evidence": [
+    {
+     "path": "tofu/modules/platform/variables.tf",
+     "line": 52,
+     "quote": "default = \"10.18.3\" # Argo CD v3.6.2"
+    }
+   ]
+  },
+  {
+   "kind": "changed_value",
+   "old": "The product repo slo-platform is private: Argo CD and the lab regression use the GHCR token (repo secret, git-credentials) to read it",
+   "new": "slo-platform is public, so no repository credentials are created. The secrets exist only with slo_platform.private = true, which defaults to false.",
+   "summary": "The credential handling for the product repo was removed once it became public.",
+   "commits": [
+    "95211f4",
+    "45fa30d"
+   ],
+   "evidence": [
+    {
+     "path": "tofu/modules/platform/variables.tf",
+     "line": 93,
+     "quote": "private = true (the product repository was private until 2026-11-21): Argo CD reads it with the GHCR token's"
+    }
+   ]
+  },
+  {
+   "kind": "other",
+   "old": "The phone is only an off-site backup target",
+   "new": "The phone also runs gitops_watch, which watches the laptop, its Alertmanager and xiaoxin from outside and speaks on the other machine.",
+   "summary": "The phone became an independent external watcher.",
+   "commits": [
+    "f3db8c7"
+   ],
+   "evidence": [
+    {
+     "path": "ansible/group_vars/offsite.yml",
+     "line": 5,
+     "quote": "# gitops_watch: the phone watches the laptop and xiaoxin from outside; speaks on the other machine (speakd :8770)"
+    }
+   ]
+  },
+  {
+   "kind": "changed_value",
+   "old": "The watcher only watches laptop and xiaoxin and receives Alertmanager's Watchdog",
+   "new": "The watcher has POST /notify so Gatus on the phone owns the endpoint checks from outside. It also has a lab dead man's switch (/lab-watchdog) and checks winpc and its external prober.",
+   "summary": "The watcher's scope and inputs expanded, and Gatus took over the outside checks of the laptop's services.",
+   "commits": [
+    "690d225",
+    "9ba874f"
+   ],
+   "evidence": [
+    {
+     "path": "ansible/group_vars/offsite.yml",
+     "line": 30,
+     "quote": "# storefront / sample-app from outside: Gatus since 2026-11-23 (POST /notify above)"
+    },
+    {
+     "path": "ansible/group_vars/offsite.yml",
+     "line": 51,
+     "quote": "  - id: lab-watchdog         # POST /lab-watchdog: the lab Alertmanager's Watchdog (gitops-manifests platform.yaml lab)"
+    }
+   ]
+  },
+  {
+   "kind": "other",
+   "old": "The phone does no detection alerting",
+   "new": "The phone runs Loki's ruler and a local Alertmanager (0.35.0, port 9093) that evaluate security-platform detection rules over the logs it stores.",
+   "summary": "A detection_alerting role was added for the phone.",
+   "commits": [
+    "35ecf3e"
+   ],
+   "evidence": [
+    {
+     "path": "ansible/roles/detection_alerting/defaults/main.yml",
+     "line": 1,
+     "quote": "# Detection alerting on the phone (the independent observer): Loki's ruler evaluates security-platform's detection"
+    },
+    {
+     "path": "ansible/roles/detection_alerting/defaults/main.yml",
+     "line": 6,
+     "quote": "alertmanager_version: \"0.35.0\""
+    }
+   ]
+  },
+  {
+   "kind": "implemented",
+   "old": "No Kubernetes API audit logging on the k3s servers",
+   "new": "The lab (e5c63a8) and then the laptop (368a566) servers enable kube-apiserver audit with a policy file and a 7-day, 4-backup, 100 MB log rotation.",
+   "summary": "Kubernetes API audit logging was enabled, first on the lab and then on the laptop.",
+   "commits": [
+    "e5c63a8",
+    "368a566"
+   ],
+   "evidence": [
+    {
+     "path": "ansible/group_vars/lab.yml",
+     "line": 19,
+     "quote": "    - \"audit-policy-file=/etc/rancher/k3s/audit-policy.yaml\""
+    },
+    {
+     "path": "ansible/group_vars/server.yml",
+     "line": 9,
+     "quote": "  kube-apiserver-arg:"
+    }
+   ]
+  },
+  {
+   "kind": "changed_value",
+   "old": "The lab runs api-factory in every environment (dev and prod)",
+   "new": "The lab sets api_factory_envs to [\"dev\"] only, with no production replicas.",
+   "summary": "The lab's api-factory environments were reduced to dev.",
+   "commits": [
+    "9a8fd76"
+   ],
+   "evidence": [
+    {
+     "path": "tofu/lab/main.tf",
+     "line": 37,
+     "quote": "api_factory_envs          = [\"dev\"]         # no production replicas on the lab (gitops-manifests platform.yaml clusters.lab)"
+    }
+   ]
+  },
+  {
+   "kind": "other",
+   "old": "backup-s3 covers only api-factory namespaces",
+   "new": "A backup_namespaces variable was added for the storefront v2 catalog database. The laptop backs up catalog-dev, catalog-staging and catalog-prod. The lab backs up catalog-dev only.",
+   "summary": "Catalog namespaces were added to the S3 backups: dev, then staging, then prod.",
+   "commits": [
+    "84b1e5f",
+    "4182faf",
+    "bdad2f2",
+    "c0403ec"
+   ],
+   "evidence": [
+    {
+     "path": "tofu/laptop/main.tf",
+     "line": 36,
+     "quote": "backup_namespaces         = [\"catalog-dev\", \"catalog-staging\", \"catalog-prod\"]"
+    },
+    {
+     "path": "tofu/lab/main.tf",
+     "line": 38,
+     "quote": "backup_namespaces         = [\"catalog-dev\"]"
+    }
+   ]
+  },
+  {
+   "kind": "changed_value",
+   "old": "scripts/env.sh targets were kind and laptop only",
+   "new": "env.sh also supports TARGET=demo.",
+   "summary": "A demo target was added to env.sh.",
+   "commits": [
+    "225acd0"
+   ],
+   "evidence": [
+    {
+     "path": "scripts/env.sh",
+     "line": 16,
+     "quote": "  *) echo \"unknown TARGET=$TARGET (kind | laptop | demo)\" >&2; exit 2 ;;"
+    }
+   ]
+  },
+  {
+   "kind": "changed_value",
+   "old": "tofu/laptop assumes a fixed kubeconfig and context",
+   "new": "kubeconfig and kube context are variables, so the laptop is reached over the LAN at home and over Tailscale elsewhere.",
+   "summary": "The laptop kubeconfig and context became configurable.",
+   "commits": [
+    "b2f7e8b"
+   ],
+   "evidence": [
+    {
+     "path": "README.md",
+     "line": 66,
+     "quote": "#   at home without Tailscale: TF_VAR_kubeconfig=~/.kube/laptop-lan.yaml TF_VAR_kube_context=laptop-lan"
+    }
+   ]
+  }
+ ],
+ "validated": [
+  {
+   "kind": "deleted",
+   "old": "Bootstrap scripts (up.sh, down.sh, secrets.sh, laptop-host.sh, laptop-runner.sh) plus argocd/, bootstrap/root.yaml and kind/cluster.yaml create the platform",
+   "new": "All removed. OpenTofu (tofu/), Ansible (ansible/) and SOPS secrets replace them.",
+   "summary": "The shell bootstrap flow and the manifest directories were deleted in the IaC migration, so any docs that say 'run up.sh' are wrong.",
+   "commits": [
+    "989c73a"
+   ],
+   "evidence": [
+    {
+     "path": "README.md",
+     "line": 12,
+     "quote": "Infrastructure as code with open-source tools only; no bootstrap shell scripts:"
+    },
+    {
+     "path": "README.md",
+     "line": 59,
+     "quote": "tofu -chdir=tofu/kind init && tofu -chdir=tofu/kind apply"
+    }
+   ],
+   "absent_old_path": false,
+   "id": "D1"
+  },
+  {
+   "kind": "moved",
+   "old": "The cluster's root Application is gitops-manifests (apps/ or clusters/<name>), and gitops-manifests defines everything that runs in the clusters",
+   "new": "The root Application is slo-platform's, pinned at a version in tofu/<cluster>/main.tf. gitops-manifests is now only slo-platform's instance (platform.yaml, applications, extras).",
+   "summary": "The laptop and lab moved to running the platform from the slo-platform product repository, and gitops-manifests became its instance.",
+   "commits": [
+    "95211f4",
+    "f59833d"
+   ],
+   "evidence": [
+    {
+     "path": "README.md",
+     "line": 8,
+     "quote": "clusters after that comes from slo-platform (the product, at the version pinned in `tofu/<cluster>/main.tf`) and"
+    },
+    {
+     "path": "tofu/laptop/main.tf",
+     "line": 39,
+     "quote": "slo_platform = { version = \"v0.1.1\", cluster = \"laptop\", lab = false }"
+    }
+   ],
+   "absent_old_path": false,
+   "id": "D2"
+  },
+  {
+   "kind": "other",
+   "old": "Only the laptop (and a local kind cluster) exist as clusters",
+   "new": "A second real cluster, 'lab', runs k3s on xiaoxin: Ansible group lab plus tofu/lab. It runs a small platform and the fault experiments.",
+   "summary": "A lab cluster on xiaoxin was added, so docs that describe a single laptop cluster are out of date.",
+   "commits": [
+    "f2fd303"
+   ],
+   "evidence": [
+    {
+     "path": "README.md",
+     "line": 21,
+     "quote": "Two real clusters, both k3s at home: `laptop` (prod, the always-on HP laptop) and `lab` (xiaoxin: fault experiments"
+    }
+   ],
+   "absent_old_path": false,
+   "id": "D3"
+  },
+  {
+   "kind": "removed_key",
+   "old": "The GKE version (Terraform: VPC, GKE, Cloud SQL, Workload Identity) will replace kind/ / tofu/kind",
+   "new": "There is no cloud code here, and a managed-cloud version is only an idea that was never started. The kind cluster is now used for the demo.",
+   "summary": "The planned GKE migration was dropped from the docs as never started.",
+   "commits": [
+    "f59833d",
+    "989c73a"
+   ],
+   "evidence": [
+    {
+     "path": "README.md",
+     "line": 24,
+     "quote": "path for a week after the switch. There is no cloud code here: a managed-cloud version (GKE, Workload Identity, Secret"
+    }
+   ],
+   "absent_old_path": false,
+   "id": "D4"
+  },
+  {
+   "kind": "implemented",
+   "old": "Planned: a demo or try-it flow for others; older docs say runs need our keys or tokens",
+   "new": "tofu/demo runs the platform with one command on kind, using throwaway secrets and public applications only. CI runs it weekly and on every change.",
+   "summary": "A keyless public demo environment was added.",
+   "commits": [
+    "225acd0",
+    "6363ada"
+   ],
+   "evidence": [
+    {
+     "path": "README.md",
+     "line": 29,
+     "quote": "Anyone can run the platform locally, without our keys or tokens: [`tofu/demo`](tofu/demo/README.md) (one command;"
+    },
+    {
+     "path": "scripts/env.sh",
+     "line": 4,
+     "quote": "#   TARGET=demo   the demo cluster anyone can build (tofu/demo), context kind-gitops-demo, apps on localhost:28080-28083"
+    }
+   ],
+   "absent_old_path": false,
+   "id": "D5"
+  },
+  {
+   "kind": "changed_value",
+   "old": "Argo CD chart 10.11.6 (v3.5.6) pinned in the platform module",
+   "new": "Argo CD chart 10.18.3 (v3.6.2) is the module default, and the lab override is gone.",
+   "summary": "The Argo CD version was upgraded.",
+   "commits": [
+    "b1f1e30",
+    "6c40fc7"
+   ],
+   "evidence": [
+    {
+     "path": "tofu/modules/platform/variables.tf",
+     "line": 52,
+     "quote": "default = \"10.18.3\" # Argo CD v3.6.2"
+    }
+   ],
+   "absent_old_path": false,
+   "id": "D6"
+  },
+  {
+   "kind": "changed_value",
+   "old": "The product repo slo-platform is private: Argo CD and the lab regression use the GHCR token (repo secret, git-credentials) to read it",
+   "new": "slo-platform is public, so no repository credentials are created. The secrets exist only with slo_platform.private = true, which defaults to false.",
+   "summary": "The credential handling for the product repo was removed once it became public.",
+   "commits": [
+    "95211f4",
+    "45fa30d"
+   ],
+   "evidence": [
+    {
+     "path": "tofu/modules/platform/variables.tf",
+     "line": 93,
+     "quote": "private = true (the product repository was private until 2026-11-21): Argo CD reads it with the GHCR token's"
+    }
+   ],
+   "absent_old_path": false,
+   "id": "D7"
+  },
+  {
+   "kind": "other",
+   "old": "The phone is only an off-site backup target",
+   "new": "The phone also runs gitops_watch, which watches the laptop, its Alertmanager and xiaoxin from outside and speaks on the other machine.",
+   "summary": "The phone became an independent external watcher.",
+   "commits": [
+    "f3db8c7"
+   ],
+   "evidence": [
+    {
+     "path": "ansible/group_vars/offsite.yml",
+     "line": 5,
+     "quote": "# gitops_watch: the phone watches the laptop and xiaoxin from outside; speaks on the other machine (speakd :8770)"
+    }
+   ],
+   "absent_old_path": false,
+   "id": "D8"
+  },
+  {
+   "kind": "changed_value",
+   "old": "The watcher only watches laptop and xiaoxin and receives Alertmanager's Watchdog",
+   "new": "The watcher has POST /notify so Gatus on the phone owns the endpoint checks from outside. It also has a lab dead man's switch (/lab-watchdog) and checks winpc and its external prober.",
+   "summary": "The watcher's scope and inputs expanded, and Gatus took over the outside checks of the laptop's services.",
+   "commits": [
+    "690d225",
+    "9ba874f"
+   ],
+   "evidence": [
+    {
+     "path": "ansible/group_vars/offsite.yml",
+     "line": 30,
+     "quote": "# storefront / sample-app from outside: Gatus since 2026-11-23 (POST /notify above)"
+    },
+    {
+     "path": "ansible/group_vars/offsite.yml",
+     "line": 51,
+     "quote": "  - id: lab-watchdog         # POST /lab-watchdog: the lab Alertmanager's Watchdog (gitops-manifests platform.yaml lab)"
+    }
+   ],
+   "absent_old_path": false,
+   "id": "D9"
+  },
+  {
+   "kind": "other",
+   "old": "The phone does no detection alerting",
+   "new": "The phone runs Loki's ruler and a local Alertmanager (0.35.0, port 9093) that evaluate security-platform detection rules over the logs it stores.",
+   "summary": "A detection_alerting role was added for the phone.",
+   "commits": [
+    "35ecf3e"
+   ],
+   "evidence": [
+    {
+     "path": "ansible/roles/detection_alerting/defaults/main.yml",
+     "line": 1,
+     "quote": "# Detection alerting on the phone (the independent observer): Loki's ruler evaluates security-platform's detection"
+    },
+    {
+     "path": "ansible/roles/detection_alerting/defaults/main.yml",
+     "line": 6,
+     "quote": "alertmanager_version: \"0.35.0\""
+    }
+   ],
+   "absent_old_path": false,
+   "id": "D10"
+  },
+  {
+   "kind": "implemented",
+   "old": "No Kubernetes API audit logging on the k3s servers",
+   "new": "The lab (e5c63a8) and then the laptop (368a566) servers enable kube-apiserver audit with a policy file and a 7-day, 4-backup, 100 MB log rotation.",
+   "summary": "Kubernetes API audit logging was enabled, first on the lab and then on the laptop.",
+   "commits": [
+    "e5c63a8",
+    "368a566"
+   ],
+   "evidence": [
+    {
+     "path": "ansible/group_vars/lab.yml",
+     "line": 19,
+     "quote": "    - \"audit-policy-file=/etc/rancher/k3s/audit-policy.yaml\""
+    },
+    {
+     "path": "ansible/group_vars/server.yml",
+     "line": 9,
+     "quote": "  kube-apiserver-arg:"
+    }
+   ],
+   "absent_old_path": false,
+   "id": "D11"
+  },
+  {
+   "kind": "changed_value",
+   "old": "The lab runs api-factory in every environment (dev and prod)",
+   "new": "The lab sets api_factory_envs to [\"dev\"] only, with no production replicas.",
+   "summary": "The lab's api-factory environments were reduced to dev.",
+   "commits": [
+    "9a8fd76"
+   ],
+   "evidence": [
+    {
+     "path": "tofu/lab/main.tf",
+     "line": 37,
+     "quote": "api_factory_envs          = [\"dev\"]         # no production replicas on the lab (gitops-manifests platform.yaml clusters.lab)"
+    }
+   ],
+   "absent_old_path": false,
+   "id": "D12"
+  },
+  {
+   "kind": "other",
+   "old": "backup-s3 covers only api-factory namespaces",
+   "new": "A backup_namespaces variable was added for the storefront v2 catalog database. The laptop backs up catalog-dev, catalog-staging and catalog-prod. The lab backs up catalog-dev only.",
+   "summary": "Catalog namespaces were added to the S3 backups: dev, then staging, then prod.",
+   "commits": [
+    "84b1e5f",
+    "4182faf",
+    "bdad2f2",
+    "c0403ec"
+   ],
+   "evidence": [
+    {
+     "path": "tofu/laptop/main.tf",
+     "line": 36,
+     "quote": "backup_namespaces         = [\"catalog-dev\", \"catalog-staging\", \"catalog-prod\"]"
+    },
+    {
+     "path": "tofu/lab/main.tf",
+     "line": 38,
+     "quote": "backup_namespaces         = [\"catalog-dev\"]"
+    }
+   ],
+   "absent_old_path": false,
+   "id": "D13"
+  },
+  {
+   "kind": "changed_value",
+   "old": "scripts/env.sh targets were kind and laptop only",
+   "new": "env.sh also supports TARGET=demo.",
+   "summary": "A demo target was added to env.sh.",
+   "commits": [
+    "225acd0"
+   ],
+   "evidence": [
+    {
+     "path": "scripts/env.sh",
+     "line": 16,
+     "quote": "  *) echo \"unknown TARGET=$TARGET (kind | laptop | demo)\" >&2; exit 2 ;;"
+    }
+   ],
+   "absent_old_path": false,
+   "id": "D14"
+  },
+  {
+   "kind": "changed_value",
+   "old": "tofu/laptop assumes a fixed kubeconfig and context",
+   "new": "kubeconfig and kube context are variables, so the laptop is reached over the LAN at home and over Tailscale elsewhere.",
+   "summary": "The laptop kubeconfig and context became configurable.",
+   "commits": [
+    "b2f7e8b"
+   ],
+   "evidence": [
+    {
+     "path": "README.md",
+     "line": 66,
+     "quote": "#   at home without Tailscale: TF_VAR_kubeconfig=~/.kube/laptop-lan.yaml TF_VAR_kube_context=laptop-lan"
+    }
+   ],
+   "absent_old_path": false,
+   "id": "D15"
+  }
+ ],
+ "parse": "schema",
+ "cost": 0.2538681,
+ "turns": 19,
+ "secs": 67.9,
+ "subtype": "success"
+}

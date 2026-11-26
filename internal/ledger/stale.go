@@ -240,8 +240,10 @@ func Check(ctx context.Context, l *Ledger, dir, repoName, ref string, now time.T
 	if err != nil {
 		return nil, err
 	}
-	r := &Report{SchemaVersion: StaleSchemaVersion, Repo: repoName, Ref: to, CheckedAt: now.UTC().Format(time.RFC3339),
-		Counts: map[string]int{Fresh: 0, Stale: 0, Recheck: 0}, Claims: []ClaimStatus{}}
+	r := &Report{
+		SchemaVersion: StaleSchemaVersion, Repo: repoName, Ref: to, CheckedAt: now.UTC().Format(time.RFC3339),
+		Counts: map[string]int{Fresh: 0, Stale: 0, Recheck: 0}, Claims: []ClaimStatus{},
+	}
 	diffs := map[string]*Changes{}
 	docs := map[string]docAt{}
 	doc := func(p string) (string, bool) {
@@ -283,8 +285,10 @@ func Check(ctx context.Context, l *Ledger, dir, repoName, ref string, now time.T
 // maps "repo@ref" (preferred) or "repo" to checkouts; claims whose repositories have no
 // checkout are skipped.
 func CheckGroup(ctx context.Context, l *Ledger, group string, dirs map[string]string, now time.Time) (*Report, error) {
-	r := &Report{SchemaVersion: StaleSchemaVersion, Repo: group, CheckedAt: now.UTC().Format(time.RFC3339),
-		Counts: map[string]int{Fresh: 0, Stale: 0, Recheck: 0}, Claims: []ClaimStatus{}}
+	r := &Report{
+		SchemaVersion: StaleSchemaVersion, Repo: group, CheckedAt: now.UTC().Format(time.RFC3339),
+		Counts: map[string]int{Fresh: 0, Stale: 0, Recheck: 0}, Claims: []ClaimStatus{},
+	}
 	g := &groupState{ctx: ctx, dirs: dirs, heads: map[string]string{}, diffs: map[string]*Changes{}, docs: map[string]docAt{}}
 	for i := range l.Claims {
 		c := &l.Claims[i]

@@ -229,8 +229,10 @@ func (l *Log) Recommend(after int, now time.Time) []Recommendation {
 	var out []Recommendation
 	for k, c := range n {
 		if c >= after {
-			out = append(out, Recommendation{Repo: k[0], Path: k[1], Drafts: c,
-				Advice: "this document keeps going stale: generate it from the source, or replace restated details with links to the files that hold them"})
+			out = append(out, Recommendation{
+				Repo: k[0], Path: k[1], Drafts: c,
+				Advice: "this document keeps going stale: generate it from the source, or replace restated details with links to the files that hold them",
+			})
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Repo+out[i].Path < out[j].Repo+out[j].Path })

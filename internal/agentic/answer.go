@@ -109,7 +109,7 @@ const (
 	maxStringRunes = 2000
 )
 
-// ErrNoFacts: the answer object holds no facts list.
+// ErrNoFacts is returned when the answer object holds no facts list.
 var ErrNoFacts = errors.New("answer has no facts")
 
 // ParseLineAnswer decodes a claim_facts answer leniently: numbers may come as strings, a

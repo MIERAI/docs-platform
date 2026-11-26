@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -298,4 +299,36 @@ func FuzzDecodeResponse(f *testing.F) {
 			t.Fatal("nil response without error")
 		}
 	})
+}
+
+// TestAnthropicPresetAgentic: the anthropic provider declares agentic mode, is a cloud
+// provider (classification applies), passes the key's location never the key, and gives
+// agentic requests only ai.judge.agentic.effort.
+func TestAnthropicPresetAgentic(t *testing.T) {
+	task := instance.Task{
+		Provider: instance.ProviderAnthropic, Model: "claude-sonnet-5-5", Effort: "medium",
+		Anthropic: instance.Anthropic{Program: "/opt/docsp/bin/docsp-judge-anthropic", APIKeyEnv: "ANTHROPIC_API_KEY"},
+	}
+	for _, agEffort := range []string{"", "high"} {
+		task.Agentic.Effort = agEffort
+		cfg := anthropicExec(task, time.Minute, 2)
+		if !cfg.Cloud || !slices.Contains(cfg.Modes, judgev1.ModeAgentic) || !slices.Contains(cfg.Modes, judgev1.ModeSnippet) {
+			t.Fatalf("preset %+v", cfg)
+		}
+		argv := strings.Join(cfg.Command, " ")
+		if !strings.Contains(argv, "-effort medium") || !strings.Contains(argv, "-api-key-env ANTHROPIC_API_KEY") ||
+			!slices.Equal(cfg.PassEnv, []string{"ANTHROPIC_API_KEY"}) {
+			t.Errorf("argv %q pass %v", argv, cfg.PassEnv)
+		}
+		if got := strings.Contains(argv, "-agentic-effort"); got != (agEffort != "") || (agEffort != "" && !strings.Contains(argv, "-agentic-effort high")) {
+			t.Errorf("agentic effort %q: argv %q", agEffort, argv)
+		}
+	}
+	p, err := New(task)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !p.Cloud() || !slices.Contains(p.Modes(), judgev1.ModeAgentic) {
+		t.Errorf("provider %s cloud=%v modes=%v", p.Name(), p.Cloud(), p.Modes())
+	}
 }

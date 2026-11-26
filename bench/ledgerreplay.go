@@ -166,22 +166,27 @@ func commitCosts(ctx context.Context, dir string, claims []*ledger.Claim, commit
 			}
 		}
 		first = false
-		lc := lrCommit{SHA: c[:12], Reasons: map[string]int{}}
-		for _, cl := range claims {
-			if !alive[cl.ID] {
-				continue
-			}
-			lc.Alive++
-			if s := ledger.Invalidate(cl, ch, docAt); s.Status == ledger.Stale {
-				lc.Stale++
-				for _, r := range s.Reasons {
-					lc.Reasons[r.Kind]++
-				}
-			}
-		}
-		out = append(out, lc)
+		out = append(out, staleAt(c, claims, alive, ch, docAt))
 	}
 	return out, nil
+}
+
+// staleAt counts the alive claims one commit invalidates, with their reasons.
+func staleAt(c string, claims []*ledger.Claim, alive map[string]bool, ch *ledger.Changes, docAt func(string) (string, bool)) lrCommit {
+	lc := lrCommit{SHA: c[:12], Reasons: map[string]int{}}
+	for _, cl := range claims {
+		if !alive[cl.ID] {
+			continue
+		}
+		lc.Alive++
+		if s := ledger.Invalidate(cl, ch, docAt); s.Status == ledger.Stale {
+			lc.Stale++
+			for _, r := range s.Reasons {
+				lc.Reasons[r.Kind]++
+			}
+		}
+	}
+	return lc
 }
 
 func hasLine(text, want string) bool {
@@ -282,28 +287,27 @@ func (r ledgerReplay) markdown() string {
 	}
 	b.WriteString("\n| repo | positives | scored | flagged at first causing commit | at any causing commit | flagged by some later commit | median commits flagging |\n|---|---|---|---|---|---|---|\n")
 	for _, rr := range r.Repos {
-		scored, first, anyc, some := 0, 0, 0, 0
-		var fl []int
-		for _, it := range rr.Items {
-			if it.Status != "scored" {
-				continue
-			}
-			scored++
-			fl = append(fl, it.Flagging)
-			if it.First {
-				first++
-			}
-			if it.Any {
-				anyc++
-			}
-			if it.Flagging > 0 {
-				some++
-			}
-		}
-		sort.Ints(fl)
-		fmt.Fprintf(&b, "| %s | %d | %d | %s | %s | %s | %d |\n", rr.Repo, len(rr.Items), scored, frac(first, scored), frac(anyc, scored), frac(some, scored), pick(fl, 0.5))
+		itemRow(&b, rr)
 	}
 	return b.String()
+}
+
+// itemRow writes one repository's recall row.
+func itemRow(b *strings.Builder, rr lrRepo) {
+	scored, first, anyc, some := 0, 0, 0, 0
+	var fl []int
+	for _, it := range rr.Items {
+		if it.Status != "scored" {
+			continue
+		}
+		scored++
+		fl = append(fl, it.Flagging)
+		first += b2i(it.First)
+		anyc += b2i(it.Any)
+		some += b2i(it.Flagging > 0)
+	}
+	sort.Ints(fl)
+	fmt.Fprintf(b, "| %s | %d | %d | %s | %s | %s | %d |\n", rr.Repo, len(rr.Items), scored, frac(first, scored), frac(anyc, scored), frac(some, scored), pick(fl, 0.5))
 }
 
 func mean(xs []int) float64 {

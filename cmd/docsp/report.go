@@ -135,8 +135,10 @@ func draftable(l *ledger.Ledger, dl *draft.Log, repoName string, n int) []*ledge
 
 func proposeDraft(ctx context.Context, g *judge.Guard, root string, c *ledger.Claim, now time.Time) draft.Entry {
 	ev := draft.Evidence(ctx, root, c)
-	e := draft.Entry{ClaimID: c.ID, Repo: c.Repo, Path: c.Path, Line: c.Line, Category: c.Category, Original: c.Text,
-		ProposedAt: now.UTC().Format(time.RFC3339), ProposedRef: c.VerifiedRef, Model: g.Name(), Status: draft.RejectedByHarness}
+	e := draft.Entry{
+		ClaimID: c.ID, Repo: c.Repo, Path: c.Path, Line: c.Line, Category: c.Category, Original: c.Text,
+		ProposedAt: now.UTC().Format(time.RFC3339), ProposedRef: c.VerifiedRef, Model: g.Name(), Status: draft.RejectedByHarness,
+	}
 	out, err := g.Judge(ctx, draft.Request(c, ev))
 	switch {
 	case err != nil:

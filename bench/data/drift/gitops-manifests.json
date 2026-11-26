@@ -1,0 +1,708 @@
+{
+ "repo": "gitops-manifests",
+ "raw": [
+  {
+   "kind": "moved",
+   "old": "The laptop's external users (k6) and the external blackbox prober run on the lab (xiaoxin), as Argo CD app platform-external-users",
+   "new": "They run on winpc (the consumer side) as Windows scheduled tasks ExternalUsers / ExternalProber; the lab app was removed",
+   "summary": "External users and the prober left the lab for winpc, and the platform/external-users directory is marked RETIRED.",
+   "commits": [
+    "04c2fc6"
+   ],
+   "evidence": [
+    {
+     "path": "platform/external-users/kustomization.yaml",
+     "line": 1,
+     "quote": "# RETIRED 2026-11-22: the laptop's users and the external prober moved to winpc, the consumer side (load tests,"
+    }
+   ]
+  },
+  {
+   "kind": "moved",
+   "old": "storefront v1 runs on both laptop and lab, with the lab's synthetic traffic (platform-traffic, k6)",
+   "new": "The lab excludes storefront and sample-app; storefront v1 runs on the laptop only, v2 on the lab only; platform-traffic was removed from the lab",
+   "summary": "Storefront v1 left the lab to free memory for v2, and the lab's k6 traffic Application was deleted.",
+   "commits": [
+    "06309ff"
+   ],
+   "evidence": [
+    {
+     "path": "platform.yaml",
+     "line": 88,
+     "quote": "      exclude: [storefront, sample-app]        # needs v0.1.2 running on both roots (older schemas reject the key)"
+    },
+    {
+     "path": "platform.yaml",
+     "line": 14,
+     "quote": "      exclude: [v2]                            # storefront v2 runs on the lab only (v2/app.yaml)"
+    }
+   ]
+  },
+  {
+   "kind": "paused_or_removed",
+   "old": "The lab runs slo-platform's daily regression at 09:00 and fault experiments run daily",
+   "new": "The regression is paused with a Feb 31 cron schedule, so it never fires",
+   "summary": "The daily regression has been paused since 2026-11-22 ('the factory comes first').",
+   "commits": [
+    "06309ff"
+   ],
+   "evidence": [
+    {
+     "path": "platform.yaml",
+     "line": 142,
+     "quote": "# PAUSED 2026-11-22: the factory comes first (owner's call) — Feb 31 never comes, so the daily regression does not run;"
+    },
+    {
+     "path": "platform.yaml",
+     "line": 144,
+     "quote": "regression: { schedule: \"0 9 31 2 *\", experiments: experiments }"
+    }
+   ]
+  },
+  {
+   "kind": "other",
+   "old": "README says clusters/lab/extras holds 'in-cluster object storage, traffic, UIs' and that the lab runs the daily experiments",
+   "new": "Lab extras no longer include traffic or external users, and apps bring their own traffic via app.yaml",
+   "summary": "The README layout and cluster table are stale for the lab's role and extras.",
+   "commits": [
+    "04c2fc6",
+    "06309ff"
+   ],
+   "evidence": [
+    {
+     "path": "README.md",
+     "line": 50,
+     "quote": "clusters/lab/extras/       what only the lab has: in-cluster object storage, traffic, UIs"
+    },
+    {
+     "path": "README.md",
+     "line": 15,
+     "quote": "| `lab` | xiaoxin | fault experiments and slo-platform's daily regression (09:00); notifies nobody |"
+    }
+   ]
+  },
+  {
+   "kind": "migrated",
+   "old": "Applications registered by per-env Application files under apps/ (storefront-dev.yaml, api-factory-prod.yaml, sample-app-*.yaml, storefront-worker-*.yaml)",
+   "new": "Each app is registered by <app>/app.yaml; the apps/ files were deleted and storefront-worker moved to storefront/worker/",
+   "summary": "One directory with an app.yaml now registers an application, replacing the per-environment files under apps/.",
+   "commits": [
+    "6f7714b",
+    "7339fef"
+   ],
+   "evidence": [
+    {
+     "path": "README.md",
+     "line": 26,
+     "quote": "## Add an application: one directory"
+    },
+    {
+     "path": "README.md",
+     "line": 39,
+     "quote": "Every application is registered this way: api-factory, sample-app, storefront, catalog."
+    }
+   ]
+  },
+  {
+   "kind": "moved",
+   "old": "Top-level storefront-worker/ chart and values-*.yaml",
+   "new": "storefront/worker/chart and storefront/worker/values-*.yaml",
+   "summary": "The storefront-worker Helm chart was renamed into the storefront monorepo directory.",
+   "commits": [
+    "6f7714b"
+   ],
+   "evidence": [
+    {
+     "path": "README.md",
+     "line": 54,
+     "quote": "storefront/                a monorepo app registered by app.yaml: web + api (kustomize), worker (Helm), dev → staging → prod"
+    }
+   ]
+  },
+  {
+   "kind": "changed_value",
+   "old": "Laptop UIs (Prometheus, Alertmanager, Pyrra) exposed on NodePorts 30085-30090",
+   "new": "Prometheus, Alertmanager and Pyrra are ClusterIP only (port-forward); the README lists NodePorts 30085-30086 and 30090; platform/ui-laptop/monitoring.yaml was deleted",
+   "summary": "The laptop's internal UIs were hardened from NodePort to ClusterIP, and the monitoring.yaml patch file was removed.",
+   "commits": [
+    "f5fe1d0"
+   ],
+   "evidence": [
+    {
+     "path": "README.md",
+     "line": 49,
+     "quote": "probes, our Kyverno policies, host object storage, UIs on NodePorts 30085-30086, 30090"
+    }
+   ]
+  },
+  {
+   "kind": "implemented",
+   "old": "The security-platform hub runs outside the cluster (prod: 'a hub outside the cluster until its in-cluster hub is enabled')",
+   "new": "The hub runs in the cluster on lab (2026-11-24) and prod/laptop (2026-11-25), with a hub PVC that is never pruned",
+   "summary": "The security-platform hub went from external to in-cluster on both clusters, and it is now pinned at v0.3.0.",
+   "commits": [
+    "1776a4c",
+    "97b9d00",
+    "9218a24"
+   ],
+   "evidence": [
+    {
+     "path": "security-platform/app.yaml",
+     "line": 4,
+     "quote": "# hub, overlays/lab + ../hub; prod: a hub outside the cluster until its in-cluster hub is enabled); Argo CD does not"
+    },
+    {
+     "path": "security-platform/base/kustomization.yaml",
+     "line": 6,
+     "quote": "  - https://github.com/MIERAI/security-platform//deploy/kubernetes?ref=65cd3b042e1151a3d1dfef90bdb6c8395a2c4d91"
+    }
+   ]
+  },
+  {
+   "kind": "implemented",
+   "old": "No runtime detection or node security logs on the clusters",
+   "new": "Falco runtime detection and node security logs (audit and auth to Loki) run on the lab and the laptop",
+   "summary": "Falco and security-detection components were added to lab (11-24) and laptop (11-25).",
+   "commits": [
+    "451e2fb",
+    "034163f",
+    "f49e569",
+    "1252297"
+   ],
+   "evidence": [
+    {
+     "path": "clusters/laptop/extras/kustomization.yaml",
+     "line": 24,
+     "quote": "  - platform-falco.yaml                # runtime detection (security-platform detections), after the lab soak"
+    },
+    {
+     "path": "clusters/laptop/extras/kustomization.yaml",
+     "line": 25,
+     "quote": "  - platform-security-detection.yaml   # its rules, in-cluster alerts, node-logs (audit + auth → Loki)"
+    }
+   ]
+  },
+  {
+   "kind": "changed_value",
+   "old": "Delivery board polls GitHub at a longer interval (earlier: 2 minutes)",
+   "new": "interval: 1m, using conditional requests",
+   "summary": "The delivery board's poll interval was shortened to every minute.",
+   "commits": [
+    "c588b8d",
+    "42fc9c4",
+    "f4b187b"
+   ],
+   "evidence": [
+    {
+     "path": "platform/delivery-board/config.yaml",
+     "line": 8,
+     "quote": "interval: 1m"
+    }
+   ]
+  },
+  {
+   "kind": "deleted",
+   "old": "platform/delivery-board/board.py is the board's code",
+   "new": "The board is its own image (deployment.yaml), with both pipelines",
+   "summary": "board.py was removed from this repo when the delivery board became a separate image.",
+   "commits": [
+    "20da25f",
+    "7be7763",
+    "42fc9c4"
+   ],
+   "evidence": [
+    {
+     "path": "platform/delivery-board/config.yaml",
+     "line": 26,
+     "quote": "    push: { label: 工厂 }                                        # commits to main that are not a design change"
+    }
+   ]
+  },
+  {
+   "kind": "deleted",
+   "old": "api-factory/base/schema-job.yaml runs the schema migration",
+   "new": "goose migrations run as an init container, with a migration rehearsal in the daily restore check",
+   "summary": "The schema Job was replaced by an init container.",
+   "commits": [
+    "5b4f18f"
+   ],
+   "evidence": [
+    {
+     "path": "README.md",
+     "line": 51,
+     "quote": "api-factory/base/          Postgres (local only) → API (init container: goose migrations) → smoke Job (PostSync hook), ordered by sync waves"
+    }
+   ]
+  },
+  {
+   "kind": "deleted",
+   "old": "platform/offsite-backup/rules.yaml holds the backup alert rules",
+   "new": "Scheduled-job SLOs (backups, restore check, off-site copy) replace it",
+   "summary": "The offsite-backup rules file was removed in favour of SLOs.",
+   "commits": [
+    "7f03f43"
+   ],
+   "evidence": [
+    {
+     "path": "README.md",
+     "line": 48,
+     "quote": "clusters/laptop/extras/    what only the laptop has: speakers, delivery board, off-site backup to the phone, external"
+    }
+   ]
+  },
+  {
+   "kind": "renamed",
+   "old": "sample-app/base/deployment.yaml (a plain Deployment)",
+   "new": "sample-app/base/rollout.yaml (an Argo Rollouts canary 50% → pause → analysis → 100%)",
+   "summary": "The sample-app Deployment became a Rollout, with Argo Rollouts added as a platform app.",
+   "commits": [
+    "6575379"
+   ],
+   "evidence": [
+    {
+     "path": "README.md",
+     "line": 53,
+     "quote": "sample-app/base|overlays/  the public reference app"
+    }
+   ]
+  },
+  {
+   "kind": "implemented",
+   "old": "api-factory runs on dev only (the lab excludes api-factory prod)",
+   "new": "api-factory dev was promoted to prod (d7555c9) on the laptop",
+   "summary": "api-factory prod now runs the d7555c9 images.",
+   "commits": [
+    "5683e62"
+   ],
+   "evidence": [
+    {
+     "path": "platform.yaml",
+     "line": 91,
+     "quote": "        api-factory: { exclude: [prod] }"
+    }
+   ]
+  },
+  {
+   "kind": "implemented",
+   "old": "Laptop telemetry (remote_write, Alloy, OTLP, Grafana datasources) goes direct",
+   "new": "Goes through the phone's auth proxy",
+   "summary": "Laptop telemetry routing changed to the phone's auth proxy.",
+   "commits": [
+    "2842c0e"
+   ],
+   "evidence": [
+    {
+     "path": "platform.yaml",
+     "line": 5,
+     "quote": "product: { repo: https://github.com/MIERAI/slo-platform.git, version: v0.1.6 }   # upgrade = change the version"
+    }
+   ]
+  },
+  {
+   "kind": "changed_value",
+   "old": "slo-platform v0.1.1 (and v0.1.2 at the storefront-v1 move)",
+   "new": "slo-platform v0.1.6, with per-cluster application and environment exclude",
+   "summary": "The product version pin was bumped several times.",
+   "commits": [
+    "06309ff"
+   ],
+   "evidence": [
+    {
+     "path": "platform.yaml",
+     "line": 5,
+     "quote": "product: { repo: https://github.com/MIERAI/slo-platform.git, version: v0.1.6 }   # upgrade = change the version"
+    }
+   ]
+  },
+  {
+   "kind": "other",
+   "old": "The old root (apps/, platform/*, clusters/<name>/kustomization.yaml) is a one-week rollback path",
+   "new": "apps/ files were deleted, so the rollback path is partly gone",
+   "summary": "The README claim that the old root still works is doubtful now that the apps/ Application files are deleted.",
+   "commits": [
+    "7339fef",
+    "6f7714b"
+   ],
+   "evidence": [
+    {
+     "path": "README.md",
+     "line": 65,
+     "quote": "The old root (before slo-platform) is still here and still works: `apps/` (app of apps + ApplicationSet),"
+    }
+   ]
+  }
+ ],
+ "validated": [
+  {
+   "kind": "moved",
+   "old": "The laptop's external users (k6) and the external blackbox prober run on the lab (xiaoxin), as Argo CD app platform-external-users",
+   "new": "They run on winpc (the consumer side) as Windows scheduled tasks ExternalUsers / ExternalProber; the lab app was removed",
+   "summary": "External users and the prober left the lab for winpc, and the platform/external-users directory is marked RETIRED.",
+   "commits": [
+    "04c2fc6"
+   ],
+   "evidence": [
+    {
+     "path": "platform/external-users/kustomization.yaml",
+     "line": 1,
+     "quote": "# RETIRED 2026-11-22: the laptop's users and the external prober moved to winpc, the consumer side (load tests,"
+    }
+   ],
+   "absent_old_path": false,
+   "id": "D1"
+  },
+  {
+   "kind": "moved",
+   "old": "storefront v1 runs on both laptop and lab, with the lab's synthetic traffic (platform-traffic, k6)",
+   "new": "The lab excludes storefront and sample-app; storefront v1 runs on the laptop only, v2 on the lab only; platform-traffic was removed from the lab",
+   "summary": "Storefront v1 left the lab to free memory for v2, and the lab's k6 traffic Application was deleted.",
+   "commits": [
+    "06309ff"
+   ],
+   "evidence": [
+    {
+     "path": "platform.yaml",
+     "line": 88,
+     "quote": "      exclude: [storefront, sample-app]        # needs v0.1.2 running on both roots (older schemas reject the key)"
+    },
+    {
+     "path": "platform.yaml",
+     "line": 14,
+     "quote": "      exclude: [v2]                            # storefront v2 runs on the lab only (v2/app.yaml)"
+    }
+   ],
+   "absent_old_path": false,
+   "id": "D2"
+  },
+  {
+   "kind": "paused_or_removed",
+   "old": "The lab runs slo-platform's daily regression at 09:00 and fault experiments run daily",
+   "new": "The regression is paused with a Feb 31 cron schedule, so it never fires",
+   "summary": "The daily regression has been paused since 2026-11-22 ('the factory comes first').",
+   "commits": [
+    "06309ff"
+   ],
+   "evidence": [
+    {
+     "path": "platform.yaml",
+     "line": 142,
+     "quote": "# PAUSED 2026-11-22: the factory comes first (owner's call) — Feb 31 never comes, so the daily regression does not run;"
+    },
+    {
+     "path": "platform.yaml",
+     "line": 144,
+     "quote": "regression: { schedule: \"0 9 31 2 *\", experiments: experiments }"
+    }
+   ],
+   "absent_old_path": false,
+   "id": "D3"
+  },
+  {
+   "kind": "other",
+   "old": "README says clusters/lab/extras holds 'in-cluster object storage, traffic, UIs' and that the lab runs the daily experiments",
+   "new": "Lab extras no longer include traffic or external users, and apps bring their own traffic via app.yaml",
+   "summary": "The README layout and cluster table are stale for the lab's role and extras.",
+   "commits": [
+    "04c2fc6",
+    "06309ff"
+   ],
+   "evidence": [
+    {
+     "path": "README.md",
+     "line": 50,
+     "quote": "clusters/lab/extras/       what only the lab has: in-cluster object storage, traffic, UIs"
+    },
+    {
+     "path": "README.md",
+     "line": 15,
+     "quote": "| `lab` | xiaoxin | fault experiments and slo-platform's daily regression (09:00); notifies nobody |"
+    }
+   ],
+   "absent_old_path": false,
+   "id": "D4"
+  },
+  {
+   "kind": "migrated",
+   "old": "Applications registered by per-env Application files under apps/ (storefront-dev.yaml, api-factory-prod.yaml, sample-app-*.yaml, storefront-worker-*.yaml)",
+   "new": "Each app is registered by <app>/app.yaml; the apps/ files were deleted and storefront-worker moved to storefront/worker/",
+   "summary": "One directory with an app.yaml now registers an application, replacing the per-environment files under apps/.",
+   "commits": [
+    "6f7714b",
+    "7339fef"
+   ],
+   "evidence": [
+    {
+     "path": "README.md",
+     "line": 26,
+     "quote": "## Add an application: one directory"
+    },
+    {
+     "path": "README.md",
+     "line": 39,
+     "quote": "Every application is registered this way: api-factory, sample-app, storefront, catalog."
+    }
+   ],
+   "absent_old_path": false,
+   "id": "D5"
+  },
+  {
+   "kind": "moved",
+   "old": "Top-level storefront-worker/ chart and values-*.yaml",
+   "new": "storefront/worker/chart and storefront/worker/values-*.yaml",
+   "summary": "The storefront-worker Helm chart was renamed into the storefront monorepo directory.",
+   "commits": [
+    "6f7714b"
+   ],
+   "evidence": [
+    {
+     "path": "README.md",
+     "line": 54,
+     "quote": "storefront/                a monorepo app registered by app.yaml: web + api (kustomize), worker (Helm), dev → staging → prod"
+    }
+   ],
+   "absent_old_path": false,
+   "id": "D6"
+  },
+  {
+   "kind": "changed_value",
+   "old": "Laptop UIs (Prometheus, Alertmanager, Pyrra) exposed on NodePorts 30085-30090",
+   "new": "Prometheus, Alertmanager and Pyrra are ClusterIP only (port-forward); the README lists NodePorts 30085-30086 and 30090; platform/ui-laptop/monitoring.yaml was deleted",
+   "summary": "The laptop's internal UIs were hardened from NodePort to ClusterIP, and the monitoring.yaml patch file was removed.",
+   "commits": [
+    "f5fe1d0"
+   ],
+   "evidence": [
+    {
+     "path": "README.md",
+     "line": 49,
+     "quote": "probes, our Kyverno policies, host object storage, UIs on NodePorts 30085-30086, 30090"
+    }
+   ],
+   "absent_old_path": false,
+   "id": "D7"
+  },
+  {
+   "kind": "implemented",
+   "old": "The security-platform hub runs outside the cluster (prod: 'a hub outside the cluster until its in-cluster hub is enabled')",
+   "new": "The hub runs in the cluster on lab (2026-11-24) and prod/laptop (2026-11-25), with a hub PVC that is never pruned",
+   "summary": "The security-platform hub went from external to in-cluster on both clusters, and it is now pinned at v0.3.0.",
+   "commits": [
+    "1776a4c",
+    "97b9d00",
+    "9218a24"
+   ],
+   "evidence": [
+    {
+     "path": "security-platform/app.yaml",
+     "line": 4,
+     "quote": "# hub, overlays/lab + ../hub; prod: a hub outside the cluster until its in-cluster hub is enabled); Argo CD does not"
+    },
+    {
+     "path": "security-platform/base/kustomization.yaml",
+     "line": 6,
+     "quote": "  - https://github.com/MIERAI/security-platform//deploy/kubernetes?ref=65cd3b042e1151a3d1dfef90bdb6c8395a2c4d91"
+    }
+   ],
+   "absent_old_path": false,
+   "id": "D8"
+  },
+  {
+   "kind": "implemented",
+   "old": "No runtime detection or node security logs on the clusters",
+   "new": "Falco runtime detection and node security logs (audit and auth to Loki) run on the lab and the laptop",
+   "summary": "Falco and security-detection components were added to lab (11-24) and laptop (11-25).",
+   "commits": [
+    "451e2fb",
+    "034163f",
+    "f49e569",
+    "1252297"
+   ],
+   "evidence": [
+    {
+     "path": "clusters/laptop/extras/kustomization.yaml",
+     "line": 24,
+     "quote": "  - platform-falco.yaml                # runtime detection (security-platform detections), after the lab soak"
+    },
+    {
+     "path": "clusters/laptop/extras/kustomization.yaml",
+     "line": 25,
+     "quote": "  - platform-security-detection.yaml   # its rules, in-cluster alerts, node-logs (audit + auth → Loki)"
+    }
+   ],
+   "absent_old_path": false,
+   "id": "D9"
+  },
+  {
+   "kind": "changed_value",
+   "old": "Delivery board polls GitHub at a longer interval (earlier: 2 minutes)",
+   "new": "interval: 1m, using conditional requests",
+   "summary": "The delivery board's poll interval was shortened to every minute.",
+   "commits": [
+    "c588b8d",
+    "42fc9c4",
+    "f4b187b"
+   ],
+   "evidence": [
+    {
+     "path": "platform/delivery-board/config.yaml",
+     "line": 8,
+     "quote": "interval: 1m"
+    }
+   ],
+   "absent_old_path": false,
+   "id": "D10"
+  },
+  {
+   "kind": "deleted",
+   "old": "platform/delivery-board/board.py is the board's code",
+   "new": "The board is its own image (deployment.yaml), with both pipelines",
+   "summary": "board.py was removed from this repo when the delivery board became a separate image.",
+   "commits": [
+    "20da25f",
+    "7be7763",
+    "42fc9c4"
+   ],
+   "evidence": [
+    {
+     "path": "platform/delivery-board/config.yaml",
+     "line": 26,
+     "quote": "    push: { label: 工厂 }                                        # commits to main that are not a design change"
+    }
+   ],
+   "absent_old_path": false,
+   "id": "D11"
+  },
+  {
+   "kind": "deleted",
+   "old": "api-factory/base/schema-job.yaml runs the schema migration",
+   "new": "goose migrations run as an init container, with a migration rehearsal in the daily restore check",
+   "summary": "The schema Job was replaced by an init container.",
+   "commits": [
+    "5b4f18f"
+   ],
+   "evidence": [
+    {
+     "path": "README.md",
+     "line": 51,
+     "quote": "api-factory/base/          Postgres (local only) → API (init container: goose migrations) → smoke Job (PostSync hook), ordered by sync waves"
+    }
+   ],
+   "absent_old_path": false,
+   "id": "D12"
+  },
+  {
+   "kind": "deleted",
+   "old": "platform/offsite-backup/rules.yaml holds the backup alert rules",
+   "new": "Scheduled-job SLOs (backups, restore check, off-site copy) replace it",
+   "summary": "The offsite-backup rules file was removed in favour of SLOs.",
+   "commits": [
+    "7f03f43"
+   ],
+   "evidence": [
+    {
+     "path": "README.md",
+     "line": 48,
+     "quote": "clusters/laptop/extras/    what only the laptop has: speakers, delivery board, off-site backup to the phone, external"
+    }
+   ],
+   "absent_old_path": false,
+   "id": "D13"
+  },
+  {
+   "kind": "renamed",
+   "old": "sample-app/base/deployment.yaml (a plain Deployment)",
+   "new": "sample-app/base/rollout.yaml (an Argo Rollouts canary 50% → pause → analysis → 100%)",
+   "summary": "The sample-app Deployment became a Rollout, with Argo Rollouts added as a platform app.",
+   "commits": [
+    "6575379"
+   ],
+   "evidence": [
+    {
+     "path": "README.md",
+     "line": 53,
+     "quote": "sample-app/base|overlays/  the public reference app"
+    }
+   ],
+   "absent_old_path": false,
+   "id": "D14"
+  },
+  {
+   "kind": "implemented",
+   "old": "api-factory runs on dev only (the lab excludes api-factory prod)",
+   "new": "api-factory dev was promoted to prod (d7555c9) on the laptop",
+   "summary": "api-factory prod now runs the d7555c9 images.",
+   "commits": [
+    "5683e62"
+   ],
+   "evidence": [
+    {
+     "path": "platform.yaml",
+     "line": 91,
+     "quote": "        api-factory: { exclude: [prod] }"
+    }
+   ],
+   "absent_old_path": false,
+   "id": "D15"
+  },
+  {
+   "kind": "implemented",
+   "old": "Laptop telemetry (remote_write, Alloy, OTLP, Grafana datasources) goes direct",
+   "new": "Goes through the phone's auth proxy",
+   "summary": "Laptop telemetry routing changed to the phone's auth proxy.",
+   "commits": [
+    "2842c0e"
+   ],
+   "evidence": [
+    {
+     "path": "platform.yaml",
+     "line": 5,
+     "quote": "product: { repo: https://github.com/MIERAI/slo-platform.git, version: v0.1.6 }   # upgrade = change the version"
+    }
+   ],
+   "absent_old_path": false,
+   "id": "D16"
+  },
+  {
+   "kind": "changed_value",
+   "old": "slo-platform v0.1.1 (and v0.1.2 at the storefront-v1 move)",
+   "new": "slo-platform v0.1.6, with per-cluster application and environment exclude",
+   "summary": "The product version pin was bumped several times.",
+   "commits": [
+    "06309ff"
+   ],
+   "evidence": [
+    {
+     "path": "platform.yaml",
+     "line": 5,
+     "quote": "product: { repo: https://github.com/MIERAI/slo-platform.git, version: v0.1.6 }   # upgrade = change the version"
+    }
+   ],
+   "absent_old_path": false,
+   "id": "D17"
+  },
+  {
+   "kind": "other",
+   "old": "The old root (apps/, platform/*, clusters/<name>/kustomization.yaml) is a one-week rollback path",
+   "new": "apps/ files were deleted, so the rollback path is partly gone",
+   "summary": "The README claim that the old root still works is doubtful now that the apps/ Application files are deleted.",
+   "commits": [
+    "7339fef",
+    "6f7714b"
+   ],
+   "evidence": [
+    {
+     "path": "README.md",
+     "line": 65,
+     "quote": "The old root (before slo-platform) is still here and still works: `apps/` (app of apps + ApplicationSet),"
+    }
+   ],
+   "absent_old_path": false,
+   "id": "D18"
+  }
+ ],
+ "parse": "schema",
+ "cost": 0.15603630000000002,
+ "turns": 18,
+ "secs": 46.7,
+ "subtype": "success"
+}

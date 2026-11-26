@@ -22,8 +22,10 @@ import (
 var now = time.Date(2026, 12, 31, 0, 0, 0, 0, time.UTC)
 
 func cand(id string, prio int, class string, rank int, age float64, maxAge int) candidate {
-	c := candidate{Pick: Pick{ID: id, Path: id + ".md", Class: class, Priority: prio, AgeDays: age, MaxAgeDays: maxAge}, classRank: rank,
-		pressure: age / float64(maxAge), fresh: prio == PriorityCycle}
+	c := candidate{
+		Pick: Pick{ID: id, Path: id + ".md", Class: class, Priority: prio, AgeDays: age, MaxAgeDays: maxAge}, classRank: rank,
+		pressure: age / float64(maxAge), fresh: prio == PriorityCycle,
+	}
 	c.Required = prio < PriorityCycle
 	return c
 }
@@ -90,7 +92,9 @@ func git(t *testing.T, dir string, args ...string) string {
 	return strings.TrimSpace(string(out))
 }
 
-func claim(repoName, p string, line int, text, cat, at, ref string, quote string) ledger.Claim {
+func claim(repoName, p string, //nolint:unparam // keeps the claim's full shape for future cases
+	line int, text, cat, at, ref string, quote string,
+) ledger.Claim {
 	c := ledger.Claim{ID: ledger.ClaimID(repoName, p, text), Repo: repoName, Path: p, Line: line, Text: text, Category: cat, Verdict: "no", VerifiedAt: at, VerifiedRef: ref}
 	if quote != "" {
 		c.Evidence.Quotes = []ledger.Quote{{Path: quote, Line: 1, Blob: "x"}}
@@ -155,13 +159,17 @@ func TestReportBudgetAndActions(t *testing.T) {
 	res.Items = append(res.Items, evalmodel.ItemResult{ID: SampleID("other", "x.md", 1), Source: SourceAccuracySample, Verdict: judgev1.Yes})
 	fresh := 0.9
 	doc := &findings.Document{
-		Metrics: []findings.Metric{{Name: "docs_references", Value: 95, Labels: map[string]string{"status": "resolved"}},
-			{Name: "docs_references", Value: 5, Labels: map[string]string{"status": "unresolved"}}},
+		Metrics: []findings.Metric{
+			{Name: "docs_references", Value: 95, Labels: map[string]string{"status": "resolved"}},
+			{Name: "docs_references", Value: 5, Labels: map[string]string{"status": "unresolved"}},
+		},
 		Findings: []findings.Finding{{Check: "docs.reference.unresolved.file_path", Severity: "medium"}, {Check: "docs.reference.unresolved.cli_flag", Severity: "info"}},
 	}
 	l := &ledger.Ledger{Claims: []ledger.Claim{{Repo: "r", Category: "dangling_reference"}, {Repo: "r", Category: "confirmed"}, {Repo: "other", Category: "dangling_reference"}}}
-	r := Report(SLOInput{Repo: "r", Policy: instance.Consistency{}, Sample: res, Check: doc, Ledger: l, Now: now,
-		Schedule: &Schedule{Freshness: &fresh, Counts: Counts{Claims: 10, Picked: 3}, EstimatedUSD: 0.12}})
+	r := Report(SLOInput{
+		Repo: "r", Policy: instance.Consistency{}, Sample: res, Check: doc, Ledger: l, Now: now,
+		Schedule: &Schedule{Freshness: &fresh, Counts: Counts{Claims: 10, Picked: 3}, EstimatedUSD: 0.12},
+	})
 	b, _ := json.Marshal(r)
 	if errs := schema(t, contracts.SLO).ValidateJSON(b); len(errs) > 0 {
 		t.Fatalf("slo/v1: %v", errs)
@@ -248,8 +256,10 @@ func TestRecheckRetiresEditedLines(t *testing.T) {
 
 func TestReportSeverityBatchingSuppression(t *testing.T) {
 	cl := func(id, path, cat string) ledger.Claim {
-		return ledger.Claim{ID: id, Repo: "r", Path: path, Line: 1, Text: id, Category: cat,
-			Facts: []ledger.Fact{{Fact: id + " fact", Status: cat, Valid: true}}}
+		return ledger.Claim{
+			ID: id, Repo: "r", Path: path, Line: 1, Text: id, Category: cat,
+			Facts: []ledger.Fact{{Fact: id + " fact", Status: cat, Valid: true}},
+		}
 	}
 	l := &ledger.Ledger{Claims: []ledger.Claim{
 		cl("c1", "a.md", "contradicted"), cl("d1", "a.md", "dangling_reference"), cl("o1", "b.md", "outdated_wording"),

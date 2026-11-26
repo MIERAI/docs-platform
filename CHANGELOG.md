@@ -6,7 +6,36 @@ Direction (approved): keep docs consistent with code over time, not once - remov
 "phantom inventory" with retail inventory control (record accuracy, cycle counting, ABC).
 Design: docs/design.md §12; plan: docs/backlog.md.
 
+### Changed
+- `make lint` and `make vuln` build golangci-lint v2.15.0 and govulncheck v1.9.0 from
+  source with `go run` (pinned, no binary download); the code base is gofumpt-formatted
+  and passes the configured linters (behaviour unchanged).
+
 ### Added
+- **Reproducible from the repository alone** (REPRODUCE.md):
+  - `bench/data`: the benchmark data about the three public repositories (147 ground-truth
+    items, the agentic DEV and TEST eval sets with pinned revisions, the prototype's frozen
+    answers and drift lists, the mutation set, the expected offline numbers), each file
+    pinned by sha256 in `bench/data/manifest.json` with the repositories' full SHAs; the
+    snippet eval set is regenerated from history instead of stored. `go test ./bench`
+    checks the hashes and scans the data for private material (local paths, e-mail
+    addresses, key and token patterns, SOPS ciphertext, and `DOCSP_DENYLIST` terms).
+  - `bench fetch` (clones at the pinned SHAs, verified), `bench mutate` (the prototype's
+    mutation-set generator ported to Go; byte-identical output and trees),
+    `bench verify-offline` (compares 46 numbers with `bench/data/expected-offline.json`),
+    `bench replay -manifest`.
+  - `make repro-offline` (`scripts/repro-offline.sh`): unit tests, the frozen-answer replay
+    (TEST recall 0.80, DEV 0.60), ledger replay (19/25, 23/25), history replay
+    (TEST 32/61, 41/61), snippet eval set and mutation set; fails on any mismatch.
+  - docs/experiments.md: the lab notebook of the model-layer experiments, with sources.
+  - `.github/workflows/repro.yml`: test, repro-offline and lint (for when a remote exists).
+- **Anthropic API provider in agentic mode**: `docsp-judge-anthropic` runs the tool-use loop
+  over the Messages API with docsp's read-only judge-tools (each call goes back to docsp as a
+  judge-tools/v1 `tool_call` and is executed by the core), structured output bound to the
+  reply schema, per-turn worst-case checks against the run budget and the request's own cap
+  (`max_request_usd` ends that request only), a step budget with a final no-tools turn,
+  prompt caching, `-agentic-effort` (from `ai.judge.agentic.effort`; snippet effort is not
+  inherited). Unit-tested against a fake HTTP server; not yet run against the live API.
 - **Claim and evidence ledger** (B1; contract ledger/v1, `internal/ledger`): every judged
   line with the validated evidence its verdict rests on, addressed by git blob - quotes
   (file blob), drift entries (their files, the removed path), absence searches (pattern,

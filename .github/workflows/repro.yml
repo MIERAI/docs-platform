@@ -1,0 +1,29 @@
+name: repro
+# REPRODUCE.md, offline tier: no model and no secrets; network only for Go modules and the
+# three public benchmark repositories on GitHub.
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  repro:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+      - name: unit tests (core and providers/anthropic)
+        run: make test
+      - name: offline tier (fails when a number differs from bench/data/expected-offline.json)
+        run: make repro-offline
+        env:
+          SKIP_TESTS: "1"
+          REPRO_WORK: ${{ runner.temp }}/docsp-repro
+      - name: lint (golangci-lint pinned, built with go run)
+        run: make lint

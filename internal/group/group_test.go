@@ -70,12 +70,14 @@ func setup(t *testing.T) (instance.Group, Checkouts, string, string) {
 	})
 	git(t, docs, "add", "-A")
 	git(t, docs, "commit", "-qm", "docs")
-	g := instance.Group{Name: "shop", Repos: []instance.GroupRepo{{Name: "api", Role: instance.RoleCode}, {Name: "docs", Role: instance.RoleDocs}},
+	g := instance.Group{
+		Name: "shop", Repos: []instance.GroupRepo{{Name: "api", Role: instance.RoleCode}, {Name: "docs", Role: instance.RoleDocs}},
 		DocSets: []instance.DocSet{
 			{Name: "design", Repo: "docs", Docs: []string{"design/**", "reference/**"}, Targets: []instance.Target{{Repo: "api", Ref: "develop"}}},
 			{Name: "runbooks", Repo: "docs", Docs: []string{"runbooks/**"}, Targets: []instance.Target{{Repo: "api", Ref: "prod"}}},
 		},
-		External: []string{"vendor/"}}
+		External: []string{"vendor/"},
+	}
 	return g, Checkouts{"api": api, "docs": docs, "api@prod": prod}, api, docs
 }
 

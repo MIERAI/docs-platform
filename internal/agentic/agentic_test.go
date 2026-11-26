@@ -144,10 +144,14 @@ func TestValidateDrift(t *testing.T) {
 	tl := tools(t, dir, false)
 	raw := []DriftEntry{
 		{Kind: "moved", Old: "old/run.sh", New: "scripts/run.sh", Summary: "moved", Commits: []string{rename}},
-		{Kind: "changed_value", Old: "port 8080", New: "port 9090", Summary: "port", Commits: []string{"deadbeef"},
-			Evidence: []QuoteRef{{Path: "config.yaml", Line: 1, Quote: "port: 9090"}}},
-		{Kind: "changed_value", Old: "a", New: "b", Summary: "made up", Commits: []string{sideCommit},
-			Evidence: []QuoteRef{{Path: "config.yaml", Line: 1, Quote: "port: 1234"}}},
+		{
+			Kind: "changed_value", Old: "port 8080", New: "port 9090", Summary: "port", Commits: []string{"deadbeef"},
+			Evidence: []QuoteRef{{Path: "config.yaml", Line: 1, Quote: "port: 9090"}},
+		},
+		{
+			Kind: "changed_value", Old: "a", New: "b", Summary: "made up", Commits: []string{sideCommit},
+			Evidence: []QuoteRef{{Path: "config.yaml", Line: 1, Quote: "port: 1234"}},
+		},
 		{Kind: "deleted", Old: "config.yaml", New: "-", Summary: "claims a live file is gone", Commits: []string{rename}},
 		{Kind: "renamed", Old: "old/*", New: "scripts/", Summary: "glob of a gone directory", Commits: []string{rename}},
 		{Kind: "other", Old: "x", New: "y", Summary: "commit only, nothing removed", Commits: []string{rename}},
@@ -230,8 +234,10 @@ func TestParseAnswersLenient(t *testing.T) {
 }
 
 func FuzzParseLineAnswer(f *testing.F) {
-	for _, s := range []string{`{"facts":[{"fact":"a","status":"confirmed","evidence":[{"kind":"quote","path":"a","line":1,"quote":"q"}]}],"reason":""}`,
-		`{"facts":{}}`, `{"facts":[1,"x",{"evidence":{"line":1e300}}]}`, `[]`, `{"facts":[{"evidence":[{"line":"-3"}]}]}`} {
+	for _, s := range []string{
+		`{"facts":[{"fact":"a","status":"confirmed","evidence":[{"kind":"quote","path":"a","line":1,"quote":"q"}]}],"reason":""}`,
+		`{"facts":{}}`, `{"facts":[1,"x",{"evidence":{"line":1e300}}]}`, `[]`, `{"facts":[{"evidence":[{"line":"-3"}]}]}`,
+	} {
 		f.Add(s)
 	}
 	f.Fuzz(func(t *testing.T, s string) {

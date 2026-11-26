@@ -42,9 +42,14 @@ func TestConstrain(t *testing.T) {
 }
 
 func TestRequestCarriesOnlyTheWrongFacts(t *testing.T) {
-	c := &ledger.Claim{ID: "abc", Repo: "r", Path: "README.md", Line: 3, Text: "Port 8080.", Category: "contradicted",
-		Facts: []ledger.Fact{{Fact: "the port is 8080", Status: "contradicted", Valid: true}, {Fact: "it is HTTP", Status: "confirmed", Valid: true},
-			{Fact: "unvalidated", Status: "contradicted", Valid: false}}}
+	c := &ledger.Claim{
+		ID: "abc", Repo: "r", Path: "README.md", Line: 3, Text: "Port 8080.", Category: "contradicted",
+		Facts: []ledger.Fact{
+			{Fact: "the port is 8080", Status: "contradicted", Valid: true},
+			{Fact: "it is HTTP", Status: "confirmed", Valid: true},
+			{Fact: "unvalidated", Status: "contradicted", Valid: false},
+		},
+	}
 	r := Request(c, []judgev1.Evidence{{Path: "config.yaml", From: 1, To: 1, Text: "port: 9090"}})
 	u := r.Prompt.User
 	if !strings.Contains(u, "- the port is 8080 (contradicted)") || strings.Contains(u, "it is HTTP") || strings.Contains(u, "unvalidated") ||
@@ -53,7 +58,7 @@ func TestRequestCarriesOnlyTheWrongFacts(t *testing.T) {
 	}
 }
 
-func git(t *testing.T, dir string, args ...string) string {
+func git(t *testing.T, dir string, args ...string) string { //nolint:unparam // helper mirrors the other packages' git helper
 	t.Helper()
 	out, err := exec.Command("git", append([]string{"-C", dir, "-c", "user.name=t", "-c", "user.email=t@e"}, args...)...).CombinedOutput()
 	if err != nil {

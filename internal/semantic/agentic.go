@@ -145,7 +145,7 @@ func (c *checker) agenticIssue(rule string, cl *claim.Claim, r *agentic.LineResu
 		Rule: rule, Subject: truncate(strings.TrimSpace(cl.Text), 80), Confidence: model.ConfMedium,
 		Suggestion: "Check the sentence against the validated evidence and fix whichever is wrong.",
 		Model:      c.opt.Judge.Name(), PromptHash: r.PromptHash,
-		Votes: fmt.Sprintf("agentic: %d/%d evidence validated", r.EvidenceOK, r.Derivation.Evidence),
+		Votes: fmt.Sprintf("agentic: %d/%d evidence validated", r.EvidenceOK, r.Evidence),
 	}
 	var why []string
 	for _, f := range r.Facts {

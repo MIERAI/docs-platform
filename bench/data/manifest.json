@@ -1,0 +1,23 @@
+{
+ "schema": "docs-platform/bench-data/v1",
+ "_comment": "Benchmark data about three public repositories (github.com/MIERAI/*), pinned to the commits every number was measured at. Regenerate the hashes after an intended change and explain it in CHANGELOG.",
+ "repos": [
+  {"name": "api-factory", "repo": "MIERAI/api-factory", "revision": "d7555c93fc9cb39c0efe7a8829e79d33d0e5c3f8", "split": "dev"},
+  {"name": "gitops-manifests", "repo": "MIERAI/gitops-manifests", "revision": "9218a247e3910995ebe5f801579f30655d1d079e", "split": "test"},
+  {"name": "infrastructure-live", "repo": "MIERAI/infrastructure-live", "revision": "25db81482feb85f76b824fcd8cd8fd4469948dfd", "split": "test"}
+ ],
+ "files": {
+   "answers/dev-frozen.jsonl": "1d8dc84c80cb176e78ac6328e57df637e6dab988e95a80df23a2dd1f726569a1",
+   "answers/test-frozen.jsonl": "847fb3060b45ae255740bdd66dbbadbf09feb18ef8ffed055708137fbb3d97af",
+   "drift/api-factory.json": "592c5e54543083ca1b915187243e346aeacd62120e52f2b7d824dbc28754ea62",
+   "drift/gitops-manifests.json": "a69ddbfadb0bfbf7ed586f59219f8761c46f7faa69303e84d422d72cb8665fef",
+   "drift/infrastructure-live.json": "78de78bb5f94ef470041de594abe4a74041438524bdf72eb3641661e0a10ed7d",
+   "eval/agentic-dev.jsonl": "17e67ca37f8afdb814da7b38fb5126123281a317efbc9a3cfc641c0b0c881358",
+   "eval/agentic-test.jsonl": "b0cbc271a3f700ca28a7848e09935149b5747eb42a04d3b79673b0f18b3a05c2",
+   "expected-offline.json": "e1753e2ea8479a5bda94f71be2aae5d01f00fabe91c5103d6a71130e6580c0d3",
+   "groundtruth/api-factory.jsonl": "f703964221e7d7d463630d07824460df2c96d72f6ea24d033fcc2086c4f96007",
+   "groundtruth/gitops-manifests.jsonl": "15277aed04e643e5f0bc7148339d3ba187c231e709263c7e9ad054f6191fb5b9",
+   "groundtruth/infrastructure-live.jsonl": "2e3dcdb846f39df6859c331dc3075796d3556ba530d113bf86f4220ba8e5e2a7",
+   "mutations.json": "18f3f9e820cc300919d338a725944b22c7aae671543c8a63339affe3ee4515cd"
+ }
+}

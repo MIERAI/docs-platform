@@ -22,7 +22,10 @@ const apiHost = "api.anthropic.com"
 // Config of the adapter (all from instance configuration via argv).
 type Config struct {
 	Model, Effort, KeyFile, KeyEnv, Fallbacks string
-	MaxRetries                                int
+	// AgenticEffort is the effort of agentic requests ("" = the model's default). Effort is
+	// not inherited by agentic requests: the agentic design was evaluated without one.
+	AgenticEffort string
+	MaxRetries    int
 }
 
 // Adapter answers judge/v1 requests with the Messages API.
@@ -42,10 +45,11 @@ func newAdapter(c Config, rt http.RoundTripper, baseURL string) (*Adapter, error
 	if c.Model == "" {
 		return nil, errors.New("-model is required")
 	}
-	switch c.Effort {
-	case "low", "medium", "high", "xhigh", "max":
-	default:
+	if !validEffort(c.Effort) {
 		return nil, fmt.Errorf("-effort %q: want low, medium, high, xhigh or max", c.Effort)
+	}
+	if c.AgenticEffort != "" && !validEffort(c.AgenticEffort) {
+		return nil, fmt.Errorf("-agentic-effort %q: want low, medium, high, xhigh, max or empty", c.AgenticEffort)
 	}
 	key, err := loadKey(c.KeyFile, c.KeyEnv)
 	if err != nil {
@@ -60,6 +64,14 @@ func newAdapter(c Config, rt http.RoundTripper, baseURL string) (*Adapter, error
 	}
 	p, ok := prices[c.Model]
 	return &Adapter{cfg: c, client: anthropic.NewClient(opts...), price: p, priced: ok}, nil
+}
+
+func validEffort(e string) bool {
+	switch e {
+	case "low", "medium", "high", "xhigh", "max":
+		return true
+	}
+	return false
 }
 
 func noRedirect(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
@@ -139,10 +151,7 @@ func (a *Adapter) Judge(ctx context.Context, req *judgev1.Request) *judgev1.Resp
 	}
 	in := judgev1.EstimateTokens(req.Prompt.System + req.Prompt.User + string(req.Prompt.ReplySchema))
 	if req.DryRun {
-		r := judgev1.Failure(req, a.model(), judgev1.ErrCodeConfig, "")
-		r.Error = nil
-		r.Usage = judgev1.Usage{InputTokens: in, OutputTokens: 700, CostUSD: a.price.cost(in, 700, 0), Estimated: true, Billing: judgev1.BillingAPI}
-		return r
+		return a.dryRun(req, 700)
 	}
 	if rem := req.Limits.BudgetRemainingUSD; rem != nil && a.priced && a.price.cost(in, maxOut, 0) > *rem {
 		return judgev1.Failure(req, a.model(), judgev1.ErrCodeBudget, "worst-case cost of this request exceeds the remaining budget")
@@ -160,6 +169,15 @@ func (a *Adapter) Judge(ctx context.Context, req *judgev1.Request) *judgev1.Resp
 	resp := a.response(req, msg)
 	resp.LatencyMS = time.Since(start).Milliseconds()
 	return resp
+}
+
+// dryRun answers without calling the API: usage estimated, no verdict.
+func (a *Adapter) dryRun(req *judgev1.Request, out int) *judgev1.Response {
+	in := judgev1.EstimateTokens(req.Prompt.System + req.Prompt.User + string(req.Prompt.ReplySchema))
+	r := judgev1.Failure(req, a.model(), judgev1.ErrCodeConfig, "")
+	r.Error = nil
+	r.Usage = judgev1.Usage{InputTokens: in, OutputTokens: out, CostUSD: a.price.cost(in, out, 0), Estimated: true, Billing: judgev1.BillingAPI}
+	return r
 }
 
 // params builds the request: the core's exact prompt, structured output with the reply schema,

@@ -52,8 +52,10 @@ func TestProposeDraft(t *testing.T) {
 		t.Fatal(err)
 	}
 	mk := func(text string) *ledger.Claim {
-		return &ledger.Claim{ID: text, Repo: "r", Path: "README.md", Line: 3, Text: text, Category: "contradicted", VerifiedRef: strings.TrimSpace(string(head)),
-			Evidence: ledger.Evidence{Quotes: []ledger.Quote{{Path: "config.yaml", Line: 1}}}}
+		return &ledger.Claim{
+			ID: text, Repo: "r", Path: "README.md", Line: 3, Text: text, Category: "contradicted", VerifiedRef: strings.TrimSpace(string(head)),
+			Evidence: ledger.Evidence{Quotes: []ledger.Quote{{Path: "config.yaml", Line: 1}}},
+		}
 	}
 	now := time.Now()
 	if e := proposeDraft(context.Background(), g, dir, mk("Port 8080."), now); e.Status != draft.Proposed || e.Draft != "Port 9090." || e.DiffTokens != 2 {

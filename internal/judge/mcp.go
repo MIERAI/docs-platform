@@ -47,7 +47,7 @@ func WriteMCPSpec(t *Tools, file, transcript string) error {
 // OpenMCPSpec opens the tools a spec file describes; every step is appended (JSON Lines,
 // mode 0600) to the spec's transcript file.
 func OpenMCPSpec(file string) (*Tools, error) {
-	b, err := os.ReadFile(file)
+	b, err := os.ReadFile(file) //nolint:gosec // spec file written (0600) by the parent docsp process
 	if err != nil {
 		return nil, fmt.Errorf("read tool spec: %w", err)
 	}

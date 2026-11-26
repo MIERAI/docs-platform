@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -122,8 +123,10 @@ func assess(ctx context.Context, in Input, p instance.Consistency, cl *classifie
 		maxAge = o.MaxAgeDays
 	}
 	age := ageDays(c.VerifiedAt, in.Now)
-	cd := candidate{Pick: Pick{ID: c.ID, Path: c.Path, Line: c.Line, Class: k, AgeDays: round1(age), MaxAgeDays: maxAge, Priority: PriorityCycle},
-		status: s.Status, classRank: rank, pressure: age / float64(maxAge)}
+	cd := candidate{
+		Pick:   Pick{ID: c.ID, Path: c.Path, Line: c.Line, Class: k, AgeDays: round1(age), MaxAgeDays: maxAge, Priority: PriorityCycle},
+		status: s.Status, classRank: rank, pressure: age / float64(maxAge),
+	}
 	if s.NewLine > 0 {
 		cd.Line = s.NewLine
 	}
@@ -196,7 +199,7 @@ func choose(repoName, ref string, now time.Time, p instance.Consistency, cands [
 	for i := range cycle[:s.Counts.Quota] {
 		cycle[i].Required, cycle[i].Reason = true, fmt.Sprintf("cycle count: %.0f of %d days", cycle[i].AgeDays, cycle[i].MaxAgeDays)
 	}
-	all := append(required, cycle[:s.Counts.Quota]...)
+	all := slices.Concat(required, cycle[:s.Counts.Quota])
 	limit := len(all)
 	if p.Budget.MaxClaims > 0 {
 		limit = min(limit, p.Budget.MaxClaims)
