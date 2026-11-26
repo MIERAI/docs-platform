@@ -171,7 +171,7 @@ func Report(in SLOInput) *SLOReport {
 }
 
 func accuracy(r *SLOReport, res *evalmodel.Result, p instance.Consistency) {
-	by, n, wrong, unknown := sampled(res)
+	by, n, wrong, unknown := sampled(res, r.Repo)
 	r.Accuracy.N, r.Accuracy.Bad = n, wrong
 	r.Accuracy.Note = fmt.Sprintf("%d sampled claims re-audited, %d undecided (excluded)", n+unknown, unknown)
 	r.Cost.SampleUSD, r.Cost.SampleBilling = res.Scores.CostUSD, res.Provider
@@ -199,12 +199,12 @@ func accuracy(r *SLOReport, res *evalmodel.Result, p instance.Consistency) {
 
 // sampled aggregates a sample's re-audit per document: decided claims, wrong ones (the
 // re-audit found a problem), undecided ones.
-func sampled(res *evalmodel.Result) (map[string]*DocAccuracy, int, int, int) {
+func sampled(res *evalmodel.Result, repoName string) (map[string]*DocAccuracy, int, int, int) {
 	by := map[string]*DocAccuracy{}
 	n, wrong, unknown := 0, 0, 0
 	for _, it := range res.Items {
-		if it.Source != SourceAccuracySample {
-			continue
+		if it.Source != SourceAccuracySample || !strings.HasPrefix(it.ID, "sample:"+repoName+":") {
+			continue // a sample may cover several repositories
 		}
 		switch it.Verdict {
 		case judgev1.Yes:

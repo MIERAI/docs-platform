@@ -152,6 +152,7 @@ func TestReportBudgetAndActions(t *testing.T) {
 	add("b.md", 1, judgev1.Yes)
 	add("b.md", 2, judgev1.Yes)
 	add("c.md", 1, judgev1.Unknown)
+	res.Items = append(res.Items, evalmodel.ItemResult{ID: SampleID("other", "x.md", 1), Source: SourceAccuracySample, Verdict: judgev1.Yes})
 	fresh := 0.9
 	doc := &findings.Document{
 		Metrics: []findings.Metric{{Name: "docs_references", Value: 95, Labels: map[string]string{"status": "resolved"}},

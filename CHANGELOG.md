@@ -17,6 +17,10 @@ Design: docs/design.md §12; plan: docs/backlog.md.
   stale when the line was edited or the document removed, a cited file changed or vanished,
   a file in an absence scope was added/changed/removed, a missing path appeared, or a drift
   entry's removed path reappeared; claims without evidence → `recheck`. Contract stale/v1.
+- `bench ledger-backtest`: scores invalidation without hindsight - claims judged at
+  revisions before their causing commits, history replayed forward from each claim's own
+  verified revision; reports first/any-causing catch rates, per-commit cost, and for every
+  claim never staled its evidence and what the causing commits changed instead.
 - `bench ledger-replay`: replays a ledger over real history (per-commit stale counts) and
   scores causing-commit recall of ground-truth positives.
 - `ls-tree` joins the read-only git allowlist (tree snapshots).
@@ -32,7 +36,8 @@ Design: docs/design.md §12; plan: docs/backlog.md.
     provider), merges them into the ledger, retires claims whose line was edited.
   - `docsp sample`: the weekly accuracy sample (seeded, reproducible) as an eval set for an
     operator-run strong-model re-audit (`eval-model -mode agentic`).
-  - `docsp slo`: SLI 1 accuracy (from the sample's re-audit, with a 95% interval), SLI 2
+  - `docsp slo`: SLI 1 accuracy (counting only the repository's own items of a sample that
+    covers several) (from the sample's re-audit, with a 95% interval), SLI 2
     freshness, SLI 3 phantom rate (dangling references at medium confidence or better plus
     open dangling_reference claims); the accuracy error budget (initial objective 80%); a
     burned budget triggers a full re-audit of the document and a halved max age (`-apply`

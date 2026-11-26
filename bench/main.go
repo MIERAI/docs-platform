@@ -1,6 +1,7 @@
 // Command bench measures docsp against human-confirmed ground truth.
 //
 //	go run ./bench -gt DIR -work DIR [-pin name=rev ...] [-denylist FILE] [-md report.md] [-json report.json]
+//	go run ./bench ledger-backtest -ledger FILE -gt DIR -set FILE -repo name=DIR ... [-json FILE]
 //	go run ./bench ledger-replay -ledger FILE -gt DIR -set FILE -repo name=DIR ... [-json FILE]
 //	go run ./bench replay -gt DIR -work DIR [-pin name=rev ...] [-eval-out set.jsonl] [-md ...] [-json ...]
 //
@@ -48,6 +49,13 @@ var (
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "ledger-backtest" {
+		if err := runLedgerBacktest(context.Background(), os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, "bench ledger-backtest:", err)
+			os.Exit(1)
+		}
+		return
+	}
 	if len(os.Args) > 1 && os.Args[1] == "ledger-replay" {
 		if err := runLedgerReplay(context.Background(), os.Args[2:]); err != nil {
 			fmt.Fprintln(os.Stderr, "bench ledger-replay:", err)
