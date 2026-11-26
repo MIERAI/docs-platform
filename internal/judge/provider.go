@@ -71,7 +71,7 @@ func New(t instance.Task) (Provider, error) {
 		return o, nil
 	case instance.ProviderClaudeCode:
 		return NewClaudeCode(ClaudeCodeConfig{
-			Program: t.ClaudeCode.Program, Model: t.Model, Effort: t.Effort, PassEnv: t.ClaudeCode.PassEnv,
+			Program: t.ClaudeCode.Program, Model: t.Model, Effort: t.Effort, AgenticEffort: t.Agentic.Effort, PassEnv: t.ClaudeCode.PassEnv,
 			Timeout: timeout, MaxConcurrency: conc,
 		})
 	case instance.ProviderAnthropic:

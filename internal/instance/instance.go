@@ -83,6 +83,9 @@ type Agentic struct {
 	// Group is line (one request per line, default) or doc (up to six lines of one document
 	// per request: cheaper, evaluated less).
 	Group string `yaml:"group"`
+	// Effort of agentic requests. Empty (default) = the model's own default, which is what
+	// the agentic design was evaluated with; ai.judge.effort applies to snippet mode only.
+	Effort string `yaml:"effort"`
 }
 
 // Budget is the hard per-run limit of one task (0 = the default).
@@ -281,6 +284,11 @@ func (a Agentic) validate(where string) []error {
 	}
 	if a.Group != "" && a.Group != "line" && a.Group != "doc" {
 		errs = append(errs, fmt.Errorf("%s: agentic.group %q: want line or doc", where, a.Group))
+	}
+	switch a.Effort {
+	case "", "low", "medium", "high", "xhigh", "max":
+	default:
+		errs = append(errs, fmt.Errorf("%s: agentic.effort %q: want low, medium, high, xhigh or max", where, a.Effort))
 	}
 	return errs
 }

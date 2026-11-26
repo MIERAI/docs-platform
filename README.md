@@ -318,6 +318,7 @@ ai:
       max_request_usd: 0.6       # cap per line request; reaching it ends that request only
       drift_max_request_usd: 2.5
       group: line                # or doc
+      # effort: high             # unset = the model's default (as evaluated); ai.judge.effort is snippet-only
 ```
 
 1. **Drift scan**, once per repository and HEAD: the model reads the history (`git_log`,

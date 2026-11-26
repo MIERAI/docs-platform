@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.4.2 - 2026-11-26
+
+The 0.4.1 rerun validated every drift entry (22/22, 17/17) but recall fell to 19/30 with
+3.0 tool steps per line (prototype 5.4): the model still stopped early. A byte-level
+comparison of what each run sent the model found the per-line user prompts nearly equal
+(the case block with ±3 lines identical) and the differences elsewhere.
+
+### Fixed
+- Agentic claude-code runs inherited `ai.judge.effort` (`medium` in the operator's
+  configuration); the prototype passed no effort, i.e. the CLI's default. Agentic runs no
+  longer inherit the snippet effort; `ai.judge.agentic.effort` sets one explicitly.
+- The appended system prompt ended with "Reply with one JSON object ..., nothing else";
+  the prototype appended nothing, and the reply schema enforces the format. Only the
+  untrusted-data rule is appended now.
+- The prompt drifted from the evaluated text in three places (working-directory wording,
+  the absence sentence, the closing "do not explain away a mismatch" sentence), and 0.4.1
+  added an untested hint to the tool list. The prototype's text is restored verbatim;
+  the only addition remains the path_missing evidence kind.
+
+### Added
+- Repository context in the system prompt (repository, checked-out revision, branch, five
+  recent commits): the prototype's CLI ran inside the checkout and told the model this
+  itself. docsp states it instead; the CLI still never runs inside the inspected
+  repository (its environment snapshot would bypass data classification).
+- `ai.judge.agentic.effort`; prompt `docsp-agentic/3`; a test pinning the per-line request
+  (prompt texts, context block, drift block, limits) and the agentic CLI argv.
+
 ## 0.4.1 - 2026-11-26
 
 The first paid TEST run of 0.4.0 (Sonnet) scored recall 22/30 against the prototype's 24/30,

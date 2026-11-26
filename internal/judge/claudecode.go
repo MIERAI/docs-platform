@@ -20,9 +20,12 @@ import (
 
 // ClaudeCodeConfig configures the claude-code provider.
 type ClaudeCodeConfig struct {
-	Program        string // absolute path of the claude CLI (default: found on PATH)
-	Model          string
-	Effort         string
+	Program string // absolute path of the claude CLI (default: found on PATH)
+	Model   string
+	Effort  string
+	// AgenticEffort is the effort of agentic runs ("" = the CLI's default; Effort is not
+	// inherited: the agentic design was evaluated without an explicit effort).
+	AgenticEffort  string
 	PassEnv        []string
 	Timeout        time.Duration
 	MaxConcurrency int
@@ -136,11 +139,21 @@ func requestCap(req *judgev1.Request) (float64, bool) {
 // prompt is appended to the CLI's own agent prompt (the configuration the agentic design was
 // evaluated with) instead of replacing it.
 func (c *ClaudeCode) AgenticArgs(req *judgev1.Request, mcpConfig string) []string {
-	args := c.Args(req)
-	for i, a := range args {
-		if a == "--system-prompt" {
-			args[i] = "--append-system-prompt"
+	var args []string
+	base := c.Args(req)
+	for i := 0; i < len(base); i++ {
+		switch base[i] {
+		case "--system-prompt":
+			args = append(args, "--append-system-prompt")
+		case "--effort":
+			i++ // snippet effort is not inherited
+			continue
+		default:
+			args = append(args, base[i])
 		}
+	}
+	if c.cfg.AgenticEffort != "" {
+		args = append(args, "--effort", c.cfg.AgenticEffort)
 	}
 	allowed := make([]string, 0, len(AllTools))
 	for _, n := range AllTools {

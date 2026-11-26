@@ -7,11 +7,13 @@ import (
 	"io"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/MIERAI/docs-platform/internal/instance"
 	"github.com/MIERAI/docs-platform/internal/judge"
+	"github.com/MIERAI/docs-platform/internal/repo"
 	"github.com/MIERAI/docs-platform/judgev1"
 )
 
@@ -98,6 +100,38 @@ type Runner struct {
 	driftOnce sync.Once
 	drift     *DriftList
 	driftErr  error
+	repoOnce  sync.Once
+	repoText  string
+}
+
+// maxRecentCommits is how many recent commits the repository context lists.
+const maxRecentCommits = 5
+
+// repoText is the repository context of every prompt (computed once).
+func (r *Runner) repoCtx(ctx context.Context) string {
+	r.repoOnce.Do(func() {
+		head, err := Head(ctx, r.o.Dir)
+		if err != nil {
+			return
+		}
+		branch, _ := repo.Git(ctx, r.o.Dir, "rev-parse", "--abbrev-ref", "HEAD")
+		log, _ := repo.Git(ctx, r.o.Dir, "log", "-n"+strconv.Itoa(maxRecentCommits), "--format=%h %s", "HEAD", "--")
+		var commits []string
+		for _, l := range strings.Split(strings.TrimSpace(log), "\n") {
+			if l != "" {
+				commits = append(commits, cutRunes(l, 200))
+			}
+		}
+		r.repoText = repoContext(r.o.Repo, head, strings.TrimSpace(branch), commits)
+	})
+	return r.repoText
+}
+
+func cutRunes(s string, n int) string {
+	if r := []rune(s); len(r) > n {
+		return string(r[:n])
+	}
+	return s
 }
 
 // New returns a runner.
@@ -169,7 +203,7 @@ func (r *Runner) scan(ctx context.Context) (*DriftList, error) {
 		c.Entries, c.Cached = ValidateDrift(ctx, t, c.Raw), true // validation is always re-run
 		return c, nil
 	}
-	p := driftPrompts()
+	p := driftPrompts(r.repoCtx(ctx))
 	req := r.request("drift-"+hash16(r.o.Repo)[:8]+"-"+head[:12], judgev1.TaskRepoDrift,
 		judgev1.Claim{Repo: r.o.Repo, Path: ".", Text: "repository " + r.o.Repo + " at " + head}, p, r.o.Settings.DriftSteps, r.o.Settings.DriftUSD)
 	out, err := r.o.Guard.Judge(judge.WithTools(ctx, t), req)
@@ -269,7 +303,7 @@ func (r *Runner) tools(steps, total int) (*judge.Tools, error) {
 
 func (r *Runner) judgeOne(ctx context.Context, s statement, text string) LineResult {
 	dtext, ids := r.driftText(ctx)
-	p := linePrompts(s, dtext)
+	p := linePrompts(s, dtext, r.repoCtx(ctx))
 	steps := r.o.Settings.LineSteps
 	req := r.request(fmt.Sprintf("line-%s-%d", hash16(r.o.Repo, s.Path)[:8], s.Line), judgev1.TaskClaimFacts,
 		judgev1.Claim{Repo: r.o.Repo, Path: s.Path, Line: s.Line, Text: text}, p, steps, r.o.Settings.LineUSD)
@@ -320,7 +354,7 @@ func (r *Runner) derive(ctx context.Context, t *judge.Tools, ids map[string]bool
 
 func (r *Runner) judgeGroup(ctx context.Context, sts []statement, text func(int) string) []LineResult {
 	dtext, ids := r.driftText(ctx)
-	p := docPrompts(sts, dtext)
+	p := docPrompts(sts, dtext, r.repoCtx(ctx))
 	n := len(sts)
 	steps := min(docGroupMaxSteps, docGroupStepsBase+docGroupStepsPerRow*n)
 	claims := make([]judgev1.Claim, 0, n)

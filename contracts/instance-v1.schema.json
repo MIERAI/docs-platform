@@ -315,6 +315,17 @@
                 "doc"
               ],
               "description": "line: one request per line (default, evaluated); doc: up to six lines of one document per request (cheaper)"
+            },
+            "effort": {
+              "type": "string",
+              "enum": [
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ],
+              "description": "effort of agentic requests; unset (default) = the model's own default, which the agentic design was evaluated with. ai.judge.effort applies to snippet mode only."
             }
           }
         }
