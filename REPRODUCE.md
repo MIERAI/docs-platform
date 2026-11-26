@@ -19,8 +19,9 @@ There are two tiers:
 | Tool | Version | Check | Needed for |
 |---|---|---|---|
 | Go | 1.27.0 or newer (the `go` line of `go.mod`; tested with 1.27.4) | `go version` | everything |
-| git | tested with 2.50.1; any 2.3x+ should do (`merge-base --is-ancestor`, `ls-tree`, `fetch <sha>`) | `git --version` | everything |
-| network | `proxy.golang.org` (Go modules) and `github.com` (three public repositories, about 20 MB) | `git ls-remote https://github.com/MIERAI/gitops-manifests.git HEAD` | offline tier |
+| git | tested with 2.50.1 and 2.43.0; any 2.3x+ should do (`merge-base --is-ancestor`, `ls-tree`, `fetch <sha>`) | `git --version` | everything |
+| make | GNU Make 3.81+ (every entry point is a make target) | `make --version` | everything |
+| network | `proxy.golang.org` (Go modules) and `github.com` (three public repositories, about 30 MB; `$REPRO_WORK` needs about 60 MB of disk) | `git ls-remote https://github.com/MIERAI/gitops-manifests.git HEAD` | offline tier |
 | ripgrep | not needed: `docsp`'s search tool is built in. Only one archived prototype configuration used `rg`. | - | - |
 | Python | not needed: the mutation-set generator is ported to Go (`go run ./bench mutate`). | - | - |
 | Claude Code CLI | any current version (the paid runs used 2.1.33x) | `claude --version` | paid tier, provider `claude-code` |
@@ -28,6 +29,18 @@ There are two tiers:
 | Ollama | a local server with a tool-calling model | `curl -s http://127.0.0.1:11434/api/tags` | paid tier, provider `ollama` |
 
 macOS and Linux are tested; the scripts are bash.
+
+Installing the prerequisites on a bare Debian/Ubuntu machine or container (verified on
+`ubuntu:24.04`, amd64 and arm64):
+
+```sh
+apt-get update && apt-get install -y git make curl ca-certificates
+curl -fsSL "https://go.dev/dl/go1.27.4.linux-$(dpkg --print-architecture).tar.gz" | tar -C /usr/local -xz
+export PATH=/usr/local/go/bin:$PATH
+go version && git --version && make --version | head -1
+```
+
+On macOS: `brew install go git make` (the system `make` 3.81 also works).
 
 ## 2. Build
 
@@ -44,11 +57,11 @@ included: `make check-self`).
 ## 3. Offline tier
 
 ```sh
-make repro-offline                       # about 1.5-3 minutes once Go modules are downloaded
+make repro-offline                       # 30 s to 3 minutes, depending on the machine and network
 REPRO_WORK=/some/scratch make repro-offline   # choose the scratch directory
 ```
 
-`REPRO_WORK` (default `$TMPDIR/docsp-repro`, never inside the repository) receives the clones
+`REPRO_WORK` (default `${TMPDIR:-/tmp}/docsp-repro`, never inside the repository) receives the clones
 and every output; it is reused between runs. `SKIP_TESTS=1` skips step 1. The script is
 [scripts/repro-offline.sh](scripts/repro-offline.sh); each step can be run by hand:
 
@@ -63,13 +76,17 @@ and every output; it is reused between runs. `SKIP_TESTS=1` skips step 1. The sc
 | 7 | `go run ./bench replay -manifest bench/data/manifest.json -eval-out ...` | change-time impact (history replay) and the frozen snippet eval set |
 | 8 | `go run ./bench mutate ...`, then `go run ./bench verify-offline ...` | regenerates the mutation set; compares 46 numbers with the expected file |
 
-The last lines must be:
+The verify step prints one line per expected number, in alphabetical order. A pass is 46
+lines starting with `ok`, no line starting with `MISMATCH`, and this as the last line:
 
 ```
-ok       agentic_test.recall                          want 0.80                     got 0.80
-...
 all 46 expected numbers reproduced
 ```
+
+Steps 4 and 5 also print `switching rule: QUALIFIES ...`: that line is meaningless for the
+replay provider (it is not a model) and can be ignored here. `make check-self` reports three
+low-severity findings on this file and `docs/experiments.md` (example variables and an
+archive path); they are expected.
 
 The headline lines of the run, and what they mean:
 
@@ -139,10 +156,14 @@ ciphertext; with `DOCSP_DENYLIST=<private term list, mode 0600>` it also checks 
 paths that appear in the data are quoted from the public repositories themselves (each was
 checked to occur in their public history).
 
-## 5. Paid tier
+## 5. Model tier (paid, or local with Ollama)
 
-The paid tier judges the TEST set live. It costs money (or subscription quota) and its
-result varies from run to run: **run it at least twice** and compare the range, not one run.
+The model tier judges the TEST set live. With Claude it costs money (or subscription quota);
+with Ollama it is free but slow. The result varies from run to run: **run it at least
+twice** and compare the range, not one run.
+
+Write the configuration below as `paid.yaml` in the repository root (it is git-ignored; do
+not commit it). Outputs go to `$REPRO_WORK/out`, outside the repository.
 
 Common setup:
 
@@ -164,17 +185,22 @@ Then the run (each run writes an eval/v1 JSON into `-out-dir`; `-no-drift-cache`
 run scan the history itself, as the measured runs did):
 
 ```sh
-mkdir -p out
+mkdir -p "$REPRO_WORK/out"
 bin/docsp eval-model -set bench/data/eval/agentic-test.jsonl -instance-config paid.yaml \
-  -mode agentic -no-drift-cache -out-dir out $WT
+  -mode agentic -no-drift-cache -out-dir "$REPRO_WORK/out" $WT
 ```
 
-The line to read: `precision P, recall R, unknown U ... (tp .. fp .. fn .. tn ..)`.
+The line to read: `precision P, recall R, unknown U ... (tp .. fp .. fn .. tn ..)`. Run the
+same command a second time and compare the two `recall` values (the range is the result;
+each run's full eval/v1 JSON is in `$REPRO_WORK/out`).
 
 ### 5.1 Claude Code CLI (`provider: claude-code`)
 
 Uses the operator's own Claude Code login (subscription quota, no API bill; docsp never
-reads the credential). In CI, name the token variable in `claude_code.pass_env`.
+reads the credential). Install Claude Code (https://docs.claude.com/en/docs/claude-code),
+run `claude` once interactively to log in, then check `claude --version` (the measured runs
+used 2.1.330). On a headless machine or in CI, log in with a long-lived token and name its
+environment variable in `claude_code.pass_env` (e.g. `pass_env: [CLAUDE_CODE_OAUTH_TOKEN]`).
 
 ```yaml
 # paid.yaml
@@ -211,7 +237,9 @@ For users with an API key and no Claude Code subscription. `docsp-judge-anthropi
 call goes back to `docsp`, which executes it read-only inside the worktree and refuses
 private paths; the answer is structured output bound to the reply schema.
 
-**The key.** Put it in an environment variable and name the variable in the configuration
+**The key.** Create one in the Anthropic Console (https://console.anthropic.com), then
+`export ANTHROPIC_API_KEY=...` in the shell that runs docsp (do not put the value in
+`paid.yaml`). Put it in an environment variable and name the variable in the configuration
 (`api_key_env`). docsp passes the variable through by name only; the provider reads it once
 and never logs, prints or stores it. (A mode-0600 file named by `api_key_file` is the
 alternative.) Requests go only to `https://api.anthropic.com`.
@@ -227,7 +255,7 @@ ai:
     max_concurrency: 2
     budget: {max_requests: 300, max_usd: 6}     # hard stop for the whole run
     anthropic:
-      program: /absolute/path/to/repo/bin/docsp-judge-anthropic
+      program: /absolute/path/to/repo/bin/docsp-judge-anthropic   # the output of: echo "$(pwd)/bin/docsp-judge-anthropic"
       api_key_env: ANTHROPIC_API_KEY
       fallbacks: default                        # server-side refusal fallback (recorded)
     agentic:
@@ -242,7 +270,7 @@ classification:
 | | Expected | Source |
 |---|---|---|
 | dry-run estimate | `cost $2.3501` (Sonnet 5.5), `$4.7002` (Opus 5.5) | `-dry-run`, this repository |
-| cost | not measured yet; budget $2.5-3.5 per run on Sonnet (the Claude Code runs of the same prompts cost $2.74-3.48) | estimate |
+| cost | not measured yet; budget $2.5-3.5 per run on Sonnet (the two v0.4.2 Claude Code runs of the same prompts cost $2.74-3.33) | estimate |
 | recall | **not measured yet.** The prompts are the ones evaluated with Claude Code, but the model does not get Claude Code's own agent prompt, so the first two runs set this provider's baseline. Compare with 0.73-0.77. | - |
 
 The provider is unit-tested against a fake HTTP server only (`cd providers/anthropic && go
@@ -250,7 +278,11 @@ test ./...`); no live API call was made while building it.
 
 ### 5.3 Ollama (`provider: ollama`)
 
-Local, free, slow. The dialer refuses non-local addresses.
+Local, free, slow. The dialer refuses non-local addresses. Pull the model first
+(`ollama pull gemma4:12b`); with `num_ctx: 32768` it needs about 10-12 GB of GPU (or
+unified) memory (measured on a 12 GB GPU). Expect about 85 s per line, so roughly 1.5-2
+hours for the 60 TEST lines plus the drift scans. No budget is set because nothing is
+billed, and private repositories may be read because nothing leaves the machine.
 
 ```yaml
 # paid.yaml
@@ -290,7 +322,12 @@ classification:
   evidence cites the very files that later revealed the line as stale, and causing commits
   are defined from the ground truth's evidence paths; the two overlap. A ledger built when
   the line was written would not always cite those files. 76% / 92% vs the impact
-  selection's 36% / 52% is an upper bound of the advantage (design §12.7).
+  selection's 36% / 52% is an upper bound of the advantage (design §12.7). An unbiased
+  backtest (paid; ledgers judged by Sonnet at 8 revisions before the causing commits, then
+  replayed forward; its data is in the private archive, not here) caught 8/20 at the first
+  causing commit and 12/20 at any causing commit, against 6/20 and 9/20 for the impact
+  selection on the same items; only 10 of the 20 base verdicts were `confirmed`, so half the
+  claims left no evidence to watch.
 - **History replay** counts a stale section as caught only when listed for re-reading at a
   causing commit; items without a causing commit (26 of 147) are reported, not scored.
 - **The snippet eval set** labels positives the same way (agreement with the audit).
