@@ -12,6 +12,16 @@ Design: docs/design.md §12; plan: docs/backlog.md.
   and passes the configured linters (behaviour unchanged).
 
 ### Added
+- **Contract layer** (`docsp contract`, contract/v1, docs/design.md §13): design-first specs
+  vs the code that implements them, without a model. Adapters: `factory-design` /
+  `factory-code` (a design-first generator's design language vs its escape hatches: SQL
+  query files and compute functions), `openapi-graphql` (GraphQL embedded in OpenAPI paths)
+  and `kotlin-graphql` (SmallRye code-first). Every mismatch gets a direction from git history
+  (`design_behind_code`, `code_behind_design`, `diverged`, `undocumented`,
+  `removed_in_code`) with the commits as evidence, an optional rename candidate, and an
+  authority-dependent message; doc sets of a group take a `contract:` block (instance/v1,
+  additive). `go run ./bench contract-lab` replays 28 injected changes on pinned public
+  clones (22 drifts detected 22/22, direction 21/22, the 6 harmless edits quiet).
 - **Reproducible from the repository alone** (REPRODUCE.md):
   - `bench/data`: the benchmark data about the three public repositories (147 ground-truth
     items, the agentic DEV and TEST eval sets with pinned revisions, the prototype's frozen
