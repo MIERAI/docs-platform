@@ -86,13 +86,18 @@ func New(t instance.Task) (Provider, error) {
 }
 
 // anthropicExec is the anthropic preset of the exec provider: the Messages API adapter
-// (cmd/docsp-judge-anthropic, its own module) receives the model, limits and where the key
-// is, never the key itself.
+// (providers/anthropic, its own module) receives the model, limits and where the key is,
+// never the key itself. It supports both modes: in agentic mode its tool calls come back over
+// the exec transport and are executed by the core (worktree-confined, classification-aware).
+// Agentic requests get only ai.judge.agentic.effort, never the snippet effort.
 func anthropicExec(t instance.Task, timeout time.Duration, conc int) ExecConfig {
 	a := t.Anthropic
 	argv := []string{a.Program, "-model", t.Model}
 	if t.Effort != "" {
 		argv = append(argv, "-effort", t.Effort)
+	}
+	if t.Agentic.Effort != "" {
+		argv = append(argv, "-agentic-effort", t.Agentic.Effort)
 	}
 	if a.MaxRetries > 0 {
 		argv = append(argv, "-max-retries", strconv.Itoa(a.MaxRetries))
@@ -110,6 +115,7 @@ func anthropicExec(t instance.Task, timeout time.Duration, conc int) ExecConfig 
 	return ExecConfig{
 		Name: instance.ProviderAnthropic, Model: t.Model, Command: argv, PassEnv: pass, Cloud: true,
 		Billing: judgev1.BillingAPI, Timeout: timeout, MaxConcurrency: conc,
+		Modes: []string{judgev1.ModeSnippet, judgev1.ModeAgentic},
 	}
 }
 
