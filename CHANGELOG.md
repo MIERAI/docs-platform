@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+Direction (approved): keep docs consistent with code over time, not once - remove the docs'
+"phantom inventory" with retail inventory control (record accuracy, cycle counting, ABC).
+Design: docs/design.md §12; plan: docs/backlog.md.
+
 ## 0.4.2 - 2026-11-26
 
 The 0.4.1 rerun validated every drift entry (22/22, 17/17) but recall fell to 19/30 with
