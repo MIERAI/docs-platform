@@ -48,8 +48,10 @@ func TestSLOSplitsATwoRepoSample(t *testing.T) {
 		dirs[r.name] = dir
 		for i := 1; i <= 4; i++ {
 			txt := "line " + r.name + " " + string(rune('0'+i))
-			l.Claims = append(l.Claims, ledger.Claim{ID: ledger.ClaimID(r.name, r.doc, txt), Repo: r.name, Path: r.doc, Line: i, Text: txt,
-				Category: "confirmed", Verdict: "no", VerifiedAt: "2026-11-26T00:00:00Z", VerifiedRef: strings.TrimSpace(string(head))})
+			l.Claims = append(l.Claims, ledger.Claim{
+				ID: ledger.ClaimID(r.name, r.doc, txt), Repo: r.name, Path: r.doc, Line: i, Text: txt,
+				Category: "confirmed", Verdict: "no", VerifiedAt: "2026-11-26T00:00:00Z", VerifiedRef: strings.TrimSpace(string(head)),
+			})
 			v := judgev1.No
 			if i <= r.wrong {
 				v = judgev1.Yes
