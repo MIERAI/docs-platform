@@ -4,6 +4,9 @@
 //	go run ./bench ledger-backtest -ledger FILE -gt DIR -set FILE -repo name=DIR ... [-json FILE]
 //	go run ./bench ledger-replay -ledger FILE -gt DIR -set FILE -repo name=DIR ... [-json FILE]
 //	go run ./bench replay -gt DIR -work DIR [-pin name=rev ...] [-eval-out set.jsonl] [-md ...] [-json ...]
+//	go run ./bench fetch [-manifest bench/data/manifest.json] -work DIR
+//	go run ./bench mutate [-manifest FILE] -work DIR [-out-dir DIR] [-out mutations.json]
+//	go run ./bench verify-offline [-expected FILE] -eval-test F -eval-dev F -ledger-replay F -replay F -evalset F -mutations F
 //
 // The second form is the history replay benchmark (the primary metric of change-time
 // detection): see replay.go.
@@ -48,27 +51,25 @@ var (
 	reRev  = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/-]{0,100}$`)
 )
 
+// subcommands are the bench modes other than the snapshot check.
+var subcommands = map[string]func(context.Context, []string) error{
+	"fetch":           runFetch,
+	"ledger-backtest": runLedgerBacktest,
+	"ledger-replay":   runLedgerReplay,
+	"mutate":          runMutate,
+	"replay":          runReplay,
+	"verify-offline":  func(_ context.Context, args []string) error { return runVerifyOffline(args) },
+}
+
 func main() {
-	if len(os.Args) > 1 && os.Args[1] == "ledger-backtest" {
-		if err := runLedgerBacktest(context.Background(), os.Args[2:]); err != nil {
-			fmt.Fprintln(os.Stderr, "bench ledger-backtest:", err)
-			os.Exit(1)
+	if len(os.Args) > 1 {
+		if sub, ok := subcommands[os.Args[1]]; ok {
+			if err := sub(context.Background(), os.Args[2:]); err != nil {
+				fmt.Fprintf(os.Stderr, "bench %s: %v\n", os.Args[1], err)
+				os.Exit(1)
+			}
+			return
 		}
-		return
-	}
-	if len(os.Args) > 1 && os.Args[1] == "ledger-replay" {
-		if err := runLedgerReplay(context.Background(), os.Args[2:]); err != nil {
-			fmt.Fprintln(os.Stderr, "bench ledger-replay:", err)
-			os.Exit(1)
-		}
-		return
-	}
-	if len(os.Args) > 1 && os.Args[1] == "replay" {
-		if err := runReplay(context.Background(), os.Args[2:]); err != nil {
-			fmt.Fprintln(os.Stderr, "bench replay:", err)
-			os.Exit(1)
-		}
-		return
 	}
 	gt := flag.String("gt", "", "directory of ground-truth *.jsonl files")
 	work := flag.String("work", "", "scratch directory for read-only clones")

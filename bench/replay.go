@@ -44,11 +44,15 @@ func runReplay(ctx context.Context, args []string) error {
 	fs.IntVar(&o.maxCommits, "max-commits", 25, "causing commits replayed per item (the first is always replayed)")
 	fs.IntVar(&o.parallel, "parallel", 6, "commits replayed concurrently")
 	fs.Var(o.pins, "pin", "check out a revision: name=rev (repeatable)")
+	manifest := fs.String("manifest", "", "take the pins of a benchmark manifest (bench/data/manifest.json); -pin wins")
 	if err := fs.Parse(args); err != nil {
 		return fmt.Errorf("replay flags: %w", err)
 	}
 	if o.gt == "" || o.work == "" {
 		return errors.New("replay: -gt and -work are required")
+	}
+	if err := o.pins.addManifest(*manifest); err != nil {
+		return err
 	}
 	gt, err := loadGT(o.gt)
 	if err != nil {

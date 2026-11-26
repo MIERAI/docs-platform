@@ -371,20 +371,24 @@ eval:                              # switching thresholds per task
 | `none` | - | deterministic checks only (default) |
 | `ollama` | local server | dialer refuses non-local addresses; temperature 0, fixed seed |
 | `claude-code` | the Claude Code CLI (`claude -p`) with the operator's own login (locally) or the token variable named in `claude_code.pass_env` (CI) | argv only, no shell; no tools, no MCP, no settings, no session on disk, empty working directory; JSON output validated against the reply schema; docsp never reads the credential |
-| `anthropic` | `docsp-judge-anthropic` (own module, official Go SDK) | key only from a 0600 file or a named env var, never logged; HTTP only to `https://api.anthropic.com`; structured output; explicit effort; per-run USD budget |
+| `anthropic` | `docsp-judge-anthropic` (own module, official Go SDK) | key only from a 0600 file or a named env var, never logged; HTTP only to `https://api.anthropic.com`; structured output; explicit effort; per-run USD budget; snippet and agentic mode |
 | `exec` | any program speaking judge/v1 as JSON Lines on stdin/stdout | treated as cloud unless `exec.local: true`; declares its `modes` |
 
 Agentic mode is supported by `claude-code` (its only tools are docsp's read-only tools, served
 over MCP by a `docsp judge-tools-mcp` child process; no built-in tools; docsp's system prompt
 is appended to the CLI's own agent prompt), `ollama` (native tool calls, then the answer with
 the reply schema as `format`; give it a context of 32k tokens or more with `ollama.num_ctx`)
-and `exec` (`modes: [agentic]`); the `anthropic` adapter is snippet-only for now. `docsp-judge-replay -answers FILE [-probe]`
+`anthropic` (the adapter runs the tool-use loop over the Messages API; every tool call is sent
+back to docsp as a judge-tools/v1 `tool_call` line and executed by the core, worktree-confined and
+classification-aware; the answer is structured output) and `exec` (`modes: [agentic]`).
+`docsp-judge-replay -answers FILE [-probe]`
 (`make build-replay`) is an offline exec provider that answers from canned answers (JSON
 Lines `{"key": "drift:<repo>" | "line:<repo>:<path>:<line>", "answer": {...}}`; `-probe` makes
 one tool call per request) - for tests and for re-scoring a frozen run at no cost.
 
 `docsp-judge-anthropic` is started by docsp with argv built from the instance configuration:
-`--model ID`, `--effort LEVEL`, `--max-retries N` (SDK retries on 408/409/429/5xx, honouring
+`--model ID`, `--effort LEVEL` (snippet requests), `--agentic-effort LEVEL` (only when
+`ai.judge.agentic.effort` is set; agentic requests otherwise use the model's default), `--max-retries N` (SDK retries on 408/409/429/5xx, honouring
 `retry-after`), `--fallbacks default|none` (server-side refusal fallback; the answering model is
 recorded), and exactly one of `--api-key-file FILE` (refused unless mode 0600) or
 `--api-key-env NAME`.
@@ -507,6 +511,18 @@ Metrics carried in every document: `docs_references{kind,status}`,
 
 ## Benchmark
 
+[REPRODUCE.md](REPRODUCE.md) reproduces every headline number from this repository alone:
+`make repro-offline` (no model) and a paid tier per provider. `bench/data` holds the
+benchmark data about the three public repositories (ground truth, DEV/TEST eval sets, the
+prototype's frozen answers and drift lists, the mutation set, expected numbers), pinned by
+full SHA in `bench/data/manifest.json`. More `bench` commands:
+
+```sh
+go run ./bench fetch -work <scratch>              # clone the public repos at the pinned SHAs
+go run ./bench mutate -work <scratch> -out m.json # regenerate the mutation set (deterministic)
+go run ./bench verify-offline [-expected FILE] -eval-test F -eval-dev F -ledger-replay F -replay F -evalset F -mutations F
+```
+
 `bench/` has two benchmarks against human-confirmed ground truth (JSON Lines: `repo, file, line,
 claim, actual, type, fix, evidence_paths`). Each public repository is cloned read-only into the
 scratch directory.
@@ -542,9 +558,10 @@ audit per sub-layer and per rule.
 ```sh
 make test        # unit, table, golden and contract tests
 make race
-make lint        # golangci-lint (strict: funlen 50, gocognit, gosec, wrapcheck, ...)
+make lint        # golangci-lint v2.15.0 via `go run` (strict: funlen 50, gocognit, gosec, wrapcheck, ...)
+make repro-offline # REPRODUCE.md offline tier; fails when a number differs
 make fuzz        # every parser of external input (FUZZTIME=30s each, GO=go)
-make vuln        # govulncheck
+make vuln        # govulncheck v1.9.0 via `go run`
 make golden      # rewrite golden files after an intended change, then review the diff
 make build-replay # bin/docsp-judge-replay, the offline canned-answer provider
 make check-self  # docs-platform checks its own documentation
