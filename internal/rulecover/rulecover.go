@@ -401,6 +401,7 @@ func proposeOnce(ctx context.Context, o Options, j *job, mutant factorytry.File,
 		ins := factoryai.Insert{Path: er.Path, Anchor: in.Anchor, Text: in.Text}
 		var err error
 		if edited, err = ins.Apply(edited); err != nil {
+			p.Inserts = nil // never show half a proposal
 			return false, err.Error()
 		}
 		p.Inserts = append(p.Inserts, ins)

@@ -57,3 +57,19 @@ func TestRuleBlock(t *testing.T) {
 		t.Error("no such line")
 	}
 }
+
+// A quote that differs from the file only in whitespace still applies, once, re-indented.
+func TestEditApplyLines(t *testing.T) {
+	src := "例子:\n  用例:\n    - 说明: mu\n      结果: { total: 1,  sla_breaches: 1 }\n"
+	e := Edit{Path: "d", Old: "  - 说明: mu\n    结果: { total: 1, sla_breaches: 1 }", New: "  - 说明: mu\n    结果: { total: 1, sla_breaches: 0 }"}
+	got, err := e.Apply(src)
+	if err != nil || got != "例子:\n  用例:\n    - 说明: mu\n      结果: { total: 1, sla_breaches: 0 }\n" {
+		t.Errorf("%q %v", got, err)
+	}
+	if _, err := (Edit{Path: "d", Old: "x  y", New: "z"}).Apply("x y\nx  y\n"); err != nil {
+		t.Errorf("an exact match wins: %v", err)
+	}
+	if _, err := (Edit{Path: "d", Old: "a   b", New: "c"}).Apply("a b\n  a  b\n"); err == nil {
+		t.Error("two whitespace-equal lines: ambiguous, refused")
+	}
+}

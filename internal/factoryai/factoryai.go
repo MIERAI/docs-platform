@@ -38,11 +38,68 @@ func (e Edit) Apply(content string) (string, error) {
 	case e.Old == e.New:
 		return "", fmt.Errorf("%s: the edit changes nothing", e.Path)
 	case n == 0:
-		return "", fmt.Errorf("%s: the text to replace is not in the file", e.Path)
+		if out, ok := e.applyLines(content); ok {
+			return out, nil
+		}
+		return "", fmt.Errorf("%s: the text to replace is not in the file: %q", e.Path, firstOf(e.Old))
 	case n > 1:
 		return "", fmt.Errorf("%s: the text to replace occurs %d times (quote more of it)", e.Path, n)
 	}
 	return strings.Replace(content, e.Old, e.New, 1), nil
+}
+
+// applyLines is the fallback when Old is not in the content verbatim: whole lines equal up to
+// whitespace (models often re-indent or collapse spaces when quoting YAML), matched exactly
+// once. New is re-indented by the difference between the file's and the quote's indentation.
+func (e Edit) applyLines(content string) (string, bool) {
+	lines := strings.Split(content, "\n")
+	old := strings.Split(strings.TrimRight(e.Old, "\n"), "\n")
+	at := -1
+	for i := 0; i+len(old) <= len(lines); i++ {
+		match := true
+		for k, o := range old {
+			if norm(lines[i+k]) != norm(o) {
+				match = false
+				break
+			}
+		}
+		if match {
+			if at >= 0 {
+				return "", false
+			}
+			at = i
+		}
+	}
+	if at < 0 || norm(old[0]) == "" {
+		return "", false
+	}
+	delta := indentOf(lines[at]) - indentOf(old[0])
+	var repl []string
+	if strings.TrimRight(e.New, "\n") != "" {
+		for _, l := range strings.Split(strings.TrimRight(e.New, "\n"), "\n") {
+			switch {
+			case delta > 0 && strings.TrimSpace(l) != "":
+				l = strings.Repeat(" ", delta) + l
+			case delta < 0:
+				l = l[min(-delta, indentOf(l)):]
+			}
+			repl = append(repl, l)
+		}
+	}
+	out := append(append(append([]string{}, lines[:at]...), repl...), lines[at+len(old):]...)
+	return strings.Join(out, "\n"), true
+}
+
+func norm(s string) string { return strings.Join(strings.Fields(s), " ") }
+
+func indentOf(s string) int { return len(s) - len(strings.TrimLeft(s, " ")) }
+
+func firstOf(s string) string {
+	s, _, _ = strings.Cut(strings.TrimSpace(s), "\n")
+	if r := []rune(s); len(r) > 80 {
+		return string(r[:80]) + "…"
+	}
+	return s
 }
 
 // Insert puts Text right after the line Anchor (which must occur exactly once as a whole line).

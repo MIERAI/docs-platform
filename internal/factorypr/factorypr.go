@@ -200,7 +200,7 @@ func acceptance(ctx context.Context, t factorytry.Runner, files []factorytry.Fil
 	return ""
 }
 
-const draftSchema = `{"type":"object","properties":{"edits":{"type":"array","maxItems":4,"items":{"type":"object","properties":{"old":{"type":"string"},"new":{"type":"string"}},"required":["old","new"],"additionalProperties":false}},"rationale":{"type":"string"}},"required":["edits","rationale"],"additionalProperties":false}`
+const draftSchema = `{"type":"object","properties":{"edits":{"type":"array","maxItems":8,"items":{"type":"object","properties":{"old":{"type":"string"},"new":{"type":"string"}},"required":["old","new"],"additionalProperties":false}},"rationale":{"type":"string"}},"required":["edits","rationale"],"additionalProperties":false}`
 
 const draftTask = `RULE (%s line %d):
 <<<
@@ -209,7 +209,7 @@ const draftTask = `RULE (%s line %d):
 At the head of a change, the hand-written code no longer does what this rule says. Facts checked against the code:
 %s
 Propose the smallest edits to %s that make the design state what the code does now: the rule's wording, and the expected results of any example that encodes the old behaviour. Keep every other word, the language, keys and indentation exactly. Do not change inputs or data rows unless an example cannot be fixed otherwise. Whether the design is stale or the code is wrong is decided by a person; you only draft the design side.
-Each edit replaces "old" - text copied exactly from %s (whole lines, occurring exactly once; never the line numbers) - with "new". At most 4 edits.%s`
+Each edit replaces "old" - text copied exactly from %s (whole lines, occurring exactly once; never the line numbers) - with "new". At most 8 edits; quote each old text from the file, without the "  42| " line-number prefix.%s`
 
 func draft(ctx context.Context, o Options, er factorymanifest.EscapedRule, r *Rule) *Draft {
 	doc, err := os.ReadFile(filepath.Join(o.Dir, filepath.FromSlash(er.Path)))
@@ -268,6 +268,7 @@ func draftOnce(ctx context.Context, o Options, er factorymanifest.EscapedRule, d
 		ed := factoryai.Edit{Path: er.Path, Old: e.Old, New: e.New}
 		var err error
 		if edited, err = ed.Apply(edited); err != nil {
+			d.Edits = nil // never show half a draft
 			return false, err.Error()
 		}
 		d.Edits = append(d.Edits, ed)
