@@ -77,14 +77,6 @@ func (c *Claim) docRef() string {
 	return c.VerifiedRef
 }
 
-// evidenceRepo is the repository the claim's evidence lives in.
-func (c *Claim) evidenceRepo() string {
-	if c.Target != nil {
-		return c.Target.Repo
-	}
-	return c.Repo
-}
-
 // Fact is a fact of the claim with its status and whether its evidence validated.
 type Fact struct {
 	Fact   string `json:"fact"`

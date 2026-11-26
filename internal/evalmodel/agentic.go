@@ -243,7 +243,7 @@ func baseResult(it *Item) ItemResult {
 func fromLine(it *Item, lr agentic.LineResult) ItemResult {
 	r := baseResult(it)
 	r.Verdict, r.Category, r.Claimed, r.Parse = lr.Verdict, lr.Category, lr.Claimed, lr.Parse
-	r.Evidence, r.EvidenceOK, r.GroupSize, r.ToolSteps = lr.Derivation.Evidence, lr.EvidenceOK, lr.GroupSize, lr.ToolSteps
+	r.Evidence, r.EvidenceOK, r.GroupSize, r.ToolSteps = lr.Evidence, lr.EvidenceOK, lr.GroupSize, lr.ToolSteps
 	r.Model, r.InputTokens, r.OutputTokens, r.CostUSD, r.LatencyMS = lr.Model, lr.InputTokens, lr.OutputTokens, lr.CostUSD, lr.LatencyMS
 	r.Error, r.Facts, r.Reason, r.Transcript = lr.Error, lr.Facts, lr.Reason, lr.Transcript
 	if strings.Contains(lr.Error, judge.ErrBudget.Error()) {

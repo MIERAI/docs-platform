@@ -189,8 +189,10 @@ func accuracy(r *SLOReport, res *evalmodel.Result, p instance.Consistency) {
 		d.Burned = float64(d.Wrong)/float64(d.Sampled) > allowed
 		r.ByDoc = append(r.ByDoc, *d)
 		if d.Burned {
-			r.Actions = append(r.Actions, Action{Path: d.Path, Action: "full_reaudit", MaxAgeDays: max(1, p.MaxAgeDays/2),
-				Why: fmt.Sprintf("%d of %d sampled claims wrong: more than the %.0f%% error budget", d.Wrong, d.Sampled, 100*allowed)})
+			r.Actions = append(r.Actions, Action{
+				Path: d.Path, Action: "full_reaudit", MaxAgeDays: max(1, p.MaxAgeDays/2),
+				Why: fmt.Sprintf("%d of %d sampled claims wrong: more than the %.0f%% error budget", d.Wrong, d.Sampled, 100*allowed),
+			})
 		}
 	}
 	sort.Slice(r.ByDoc, func(i, j int) bool { return r.ByDoc[i].Path < r.ByDoc[j].Path })

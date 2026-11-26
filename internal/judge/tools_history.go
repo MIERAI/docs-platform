@@ -235,6 +235,22 @@ func (t *Tools) changesSince(ctx context.Context, p string, line int) (any, erro
 	return &textResult{Text: b.String()}, nil
 }
 
+// missingPathNote describes a path the line names that does not exist: the commits that
+// deleted or renamed it and the files still containing the name.
+func (t *Tools) missingPathNote(ctx context.Context, tok string, fs []string) string {
+	s := strings.TrimSuffix(strings.TrimPrefix(tok, "./"), "/")
+	note := fmt.Sprintf("- named path `%s` does not exist at HEAD", tok)
+	if c, err := CleanPath(s); err == nil && c != "." {
+		if gone, err := repo.Git(ctx, t.dir, "log", "--format=%h %ad %s", "--date=short", "-n3", "--diff-filter=DR", "HEAD", "--", c, c+"/*"); err == nil && strings.TrimSpace(gone) != "" {
+			note += "; deleted/renamed in: " + strings.ReplaceAll(strings.TrimSpace(gone), "\n", "; ")
+		}
+	}
+	if len(fs) > 0 {
+		note += "; files containing that name: " + strings.Join(fs[:min(4, len(fs))], ", ")
+	}
+	return note
+}
+
 // sinceTokens writes the paths a line names that are gone, and returns the files it refers to.
 func (t *Tools) sinceTokens(ctx context.Context, b *strings.Builder, doc, text string) []string {
 	set := map[string]bool{}
@@ -243,17 +259,7 @@ func (t *Tools) sinceTokens(ctx context.Context, b *strings.Builder, doc, text s
 		fs, isPath := t.resolve(ctx, tok)
 		looksPath := strings.Contains(tok, "/") || reLooksPath.MatchString(tok)
 		if looksPath && !isPath {
-			s := strings.TrimSuffix(strings.TrimPrefix(tok, "./"), "/")
-			note := fmt.Sprintf("- named path `%s` does not exist at HEAD", tok)
-			if c, err := CleanPath(s); err == nil && c != "." {
-				if gone, err := repo.Git(ctx, t.dir, "log", "--format=%h %ad %s", "--date=short", "-n3", "--diff-filter=DR", "HEAD", "--", c, c+"/*"); err == nil && strings.TrimSpace(gone) != "" {
-					note += "; deleted/renamed in: " + strings.ReplaceAll(strings.TrimSpace(gone), "\n", "; ")
-				}
-			}
-			if len(fs) > 0 {
-				note += "; files containing that name: " + strings.Join(fs[:min(4, len(fs))], ", ")
-			}
-			notes = append(notes, note)
+			notes = append(notes, t.missingPathNote(ctx, tok, fs))
 			continue
 		}
 		for _, f := range fs {
@@ -275,27 +281,32 @@ func (t *Tools) sinceTokens(ctx context.Context, b *strings.Builder, doc, text s
 	return paths
 }
 
+// sinceTouching writes the commits after sha that touched paths, the first three with diffs.
+func (t *Tools) sinceTouching(ctx context.Context, b *strings.Builder, sha, short string, paths []string) {
+	args := append([]string{"log", "--format=%h %ad %s", "--date=short", "-n12", sha + "..HEAD", "--"}, paths...)
+	log, _ := repo.Git(ctx, t.dir, args...)
+	if strings.TrimSpace(log) == "" {
+		fmt.Fprintf(b, "No commits touched those files after %s.\n", short)
+		return
+	}
+	fmt.Fprintf(b, "Commits after %s touching them (newest first):\n", short)
+	for k, l := range strings.Split(strings.TrimSpace(log), "\n") {
+		h := strings.Fields(l)[0]
+		if !repo.ValidRef(h) {
+			continue
+		}
+		fmt.Fprintf(b, "* %s\n", l)
+		if k < 3 {
+			d, _ := repo.Git(ctx, t.dir, append([]string{"show", "--format=", "--unified=0", "--no-color", h, "--"}, paths...)...)
+			b.WriteString(diffLines(d) + "\n")
+		}
+	}
+}
+
 func (t *Tools) sinceCommits(ctx context.Context, b *strings.Builder, sha, doc string, paths []string) {
 	short := sha[:min(7, len(sha))]
 	if len(paths) > 0 {
-		args := append([]string{"log", "--format=%h %ad %s", "--date=short", "-n12", sha + "..HEAD", "--"}, paths...)
-		log, _ := repo.Git(ctx, t.dir, args...)
-		if strings.TrimSpace(log) == "" {
-			fmt.Fprintf(b, "No commits touched those files after %s.\n", short)
-		} else {
-			fmt.Fprintf(b, "Commits after %s touching them (newest first):\n", short)
-			for k, l := range strings.Split(strings.TrimSpace(log), "\n") {
-				h := strings.Fields(l)[0]
-				if !repo.ValidRef(h) {
-					continue
-				}
-				fmt.Fprintf(b, "* %s\n", l)
-				if k < 3 {
-					d, _ := repo.Git(ctx, t.dir, append([]string{"show", "--format=", "--unified=0", "--no-color", h, "--"}, paths...)...)
-					b.WriteString(diffLines(d) + "\n")
-				}
-			}
-		}
+		t.sinceTouching(ctx, b, sha, short, paths)
 	}
 	dl, _ := repo.Git(ctx, t.dir, "log", "--format=%h %ad %s", "--date=short", "-n5", sha+"..HEAD", "--", doc)
 	if s := strings.TrimSpace(dl); s != "" {

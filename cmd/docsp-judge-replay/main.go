@@ -147,8 +147,10 @@ func docAnswer(req *judgev1.Request, m map[string]json.RawMessage) json.RawMessa
 }
 
 func toolProbe(req *judgev1.Request, w *bufio.Writer, sc *bufio.Scanner) error {
-	call := judgev1.ToolCall{Type: "tool_call", ID: req.ID, Call: "probe-1", Tool: judgev1.ToolReadFile,
-		Args: mustJSON(map[string]any{"path": req.Claim.Path, "from_line": max(1, req.Claim.Line-3), "to_line": req.Claim.Line + 3})}
+	call := judgev1.ToolCall{
+		Type: "tool_call", ID: req.ID, Call: "probe-1", Tool: judgev1.ToolReadFile,
+		Args: mustJSON(map[string]any{"path": req.Claim.Path, "from_line": max(1, req.Claim.Line-3), "to_line": req.Claim.Line + 3}),
+	}
 	if req.Task.Type == judgev1.TaskRepoDrift {
 		call.Tool, call.Args = judgev1.ToolGitChanges, mustJSON(map[string]any{"kind": "DR", "max_count": 5})
 	}

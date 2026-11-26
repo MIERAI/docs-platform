@@ -55,7 +55,7 @@ type Suppressed struct {
 // ConsistencyReport is docs-platform/report/v1: the validated problems of the ledger, for
 // people. It never fails a build: nobody is forced to update documentation; contradicted and
 // dangling references are reported at once, aged wording and incomplete lists in batches.
-type ConsistencyReport struct {
+type ConsistencyReport struct { //nolint:revive // Report is the SLO report builder's name
 	SchemaVersion string       `json:"schema_version"`
 	ReportedAt    string       `json:"reported_at"`
 	Immediate     []Finding    `json:"immediate"`

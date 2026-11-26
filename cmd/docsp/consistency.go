@@ -212,7 +212,8 @@ func cmdSample(ctx context.Context, args []string, stdout, stderr io.Writer) (in
 	var c consFlags
 	c.register(fs)
 	n := fs.Int("n", 0, "sample size (default consistency.sample_size, 30)")
-	seed := fs.Uint64("seed", uint64(time.Now().Unix()/(7*24*3600)), "random seed (default: the week number, so a week's sample is reproducible)")
+	seed := fs.Uint64("seed", uint64(time.Now().Unix()/(7*24*3600)), //nolint:gosec // Unix time is positive
+		"random seed (default: the week number, so a week's sample is reproducible)")
 	if err := fs.Parse(args); err != nil {
 		return flagErr(err)
 	}
@@ -269,8 +270,10 @@ func cmdSLO(ctx context.Context, args []string, stdout, stderr io.Writer) (int, 
 	if err != nil {
 		return exitUsage, err //nolint:wrapcheck // already descriptive
 	}
-	r := consistency.Report(consistency.SLOInput{Repo: name, Ref: sched.Ref, Policy: in.Consistency, Schedule: sched, Sample: sample,
-		Check: chk.Document, Ledger: l, Now: now})
+	r := consistency.Report(consistency.SLOInput{
+		Repo: name, Ref: sched.Ref, Policy: in.Consistency, Schedule: sched, Sample: sample,
+		Check: chk.Document, Ledger: l, Now: now,
+	})
 	if *apply {
 		if c.state == "" {
 			return exitUsage, errors.New("-apply needs -state FILE")

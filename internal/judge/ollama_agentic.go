@@ -95,9 +95,11 @@ func (o *Ollama) judgeAgentic(ctx context.Context, req *judgev1.Request) (*judge
 	if t == nil {
 		return nil, errors.New("ollama: agentic mode needs the worktree tools")
 	}
-	l := &agenticLoop{o: o, req: req, tools: t, seen: map[string]bool{}, model: o.cfg.Model,
+	l := &agenticLoop{
+		o: o, req: req, tools: t, seen: map[string]bool{}, model: o.cfg.Model,
 		msgs:  []chatMessage{{Role: "system", Content: req.Prompt.System}, {Role: "user", Content: req.Prompt.User}},
-		usage: judgev1.Usage{Billing: judgev1.BillingNone}}
+		usage: judgev1.Usage{Billing: judgev1.BillingNone},
+	}
 	steps := t.Limits().MaxSteps
 	if req.Limits.MaxTurns > 0 {
 		steps = min(steps, req.Limits.MaxTurns)

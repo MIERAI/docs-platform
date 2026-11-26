@@ -105,7 +105,7 @@ commands:
   report     validated problems for people: contradicted/dangling at once, the rest in batches; never fails
   draft      minimal-diff fix proposals for the ledger's problems (checked, logged, never applied)
   drafts     what became of the drafts: acceptance, revert rate, diff size; docs to generate or link instead
-  group      repository groups: plan (doc sets, declared targets, shared drift scans), judge, stale
+  group      repository groups: plan (doc sets, declared targets, shared drift scans), stale, judge
   stale      claims of the evidence ledger whose line or evidence changed since judged (no model)
   eval-model score a model provider per task (judge, draft) on a frozen eval set; -dry-run estimates cost
   import-findings

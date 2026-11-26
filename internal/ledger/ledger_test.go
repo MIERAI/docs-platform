@@ -58,7 +58,7 @@ func (g *gitRepo) write(files map[string]string) {
 	}
 }
 
-func (g *gitRepo) commit(msg string) string {
+func (g *gitRepo) commit(msg string) string { //nolint:unparam // the commit id is part of the helper's contract
 	g.git("add", "-A")
 	g.git("commit", "-qm", msg)
 	return g.git("rev-parse", "HEAD")
@@ -84,8 +84,10 @@ func claims(t *testing.T, g *gitRepo) *Ledger {
 	}
 	b.Now = func() time.Time { return time.Date(2026, 11, 26, 0, 0, 0, 0, time.UTC) }
 	b.Class = instance.Classification{Default: instance.Public, Paths: []instance.PathClass{{Repo: "demo", Glob: "private/**", Class: instance.Private}}}
-	b.Drift = &agentic.DriftList{Entries: []agentic.DriftEntry{{ID: "D1", Kind: "moved", Old: "old/run.sh", AbsentOldPath: true,
-		Evidence: []agentic.QuoteRef{{Path: "scripts/run.sh", Line: 1, Quote: "exec ./service"}}}}}
+	b.Drift = &agentic.DriftList{Entries: []agentic.DriftEntry{{
+		ID: "D1", Kind: "moved", Old: "old/run.sh", AbsentOldPath: true,
+		Evidence: []agentic.QuoteRef{{Path: "scripts/run.sh", Line: 1, Quote: "exec ./service"}},
+	}}}
 	lrs := []agentic.LineResult{
 		line(3, agentic.Confirmed, ok(agentic.Evidence{Kind: agentic.KindQuote, Path: "config.yaml", Line: 1, Quote: "port: 9090"})),
 		line(4, agentic.Confirmed, ok(agentic.Evidence{Kind: agentic.KindAbsence, SearchPattern: "deploy", SearchScope: ".github/workflows/*"})),

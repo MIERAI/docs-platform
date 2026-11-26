@@ -62,7 +62,7 @@ func firstObject(c string) json.RawMessage {
 		return compact(json.RawMessage(c))
 	}
 	end := len(c) - 1
-	for n := 0; n < maxTailTries; n++ {
+	for range maxTailTries {
 		j := strings.LastIndex(c[:end], "}")
 		if j < 0 {
 			return nil

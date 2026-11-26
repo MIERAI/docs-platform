@@ -139,7 +139,7 @@ func (r *searchResult) shrink() bool {
 
 // Search runs q. The same function serves the search tool and the re-run of absence
 // evidence, so an absence is accepted only if exactly the search the model ran finds nothing.
-func (t *Tools) Search(ctx context.Context, q SearchQuery) (*searchResult, error) {
+func (t *Tools) Search(ctx context.Context, q SearchQuery) (*searchResult, error) { //nolint:revive // callers read Matches only; the type stays internal
 	match, err := lineMatcher(q.Pattern, q.Regex)
 	if err != nil {
 		return nil, err

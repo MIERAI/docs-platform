@@ -310,7 +310,7 @@ func record(ctx context.Context, dp DocSetPlan, t TargetPlan, run *agentic.Runne
 	return n, nil
 }
 
-// ErrNoGroup: the instance configuration has no group of that name.
+// ErrNoGroup is returned when the instance configuration has no group of that name.
 var ErrNoGroup = errors.New("no such group in the instance configuration")
 
 // Find returns the named group.

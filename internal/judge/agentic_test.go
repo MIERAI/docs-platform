@@ -117,8 +117,10 @@ func agenticRequest(id, task string) *judgev1.Request {
 		SchemaVersion: judgev1.SchemaVersion, ID: id, Task: judgev1.Task{Type: task}, Mode: judgev1.ModeAgentic,
 		Claim:    judgev1.Claim{Repo: "pub", Path: "README.md", Line: 3, Text: "The port is 8080."},
 		Evidence: []judgev1.Evidence{},
-		Prompt: judgev1.Prompt{Version: "t/1", Hash: "0123456789abcdef", System: "s", User: "check the port",
-			ReplySchema: json.RawMessage(`{"type":"object","required":["facts","reason"],"properties":{"facts":{"type":"array"},"reason":{"type":"string"}}}`)},
+		Prompt: judgev1.Prompt{
+			Version: "t/1", Hash: "0123456789abcdef", System: "s", User: "check the port",
+			ReplySchema: json.RawMessage(`{"type":"object","required":["facts","reason"],"properties":{"facts":{"type":"array"},"reason":{"type":"string"}}}`),
+		},
 		Limits: judgev1.Limits{MaxTurns: 7, MaxRequestUSD: &usd},
 	}
 	if task == judgev1.TaskDocFacts {

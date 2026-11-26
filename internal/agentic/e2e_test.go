@@ -106,8 +106,10 @@ func fakeDrift(f *fakeIO, req *judgev1.Request) any {
 	}
 	return map[string]any{"drift": []any{
 		map[string]any{"kind": "moved", "old": "old/run.sh", "new": "scripts/run.sh", "summary": "the start script moved", "commits": []string{commit}},
-		map[string]any{"kind": "changed_value", "old": "port 1111", "new": "port 2222", "summary": "invented", "commits": []string{"deadbeef"},
-			"evidence": []any{map[string]any{"path": "config.yaml", "line": 1, "quote": "port: 2222"}}},
+		map[string]any{
+			"kind": "changed_value", "old": "port 1111", "new": "port 2222", "summary": "invented", "commits": []string{"deadbeef"},
+			"evidence": []any{map[string]any{"path": "config.yaml", "line": 1, "quote": "port: 2222"}},
+		},
 	}}
 }
 
@@ -139,8 +141,10 @@ func execGuard(t *testing.T, cloud bool) *judge.Guard {
 		t.Fatal(err)
 	}
 	t.Setenv("DOCSP_FAKE", "agentic")
-	p, err := judge.NewExec(judge.ExecConfig{Name: "exec", Model: "agent", Command: []string{exe}, PassEnv: []string{"DOCSP_FAKE"},
-		Cloud: cloud, Modes: []string{judgev1.ModeAgentic}, Billing: judgev1.BillingAPI, Timeout: 20 * time.Second, MaxConcurrency: 2})
+	p, err := judge.NewExec(judge.ExecConfig{
+		Name: "exec", Model: "agent", Command: []string{exe}, PassEnv: []string{"DOCSP_FAKE"},
+		Cloud: cloud, Modes: []string{judgev1.ModeAgentic}, Billing: judgev1.BillingAPI, Timeout: 20 * time.Second, MaxConcurrency: 2,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
