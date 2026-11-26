@@ -66,7 +66,10 @@ func (f *factory) Try(_ context.Context, files []factorytry.File, _ []string) (*
 	ok := strings.Contains(d, "sla: 0")
 	return &factorytry.Result{
 		Schema: factorytry.ResultSchema, Status: factorytry.StatusOK, Stage: "accept",
-		APIs: []factorytry.API{{ID: "a.calc", Cases: []factorytry.Case{{Name: "300.5 秒", Source: factorytry.SourceExample, Passed: ok}}}},
+		APIs: []factorytry.API{{ID: "a.calc", Cases: []factorytry.Case{
+			{Name: "300.5 秒", Source: factorytry.SourceExample, Passed: ok},
+			{Name: "hand", Source: factorytry.SourceHandTest}, // the code's own test, stale after the change: not the draft's business
+		}}},
 	}, nil
 }
 
