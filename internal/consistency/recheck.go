@@ -55,6 +55,9 @@ func Recheck(ctx context.Context, run *agentic.Runner, b *ledger.Builder, l *led
 				ok = false
 				continue
 			}
+			if old := l.Find(c.ID); old != nil && len(old.Evidence.Pinned) > 0 {
+				b.Pin(&c, ledger.PinnedPaths(old)) // the producer's footprint outlives the judgment
+			}
 			l.Merge(c)
 			res.Judged++
 			res.ByCat[c.Category]++

@@ -14,7 +14,10 @@ const sample = `{"schema": "factory.api-manifest/v1", "adapter": "go", "project"
    "rules": [{"path": "design/a/Calc.yaml", "line": 12, "when": "w", "then": "t"}],
    "escape": [{"path": "internal/handler/a/calc_logic.go", "kind": "logic", "exists": true},
               {"path": "internal/handler/a/calc_logic_test.go", "kind": "test", "exists": true},
-              {"path": "internal/handler/a/calc_extra.go", "kind": "handler", "exists": false}]}],
+              {"path": "internal/handler/a/calc_extra.go", "kind": "handler", "exists": false}]},
+  {"id": "a.sql", "name": "Sql", "domain": "a", "source": {"path": "specs/a/sql/spec.yaml"},
+   "rules": [{"path": "specs/a/sql/spec.yaml", "line": 9, "when": "w", "then": "t"}],
+   "escape": [{"path": "specs/a/sql/spec.yaml", "kind": "sql", "exists": true}]}],
   "hand_files": []}`
 
 func TestParseAndFootprints(t *testing.T) {
@@ -29,7 +32,8 @@ func TestParseAndFootprints(t *testing.T) {
 	if !idx[Key("a", "Calc")].Escaped() {
 		t.Error("an API with hand-written logic is escaped")
 	}
-	want := map[string][]string{"design/a/Calc.yaml:12": {"internal/handler/a/calc_logic.go", "internal/handler/a/calc_logic_test.go"}}
+	// Tests are not the implementation; SQL in the rule's own file is covered by the file itself.
+	want := map[string][]string{"design/a/Calc.yaml:12": {"internal/handler/a/calc_logic.go"}, "specs/a/sql/spec.yaml:9": {}}
 	if got := m.RuleFootprints(); !reflect.DeepEqual(got, want) {
 		t.Errorf("footprints %v, want %v", got, want)
 	}

@@ -43,20 +43,21 @@ type command func(ctx context.Context, args []string, stdout, stderr io.Writer) 
 
 // commands maps sub-command names to their implementations.
 var commands = map[string]command{
-	"check":      cmdCheck,
-	"impact":     cmdImpact,
-	"audit":      cmdAudit,
-	"eval-model": cmdEvalModel,
-	"stale":      cmdStale,
-	"schedule":   cmdSchedule,
-	"recheck":    cmdRecheck,
-	"sample":     cmdSample,
-	"slo":        cmdSLO,
-	"group":      cmdGroup,
-	"contract":   cmdContract,
-	"report":     cmdReport,
-	"draft":      cmdDraft,
-	"drafts":     cmdDrafts,
+	"check":         cmdCheck,
+	"impact":        cmdImpact,
+	"audit":         cmdAudit,
+	"eval-model":    cmdEvalModel,
+	"stale":         cmdStale,
+	"schedule":      cmdSchedule,
+	"recheck":       cmdRecheck,
+	"sample":        cmdSample,
+	"slo":           cmdSLO,
+	"group":         cmdGroup,
+	"contract":      cmdContract,
+	"factory-rules": cmdFactoryRules,
+	"report":        cmdReport,
+	"draft":         cmdDraft,
+	"drafts":        cmdDrafts,
 	"import-findings": func(_ context.Context, a []string, out, errw io.Writer) (int, error) {
 		return cmdImportFindings(a, out, errw)
 	},
@@ -110,6 +111,8 @@ commands:
   drafts     what became of the drafts: acceptance, revert rate, diff size; docs to generate or link instead
   group      repository groups: plan (doc sets, declared targets, shared drift scans), stale, judge
   contract   design-first specs vs the code: interface diff + which side moved (git history; no model)
+  factory-rules
+             an API factory's business rules with hand-written code into the ledger, pinned to that code
   stale      claims of the evidence ledger whose line or evidence changed since judged (no model)
   eval-model score a model provider per task (judge, draft) on a frozen eval set; -dry-run estimates cost
   import-findings

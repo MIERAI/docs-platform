@@ -116,10 +116,16 @@ type statement struct {
 	Path    string
 	Line    int
 	Context string // ±3 lines, the line under test marked ">>"
+	Hint    string // code the statement governs, by the producer's word (Options.Hint)
 }
 
 func caseBlock(s statement) string {
-	return fmt.Sprintf("Documentation file: %s\nStatement under test: line %d\n\n%s\n", s.Path, s.Line, s.Context)
+	b := fmt.Sprintf("Documentation file: %s\nStatement under test: line %d\n\n%s\n", s.Path, s.Line, s.Context)
+	if s.Hint != "" {
+		b += "\nThe code generator that owns this document says the statement is implemented by hand-written code in: " +
+			s.Hint + "\nStart there; the verdict must still rest on what you read.\n"
+	}
+	return b
 }
 
 func linePrompts(s statement, drift, repo string) prompts {

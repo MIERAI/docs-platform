@@ -94,6 +94,11 @@ type Evidence struct {
 	// they can send the claim back to the judge, never support a verdict.
 	Weak    []Scope  `json:"weak,omitempty"`
 	Members []Member `json:"members,omitempty"`
+	// Pinned are files a producer of the code declares the claim governs (an API factory's
+	// manifest: the hand-written code behind a business rule), with their blobs at the
+	// verified revision. Like Weak they are a footprint, not evidence: a change re-opens the
+	// claim; they are always on and survive re-judging.
+	Pinned []File `json:"pinned,omitempty"`
 }
 
 // Empty reports whether the claim rests on no evidence (it cannot be invalidated, only
@@ -237,6 +242,16 @@ func (l *Ledger) Merge(cs ...Claim) {
 			l.Claims[i] = c
 		}
 	}
+}
+
+// Find returns the claim with the given id (nil when there is none).
+func (l *Ledger) Find(id string) *Claim {
+	for i := range l.Claims {
+		if l.Claims[i].ID == id {
+			return &l.Claims[i]
+		}
+	}
+	return nil
 }
 
 // Remove drops the claims with the given ids and returns how many it removed.
