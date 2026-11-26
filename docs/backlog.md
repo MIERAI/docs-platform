@@ -26,16 +26,16 @@ classification. Order = implementation order. Every item: tests, docs, no model 
 
 ## B2 Freshness, cycle counting, SLIs and error budget
 
-- [ ] B2.1 Freshness policy in the instance config: `max_age_days`, churn threshold (commits,
+- [x] B2.1 Freshness policy in the instance config: `max_age_days`, churn threshold (commits,
       changed lines in the evidence scope), ABC classes (churn / importance) with per-class
       max age.
-- [ ] B2.2 Scheduler `docsp schedule`: priority stale > due > periodic recheck, ABC and age
+- [x] B2.2 Scheduler `docsp schedule`: priority stale > due > periodic recheck, ABC and age
       within a priority; minimum count per run so every claim is verified within the period;
       budget cap (requests / USD); reports the shortfall instead of skipping silently.
-- [ ] B2.3 SLIs: accuracy (weekly random sample, strong-model re-audit with harness
+- [x] B2.3 SLIs: accuracy (weekly random sample, strong-model re-audit with harness
       validation; sampling command only, paid runs by the operator), freshness (share
       verified within max age), phantom rate (deterministic dangling references).
-- [ ] B2.4 SLO and error budget: initial accuracy ≥ 80%, budget burn → full re-audit of the
+- [x] B2.4 SLO and error budget: initial accuracy ≥ 80%, budget burn → full re-audit of the
       doc set + shorter max age; report SLIs, budget remaining, cost.
 
 ## B3 Repo groups and declared refs

@@ -210,6 +210,18 @@ detail}], new_line, verified_ref}]`; reason kinds `doc_removed`, `doc_line_chang
 `evidence_changed`, `evidence_removed`, `drift_evidence_changed`,
 `removed_path_reappeared`, `absence_scope_changed`, `path_appeared`, `no_evidence`.
 
+## schedule/v1 and slo/v1
+
+schedule/v1: one scheduler run - `counts {claims, stale, due, recheck, cycle_quota, picked,
+shortfall}`, `estimated_usd`, `freshness`, `picked[]` and `shortfall[]` of `{id, path, line,
+class, priority (0 stale, 1 due, 2 recheck, 3 cycle), reason, age_days, max_age_days,
+churn_commits, churn_lines, required}`.
+
+slo/v1: `accuracy`, `freshness`, `phantom_rate` as `{value, target, n, bad, met, low, high,
+note}`; `error_budget {allowed, used, remaining, burned}`; `by_doc[]`; `actions[{path,
+action: full_reaudit, max_age_days, why}]`; `cost {sample_usd, sample_billing,
+scheduled_usd_estimate, scheduled_claims}`.
+
 ## instance/v1
 
 The operator's settings (YAML): `ai.judge` and `ai.draft` (provider, model, effort, timeout,

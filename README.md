@@ -197,6 +197,36 @@ is `fresh`. Output: stale/v1 JSON (`-format json`, `-out FILE`, mode 0600) or a 
 The ledger is private data (documentation text and paths): mode 0600, never inside an
 inspected repository.
 
+### Continuous consistency: `docsp schedule`, `recheck`, `sample`, `slo`
+
+Cycle counting for documentation (docs/design.md §12), driven by the ledger and the
+instance configuration's `consistency:` block:
+
+```yaml
+consistency:
+  max_age_days: 30          # every claim is verified again within this many days
+  churn_commits: 10         # ... or sooner when its evidence scope churns this much
+  churn_lines: 300
+  classes:                  # ABC: first match wins; others are C with max_age_days
+    - {name: A, max_age_days: 7, docs: ["docs/runbooks/**", "README.md"]}
+    - {name: B, max_age_days: 14, min_commits_90d: 20}
+  run_interval_days: 1
+  budget: {max_claims: 50, max_usd: 2, usd_per_claim: 0.04}
+  slo: {accuracy: 0.8, freshness: 0.95, phantom_rate: 0.01}
+  sample_size: 30
+```
+
+- `docsp schedule -ledger L -instance-config I [-state S] [repo]`: the claims to judge again
+  this run (schedule/v1) - stale, due, rechecks, then the cycle quota - within the budget; the
+  rest is reported as shortfall.
+- `docsp recheck -schedule FILE -ledger L -instance-config I [repo]`: judges them (agentic) and
+  updates the ledger.
+- `docsp sample -ledger L -out set.jsonl [-n N] [-seed S] [repo]`: the accuracy sample, an eval
+  set to re-audit with `docsp eval-model -mode agentic` (a paid run the operator starts).
+- `docsp slo -ledger L -instance-config I [-sample-result eval.json] [-state S -apply] [repo]`:
+  accuracy, freshness and phantom rate against their objectives, the error budget, the
+  actions a burned budget triggers (full re-audit, halved max age), and the cost (slo/v1).
+
 ### `docsp import-findings --repo-name NAME [--repo owner/name] FILE.jsonl`
 
 Turns a reviewed backlog (the ground-truth JSON Lines format: `repo, file, line, claim, actual,

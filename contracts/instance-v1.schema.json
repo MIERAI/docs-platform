@@ -130,6 +130,102 @@
           }
         }
       }
+    },
+    "consistency": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Continuous-consistency policy (docs/design.md §12): freshness / cycle counting, ABC classes, per-run budget, SLO.",
+      "properties": {
+        "max_age_days": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "churn_commits": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "churn_lines": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "run_interval_days": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sample_size": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "classes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "max_age_days"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "max_age_days": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "docs": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "min_commits_90d": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        },
+        "budget": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "max_claims": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "max_usd": {
+              "type": "number",
+              "minimum": 0
+            },
+            "usd_per_claim": {
+              "type": "number",
+              "minimum": 0
+            }
+          }
+        },
+        "slo": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "accuracy": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "freshness": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "phantom_rate": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          }
+        }
+      }
     }
   },
   "$defs": {

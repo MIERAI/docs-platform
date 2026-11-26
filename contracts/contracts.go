@@ -66,3 +66,13 @@ var Ledger []byte
 //
 //go:embed stale-v1.schema.json
 var Stale []byte
+
+// Schedule is docs-platform/schedule/v1: one cycle-count run of the consistency scheduler.
+//
+//go:embed schedule-v1.schema.json
+var Schedule []byte
+
+// SLO is docs-platform/slo/v1: documentation consistency SLIs, error budget and cost.
+//
+//go:embed slo-v1.schema.json
+var SLO []byte

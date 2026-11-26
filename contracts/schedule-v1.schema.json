@@ -1,0 +1,146 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/MIERAI/docs-platform/contracts/schedule-v1.schema.json",
+  "title": "docs-platform/schedule/v1",
+  "description": "One cycle-count run (docs/design.md §12.2): the ledger's claims to judge again - stale, due by age / churn / burned error budget, no-evidence rechecks, and enough of the oldest that every claim is verified within its class's max age - within the run's budget; what the budget cut is the shortfall.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "repo",
+    "ref",
+    "planned_at",
+    "counts",
+    "estimated_usd",
+    "picked"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^1\\.[0-9]+$"
+    },
+    "repo": {
+      "type": "string"
+    },
+    "ref": {
+      "type": "string"
+    },
+    "planned_at": {
+      "type": "string"
+    },
+    "counts": {
+      "type": "object",
+      "required": [
+        "claims",
+        "stale",
+        "due",
+        "recheck",
+        "cycle_quota",
+        "picked",
+        "shortfall"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "claims": {
+          "type": "integer"
+        },
+        "stale": {
+          "type": "integer"
+        },
+        "due": {
+          "type": "integer"
+        },
+        "recheck": {
+          "type": "integer"
+        },
+        "cycle_quota": {
+          "type": "integer"
+        },
+        "picked": {
+          "type": "integer"
+        },
+        "shortfall": {
+          "type": "integer"
+        }
+      }
+    },
+    "estimated_usd": {
+      "type": "number"
+    },
+    "freshness": {
+      "type": "number",
+      "description": "SLI 2: share of claims verified within their max age and not stale"
+    },
+    "picked": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/pick"
+      }
+    },
+    "shortfall": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/pick"
+      }
+    }
+  },
+  "$defs": {
+    "pick": {
+      "type": "object",
+      "required": [
+        "id",
+        "path",
+        "line",
+        "class",
+        "priority",
+        "reason",
+        "age_days",
+        "max_age_days",
+        "required"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "line": {
+          "type": "integer"
+        },
+        "class": {
+          "type": "string"
+        },
+        "priority": {
+          "type": "integer",
+          "enum": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "description": "0 stale, 1 due (age, churn, error budget), 2 recheck (no evidence, old), 3 cycle count"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "age_days": {
+          "type": "number"
+        },
+        "max_age_days": {
+          "type": "integer"
+        },
+        "churn_commits": {
+          "type": "integer"
+        },
+        "churn_lines": {
+          "type": "integer"
+        },
+        "required": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

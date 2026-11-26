@@ -20,6 +20,23 @@ Design: docs/design.md §12; plan: docs/backlog.md.
 - `bench ledger-replay`: replays a ledger over real history (per-commit stale counts) and
   scores causing-commit recall of ground-truth positives.
 - `ls-tree` joins the read-only git allowlist (tree snapshots).
+- **Cycle counting and the consistency SLO** (B2; contracts schedule/v1 and slo/v1,
+  `internal/consistency`, instance `consistency:` block):
+  - `docsp schedule`: which claims to judge again this run - stale first, then due (older
+    than the class's max age, churn in the evidence scope over a threshold, or a document
+    whose error budget burned), no-evidence rechecks, then enough of the oldest that every
+    claim is verified within its ABC class's max age; capped by `budget.max_claims` /
+    `max_usd`, the cut reported as shortfall. ABC classes by document glob (importance) or
+    90-day churn of the claim's footprint.
+  - `docsp recheck -schedule FILE`: judges the picked claims (agentic, any configured
+    provider), merges them into the ledger, retires claims whose line was edited.
+  - `docsp sample`: the weekly accuracy sample (seeded, reproducible) as an eval set for an
+    operator-run strong-model re-audit (`eval-model -mode agentic`).
+  - `docsp slo`: SLI 1 accuracy (from the sample's re-audit, with a 95% interval), SLI 2
+    freshness, SLI 3 phantom rate (dangling references at medium confidence or better plus
+    open dangling_reference claims); the accuracy error budget (initial objective 80%); a
+    burned budget triggers a full re-audit of the document and a halved max age (`-apply`
+    writes them to the `-state` file the scheduler reads); cost of the sample and the run.
 
 ## 0.4.2 - 2026-11-26
 

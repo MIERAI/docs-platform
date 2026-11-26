@@ -46,6 +46,10 @@ var commands = map[string]command{
 	"audit":      cmdAudit,
 	"eval-model": cmdEvalModel,
 	"stale":      cmdStale,
+	"schedule":   cmdSchedule,
+	"recheck":    cmdRecheck,
+	"sample":     cmdSample,
+	"slo":        cmdSLO,
 	"import-findings": func(_ context.Context, a []string, out, errw io.Writer) (int, error) {
 		return cmdImportFindings(a, out, errw)
 	},
@@ -90,6 +94,10 @@ commands:
   check      that documentation references exist in code and public symbols are documented
   audit      semantic audit: claims in the docs vs the code (deterministic checks + optional judge model)
   impact     doc sections a change affects (derived from the reference graph) + explicit rules / waivers
+  schedule   cycle count: the ledger's claims to judge again in this run (stale, due, quota), within budget
+  recheck    judge a schedule's claims again (agentic) and update the ledger
+  sample     draw the weekly accuracy sample of the ledger (an eval set for a paid re-audit)
+  slo        documentation consistency SLIs (accuracy, freshness, phantom rate), error budget, cost
   stale      claims of the evidence ledger whose line or evidence changed since judged (no model)
   eval-model score a model provider per task (judge, draft) on a frozen eval set; -dry-run estimates cost
   import-findings

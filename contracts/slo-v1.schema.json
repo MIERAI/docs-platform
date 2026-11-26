@@ -1,0 +1,183 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/MIERAI/docs-platform/contracts/slo-v1.schema.json",
+  "title": "docs-platform/slo/v1",
+  "description": "Documentation consistency SLO report (docs/design.md §12.3): accuracy (record accuracy of a random sample, re-audited by a strong model with harness validation), freshness (share verified within max age), phantom rate (dangling references); the accuracy error budget, the actions its burn triggers, and the cost.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "repo",
+    "ref",
+    "reported_at",
+    "accuracy",
+    "freshness",
+    "phantom_rate",
+    "cost"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^1\\.[0-9]+$"
+    },
+    "repo": {
+      "type": "string"
+    },
+    "ref": {
+      "type": "string"
+    },
+    "reported_at": {
+      "type": "string"
+    },
+    "accuracy": {
+      "$ref": "#/$defs/sli"
+    },
+    "freshness": {
+      "$ref": "#/$defs/sli"
+    },
+    "phantom_rate": {
+      "$ref": "#/$defs/sli"
+    },
+    "error_budget": {
+      "type": "object",
+      "required": [
+        "allowed",
+        "used",
+        "remaining",
+        "burned"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "allowed": {
+          "type": "number"
+        },
+        "used": {
+          "type": "number"
+        },
+        "remaining": {
+          "type": "number"
+        },
+        "burned": {
+          "type": "boolean"
+        }
+      }
+    },
+    "by_doc": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "path",
+          "sampled",
+          "wrong",
+          "burned"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "sampled": {
+            "type": "integer"
+          },
+          "wrong": {
+            "type": "integer"
+          },
+          "burned": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "path",
+          "action",
+          "why"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "full_reaudit"
+            ]
+          },
+          "max_age_days": {
+            "type": "integer"
+          },
+          "why": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "cost": {
+      "type": "object",
+      "required": [
+        "sample_usd",
+        "scheduled_usd_estimate",
+        "scheduled_claims"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "sample_usd": {
+          "type": "number"
+        },
+        "sample_billing": {
+          "type": "string"
+        },
+        "scheduled_usd_estimate": {
+          "type": "number"
+        },
+        "scheduled_claims": {
+          "type": "integer"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "sli": {
+      "type": "object",
+      "required": [
+        "target",
+        "n",
+        "bad",
+        "met"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "type": "number"
+        },
+        "target": {
+          "type": "number"
+        },
+        "n": {
+          "type": "integer"
+        },
+        "bad": {
+          "type": "integer"
+        },
+        "met": {
+          "type": "boolean"
+        },
+        "low": {
+          "type": "number"
+        },
+        "high": {
+          "type": "number"
+        },
+        "note": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

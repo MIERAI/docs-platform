@@ -43,6 +43,107 @@ type Instance struct {
 	// Prices override or extend the built-in list prices used for estimates (USD per million
 	// tokens, keyed by model id).
 	Prices map[string]Price `yaml:"prices"`
+	// Consistency is the continuous-consistency policy: freshness (cycle counting), ABC
+	// classes, the per-run budget and the SLO (docs/design.md §12).
+	Consistency Consistency `yaml:"consistency"`
+}
+
+// Consistency is the continuous-consistency policy (0 / empty = the default).
+type Consistency struct {
+	// MaxAgeDays: every claim is verified again within this many days (default 30).
+	MaxAgeDays int `yaml:"max_age_days"`
+	// ChurnCommits / ChurnLines: a claim is due early when this many commits, or changed
+	// lines, touched its evidence scope since it was verified (0 = not checked).
+	ChurnCommits int `yaml:"churn_commits"`
+	ChurnLines   int `yaml:"churn_lines"`
+	// Classes are the ABC classes, first match wins; a claim matching none is class C with
+	// MaxAgeDays.
+	Classes []ABCClass `yaml:"classes"`
+	// RunIntervalDays is how often the scheduler runs (default 1): it picks at least the
+	// claims needed so that every claim is verified within its class's max age.
+	RunIntervalDays int `yaml:"run_interval_days"`
+	// Budget caps one scheduler run.
+	Budget RunBudget `yaml:"budget"`
+	SLO    SLO       `yaml:"slo"`
+	// SampleSize is the size of the weekly accuracy sample (default 30).
+	SampleSize int `yaml:"sample_size"`
+}
+
+// ABCClass is one ABC class: by document glob (importance) or by recent churn.
+type ABCClass struct {
+	Name       string   `yaml:"name"`
+	MaxAgeDays int      `yaml:"max_age_days"`
+	Docs       []string `yaml:"docs"`
+	// MinCommits90d: the class applies when at least this many commits touched the claim's
+	// document or evidence in the last 90 days (0 = by document glob only).
+	MinCommits90d int `yaml:"min_commits_90d"`
+}
+
+// RunBudget caps one scheduler run (0 = no cap of that kind).
+type RunBudget struct {
+	MaxClaims int     `yaml:"max_claims"`
+	MaxUSD    float64 `yaml:"max_usd"`
+	// USDPerClaim estimates one re-judgment (default 0.04, the measured agentic cost).
+	USDPerClaim float64 `yaml:"usd_per_claim"`
+}
+
+// SLO holds the documentation-consistency objectives (rates 0..1).
+type SLO struct {
+	// Accuracy: share of sampled claims that still hold (default 0.8: error budget 20%).
+	Accuracy float64 `yaml:"accuracy"`
+	// Freshness: share of claims verified within their max age (default 0.95).
+	Freshness float64 `yaml:"freshness"`
+	// PhantomRate: largest acceptable share of dangling references (default 0.01).
+	PhantomRate float64 `yaml:"phantom_rate"`
+}
+
+// WithDefaults fills unset fields.
+func (c Consistency) WithDefaults() Consistency {
+	def := func(v *int, d int) {
+		if *v <= 0 {
+			*v = d
+		}
+	}
+	def(&c.MaxAgeDays, 30)
+	def(&c.RunIntervalDays, 1)
+	def(&c.SampleSize, 30)
+	if c.Budget.USDPerClaim <= 0 {
+		c.Budget.USDPerClaim = 0.04
+	}
+	if c.SLO.Accuracy <= 0 {
+		c.SLO.Accuracy = 0.8
+	}
+	if c.SLO.Freshness <= 0 {
+		c.SLO.Freshness = 0.95
+	}
+	if c.SLO.PhantomRate <= 0 {
+		c.SLO.PhantomRate = 0.01
+	}
+	return c
+}
+
+func (s SLO) validate() []error {
+	for _, r := range []float64{s.Accuracy, s.Freshness, s.PhantomRate} {
+		if r < 0 || r > 1 {
+			return []error{errors.New("consistency.slo: rates are between 0 and 1")}
+		}
+	}
+	return nil
+}
+
+func (c Consistency) validate() []error {
+	var errs []error
+	if c.MaxAgeDays < 0 || c.ChurnCommits < 0 || c.ChurnLines < 0 || c.RunIntervalDays < 0 || c.SampleSize < 0 ||
+		c.Budget.MaxClaims < 0 || c.Budget.MaxUSD < 0 || c.Budget.USDPerClaim < 0 {
+		errs = append(errs, errors.New("consistency: limits must not be negative"))
+	}
+	errs = append(errs, c.SLO.validate()...)
+	for i, k := range c.Classes {
+		if k.Name == "" || k.MaxAgeDays <= 0 || k.MinCommits90d < 0 {
+			errs = append(errs, fmt.Errorf("consistency.classes[%d]: name and a positive max_age_days are required", i))
+		}
+	}
+	return errs
 }
 
 // AI selects a model per task; each task is swappable and evaluated on its own.
@@ -238,6 +339,7 @@ func (in *Instance) Validate() error {
 	errs = append(errs, in.AI.Judge.validate("ai.judge")...)
 	errs = append(errs, in.AI.Draft.validate("ai.draft")...)
 	errs = append(errs, in.Classification.validate()...)
+	errs = append(errs, in.Consistency.validate()...)
 	for id, p := range in.Prices {
 		if p.Input < 0 || p.Output < 0 || p.CacheRead < 0 {
 			errs = append(errs, fmt.Errorf("prices[%s]: must not be negative", id))

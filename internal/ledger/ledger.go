@@ -208,3 +208,20 @@ func (l *Ledger) Merge(cs ...Claim) {
 		}
 	}
 }
+
+// Remove drops the claims with the given ids and returns how many it removed.
+func (l *Ledger) Remove(ids ...string) int {
+	drop := map[string]bool{}
+	for _, id := range ids {
+		drop[id] = true
+	}
+	kept := l.Claims[:0]
+	for _, c := range l.Claims {
+		if !drop[c.ID] {
+			kept = append(kept, c)
+		}
+	}
+	n := len(l.Claims) - len(kept)
+	l.Claims = kept
+	return n
+}
