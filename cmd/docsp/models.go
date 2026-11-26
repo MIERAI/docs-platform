@@ -33,6 +33,7 @@ type agenticFlags struct {
 	mode, group, driftCache string
 	noDrift, noCache        bool
 	worktrees               worktreeFlag
+	ledger                  string
 }
 
 func (a *agenticFlags) register(fs *flag.FlagSet, worktrees bool) {
@@ -41,6 +42,7 @@ func (a *agenticFlags) register(fs *flag.FlagSet, worktrees bool) {
 	fs.StringVar(&a.driftCache, "drift-cache", "", "agentic: directory caching drift lists by HEAD SHA (default: the user cache directory, docsp/drift)")
 	fs.BoolVar(&a.noCache, "no-drift-cache", false, "agentic: always run the drift scan, cache nothing")
 	fs.BoolVar(&a.noDrift, "no-drift", false, "agentic: skip the drift scan (per-line judgment without drift context)")
+	fs.StringVar(&a.ledger, "ledger", "", "agentic: claim ledger file (mode 0600) receiving every judged line with its validated evidence")
 	if worktrees {
 		fs.Var(&a.worktrees, "worktree", "agentic: NAME=DIR, a checkout of repository NAME (repeatable; at the items' revision)")
 	}
@@ -181,7 +183,7 @@ func evalTask(ctx context.Context, set *evalmodel.Set, in *instance.Instance, ta
 		if err != nil {
 			return nil, err
 		}
-		o.Agentic = &evalmodel.Agentic{Worktrees: f.agentic.worktrees, Class: in.Classification, CacheDir: cache, NoDrift: f.agentic.noDrift, Settings: st}
+		o.Agentic = &evalmodel.Agentic{Worktrees: f.agentic.worktrees, Class: in.Classification, CacheDir: cache, NoDrift: f.agentic.noDrift, Settings: st, Ledger: f.agentic.ledger}
 	default:
 		return nil, fmt.Errorf("-mode %q: want snippet or agentic", f.agentic.mode)
 	}
@@ -249,6 +251,9 @@ func writeScores(w io.Writer, res *evalmodel.Result) {
 }
 
 func writeAgentic(w io.Writer, res *evalmodel.Result) {
+	if res.LedgerError != "" {
+		_, _ = fmt.Fprintln(w, "  ledger NOT written: "+res.LedgerError)
+	}
 	_, _ = fmt.Fprintf(w, "  agentic mode, %s grouping, prompt templates %s\n", res.Group, res.PromptTemplateHash)
 	for _, d := range res.Drift {
 		state := "scanned"

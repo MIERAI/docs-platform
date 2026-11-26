@@ -9,6 +9,8 @@
 //	                                    reviewed backlog → findings/v1 JSON
 //	docsp extract [repo]                dump what the extractors found (extract/v1)
 //	docsp validate FILE                 validate a findings/v1 document
+//	docsp stale -ledger FILE [-ref REV] [repo]
+//	                                    claims whose evidence changed (no model)
 //	docsp judge-tools-mcp -spec FILE    (internal) serve the read-only judge-tools over MCP stdio
 //	docsp version
 package main
@@ -34,6 +36,26 @@ func main() {
 	os.Exit(run(context.Background(), os.Args[1:], os.Stdout, os.Stderr))
 }
 
+// command runs one sub-command.
+type command func(ctx context.Context, args []string, stdout, stderr io.Writer) (int, error)
+
+// commands maps sub-command names to their implementations.
+var commands = map[string]command{
+	"check":      cmdCheck,
+	"impact":     cmdImpact,
+	"audit":      cmdAudit,
+	"eval-model": cmdEvalModel,
+	"stale":      cmdStale,
+	"import-findings": func(_ context.Context, a []string, out, errw io.Writer) (int, error) {
+		return cmdImportFindings(a, out, errw)
+	},
+	"extract":  func(_ context.Context, a []string, out, errw io.Writer) (int, error) { return cmdExtract(a, out, errw) },
+	"validate": func(_ context.Context, a []string, out, _ io.Writer) (int, error) { return cmdValidate(a, out) },
+	"judge-tools-mcp": func(ctx context.Context, a []string, out, errw io.Writer) (int, error) {
+		return cmdJudgeToolsMCP(ctx, a, os.Stdin, out, errw)
+	},
+}
+
 func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		usage(stderr)
@@ -41,26 +63,12 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	}
 	var err error
 	code := exitOK
-	switch args[0] {
-	case "check":
-		code, err = cmdCheck(ctx, args[1:], stdout, stderr)
-	case "impact":
-		code, err = cmdImpact(ctx, args[1:], stdout, stderr)
-	case "audit":
-		code, err = cmdAudit(ctx, args[1:], stdout, stderr)
-	case "eval-model":
-		code, err = cmdEvalModel(ctx, args[1:], stdout, stderr)
-	case "import-findings":
-		code, err = cmdImportFindings(args[1:], stdout, stderr)
-	case "extract":
-		code, err = cmdExtract(args[1:], stdout, stderr)
-	case "validate":
-		code, err = cmdValidate(args[1:], stdout)
-	case "judge-tools-mcp":
-		code, err = cmdJudgeToolsMCP(ctx, args[1:], os.Stdin, stdout, stderr)
-	case "version", "--version":
+	switch c, ok := commands[args[0]]; {
+	case ok:
+		code, err = c(ctx, args[1:], stdout, stderr)
+	case args[0] == "version" || args[0] == "--version":
 		_, err = fmt.Fprintln(stdout, "docsp", version)
-	case "help", "-h", "--help":
+	case args[0] == "help" || args[0] == "-h" || args[0] == "--help":
 		usage(stdout)
 	default:
 		usage(stderr)
@@ -82,6 +90,7 @@ commands:
   check      that documentation references exist in code and public symbols are documented
   audit      semantic audit: claims in the docs vs the code (deterministic checks + optional judge model)
   impact     doc sections a change affects (derived from the reference graph) + explicit rules / waivers
+  stale      claims of the evidence ledger whose line or evidence changed since judged (no model)
   eval-model score a model provider per task (judge, draft) on a frozen eval set; -dry-run estimates cost
   import-findings
              turn a reviewed backlog (JSON Lines) into findings/v1 for the ledger

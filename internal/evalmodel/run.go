@@ -48,6 +48,8 @@ type Result struct {
 	Group string `json:"group,omitempty"`
 	// Drift (1.1, agentic) summarises the drift scan of each repository.
 	Drift []DriftSummary `json:"drift,omitempty"`
+	// LedgerError is set when writing the claim ledger failed.
+	LedgerError string `json:"ledger_error,omitempty"`
 }
 
 // SetRef identifies the frozen set.

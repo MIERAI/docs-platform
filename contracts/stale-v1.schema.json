@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/MIERAI/docs-platform/contracts/stale-v1.schema.json",
+  "title": "docs-platform/stale/v1",
+  "description": "The ledger's claims of one repository checked against one revision, without any model: fresh (evidence unchanged), stale (the line or evidence changed: judge again) or recheck (no evidence: periodic recheck only).",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "repo",
+    "ref",
+    "checked_at",
+    "counts",
+    "claims"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^1\\.[0-9]+$"
+    },
+    "repo": {
+      "type": "string"
+    },
+    "ref": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "checked_at": {
+      "type": "string"
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "integer"
+      }
+    },
+    "claims": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "repo",
+          "path",
+          "line",
+          "category",
+          "status",
+          "verified_ref"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "repo": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "line": {
+            "type": "integer"
+          },
+          "category": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "fresh",
+              "stale",
+              "recheck"
+            ]
+          },
+          "new_line": {
+            "type": "integer"
+          },
+          "verified_ref": {
+            "type": "string"
+          },
+          "reasons": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "kind"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "doc_removed",
+                    "doc_line_changed",
+                    "evidence_changed",
+                    "evidence_removed",
+                    "drift_evidence_changed",
+                    "removed_path_reappeared",
+                    "absence_scope_changed",
+                    "path_appeared",
+                    "no_evidence"
+                  ]
+                },
+                "path": {
+                  "type": "string"
+                },
+                "detail": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

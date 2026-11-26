@@ -43,6 +43,9 @@ type Options struct {
 	// is its grouping (line or doc).
 	Agentic      *agentic.Runner
 	AgenticGroup string
+	// OnJudged receives every agentic line result (for the claim ledger); calls are
+	// serialised.
+	OnJudged func([]agentic.LineResult)
 }
 
 // Stats describe one audit run.

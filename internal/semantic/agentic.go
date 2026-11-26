@@ -62,6 +62,9 @@ func (c *checker) askAgentic(qs []question) error {
 			mu.Lock()
 			defer mu.Unlock()
 			refused = append(refused, c.agenticResults(u, res)...)
+			if c.opt.OnJudged != nil {
+				c.opt.OnJudged(res)
+			}
 		}(u)
 	}
 	wg.Wait()

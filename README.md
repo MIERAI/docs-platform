@@ -185,6 +185,18 @@ In agentic mode the scores add the derived categories, `unverifiable_rate` (not 
 unknown), `evidence_rejection_rate`, `parse_failures` and `parse_fallbacks`, and each item
 carries its facts with the check of every piece of evidence.
 
+### `docsp stale -ledger FILE [-ref REV] [-repo-name NAME] [repo]`
+
+Checks the claim ledger (contract ledger/v1, written by `audit` / `eval-model` in agentic
+mode with `-ledger FILE`) against a revision, without any model. A claim is `stale` - judge
+it again - when its line was edited or its document removed, a file it quotes changed or
+vanished, a file inside one of its absence searches was added, changed or removed, a path it
+calls missing appeared, or a drift entry's removed path reappeared. A claim with no evidence
+(unknown, unverifiable) is `recheck`: only the periodic recheck can renew it. Everything else
+is `fresh`. Output: stale/v1 JSON (`-format json`, `-out FILE`, mode 0600) or a text summary.
+The ledger is private data (documentation text and paths): mode 0600, never inside an
+inspected repository.
+
 ### `docsp import-findings --repo-name NAME [--repo owner/name] FILE.jsonl`
 
 Turns a reviewed backlog (the ground-truth JSON Lines format: `repo, file, line, claim, actual,

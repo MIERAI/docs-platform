@@ -56,3 +56,13 @@ var EvalResult []byte
 //
 //go:embed judge-tools-v1.schema.json
 var JudgeTools []byte
+
+// Ledger is docs-platform/ledger/v1: judged claims and the validated evidence they rest on.
+//
+//go:embed ledger-v1.schema.json
+var Ledger []byte
+
+// Stale is docs-platform/stale/v1: the ledger's claims checked against a newer revision.
+//
+//go:embed stale-v1.schema.json
+var Stale []byte

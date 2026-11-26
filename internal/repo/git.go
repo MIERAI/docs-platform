@@ -15,6 +15,7 @@ import (
 var readOnlyGit = map[string]bool{
 	"diff": true, "log": true, "rev-parse": true, "ls-files": true, "show": true,
 	"blame": true, "merge-base": true, // the agentic judge's changes_since and drift validation
+	"ls-tree": true, // the evidence ledger's tree snapshots
 }
 
 // refPattern accepts branch names, tags, SHAs and rev expressions like HEAD~1 or origin/main,

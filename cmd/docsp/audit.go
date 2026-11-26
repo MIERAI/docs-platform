@@ -83,5 +83,5 @@ func auditAgentic(af *agenticFlags) (*check.AgenticAudit, error) {
 	if af.noCache {
 		cache = ""
 	}
-	return &check.AgenticAudit{Group: af.group, CacheDir: cache, NoDrift: af.noDrift}, nil
+	return &check.AgenticAudit{Group: af.group, CacheDir: cache, NoDrift: af.noDrift, Ledger: af.ledger}, nil
 }

@@ -7,20 +7,20 @@ classification. Order = implementation order. Every item: tests, docs, no model 
 
 ## B1 Claim and evidence ledger, deterministic invalidation
 
-- [ ] B1.1 Contract `contracts/ledger-v1.schema.json`: claims (stable id independent of the
+- [x] B1.1 Contract `contracts/ledger-v1.schema.json`: claims (stable id independent of the
       line number, doc blob, category, verdict, `last_verified_at`, `last_verified_ref`,
       model, prompt hash, facts) and validated evidence addressed as `repo@ref:path:line`:
       quote (blob), drift (entry, commits, blobs, removed path), absence (pattern, glob,
       regex, covered file-set hash and count), path_missing (target).
-- [ ] B1.2 Ledger store: one JSON file per instance, mode 0600, outside inspected
+- [x] B1.2 Ledger store: one JSON file per instance, mode 0600, outside inspected
       repositories; merge (newer verification of the same claim wins); private-data aware
       (paths of private classification are kept but flagged; nothing leaves the machine).
-- [ ] B1.3 Writers: agentic `audit` and `eval-model` record each judged line (`-ledger FILE`).
-- [ ] B1.4 `docsp stale -ledger FILE [-ref R] REPO`: deterministic invalidation against a new
+- [x] B1.3 Writers: agentic `audit` and `eval-model` record each judged line (`-ledger FILE`).
+- [x] B1.4 `docsp stale -ledger FILE [-ref R] REPO`: deterministic invalidation against a new
       revision (doc line gone or moved, evidence blob changed or gone, absence scope file set
       changed, path_missing target appeared, drift removed path reappeared); claims without
       evidence → `recheck`. Output contract stale/v1 + text summary.
-- [ ] B1.5 Offline validation (`bench ledger-replay`): ledger from the frozen TEST answers;
+- [x] B1.5 Offline validation (`bench ledger-replay`): ledger from the frozen TEST answers;
       per-commit stale counts over real history; causing-commit recall of GT positives vs the
       impact selection (52% first / 67% any on the TEST slice).
 

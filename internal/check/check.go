@@ -23,6 +23,7 @@ import (
 	"github.com/MIERAI/docs-platform/internal/findings"
 	"github.com/MIERAI/docs-platform/internal/instance"
 	"github.com/MIERAI/docs-platform/internal/judge"
+	"github.com/MIERAI/docs-platform/internal/ledger"
 	"github.com/MIERAI/docs-platform/internal/match"
 	"github.com/MIERAI/docs-platform/internal/model"
 	"github.com/MIERAI/docs-platform/internal/plugin"
@@ -248,6 +249,8 @@ type AgenticAudit struct {
 	// CacheDir caches drift lists by HEAD SHA ("" = no cache).
 	CacheDir string
 	NoDrift  bool
+	// Ledger, when set, receives a claim for every judged line (mode 0600).
+	Ledger string
 }
 
 // AuditResult of one audit.
@@ -289,14 +292,21 @@ func Audit(ctx context.Context, o AuditOptions) (*AuditResult, error) {
 		StaleCommits: cfg.Audit.StaleCommits, Judge: g, MaxQuestions: o.MaxQuestions, Repo: repoName(o.Options),
 		Suppressed: suppressedLines(inv),
 	}
+	var judged []agentic.LineResult
 	if o.Agentic != nil && g != nil {
 		if err := agenticOptions(&so, o.Agentic, in, r.Root); err != nil {
 			return nil, err
 		}
+		so.OnJudged = func(lrs []agentic.LineResult) { judged = append(judged, lrs...) }
 	}
 	res, err := semantic.Run(ctx, r, inv, so)
 	if err != nil {
 		return nil, fmt.Errorf("audit: %w", err)
+	}
+	if o.Agentic != nil && o.Agentic.Ledger != "" && so.Agentic != nil {
+		if err := recordClaims(ctx, o.Agentic.Ledger, r.Root, so, in, judged); err != nil {
+			return nil, err
+		}
 	}
 	tools, name := auditTools(exts, g, so.Agentic != nil)
 	doc := findings.BuildSemantic(findings.Params{
@@ -304,6 +314,28 @@ func Audit(ctx context.Context, o AuditOptions) (*AuditResult, error) {
 		Finished: findings.Timestamp(now()), Instance: o.Instance, Owner: cfg.Owner, Gaps: gaps(inv.Gaps),
 	}, res.Issues)
 	return &AuditResult{Document: doc, Stats: res.Stats, Judge: name}, nil
+}
+
+// recordClaims merges the audit's judged lines into the claim ledger.
+func recordClaims(ctx context.Context, file, root string, so semantic.Options, in *instance.Instance, judged []agentic.LineResult) error {
+	l, err := ledger.Load(file)
+	if err != nil {
+		return err //nolint:wrapcheck // already descriptive
+	}
+	b, err := ledger.NewBuilder(ctx, root, so.Repo, "HEAD")
+	if err != nil {
+		return err //nolint:wrapcheck // already descriptive
+	}
+	b.Class, b.Model = in.Classification, so.Judge.Name()
+	if d, err := so.Agentic.Drift(ctx); err == nil {
+		b.Drift = d
+	}
+	for i := range judged {
+		if c, ok := b.Claim(ctx, &judged[i]); ok {
+			l.Merge(c)
+		}
+	}
+	return l.Save(file) //nolint:wrapcheck // already descriptive
 }
 
 // auditTools are the collector tools of an audit and the judge's name ("none" without one).

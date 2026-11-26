@@ -1,0 +1,263 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/MIERAI/docs-platform/contracts/ledger-v1.schema.json",
+  "title": "docs-platform/ledger/v1",
+  "description": "The claim and evidence ledger: every judged documentation line with the validated evidence its verdict rests on (repo@ref:path:line, git blob hashes). A later revision invalidates a claim deterministically when any of its evidence changed (docs/design.md §12.1). Private data: written with mode 0600, never into an inspected repository.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "claims"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^1\\.[0-9]+$"
+    },
+    "claims": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/claim"
+      }
+    }
+  },
+  "$defs": {
+    "claim": {
+      "type": "object",
+      "required": [
+        "id",
+        "repo",
+        "path",
+        "line",
+        "text",
+        "doc_blob",
+        "category",
+        "verdict",
+        "verified_at",
+        "verified_ref",
+        "evidence"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{16}$",
+          "description": "sha256(repo, path, normalised text)[:16]: stable across line moves"
+        },
+        "repo": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "line": {
+          "type": "integer"
+        },
+        "text": {
+          "type": "string"
+        },
+        "doc_blob": {
+          "type": "string"
+        },
+        "category": {
+          "type": "string",
+          "enum": [
+            "contradicted",
+            "dangling_reference",
+            "incomplete_list",
+            "outdated_wording",
+            "unverifiable_in_repo",
+            "confirmed",
+            "unknown"
+          ]
+        },
+        "verdict": {
+          "type": "string",
+          "enum": [
+            "yes",
+            "no",
+            "unknown"
+          ]
+        },
+        "verified_at": {
+          "type": "string"
+        },
+        "verified_ref": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "model": {
+          "type": "string"
+        },
+        "prompt_hash": {
+          "type": "string"
+        },
+        "facts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "fact",
+              "status",
+              "valid"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "fact": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              },
+              "valid": {
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        "evidence": {
+          "$ref": "#/$defs/evidence"
+        },
+        "private": {
+          "type": "boolean"
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "quotes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "path",
+              "line",
+              "blob"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "repo": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "line": {
+                "type": "integer"
+              },
+              "blob": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "drift": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "commits": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "files": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/file"
+                }
+              },
+              "removed_path": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "absence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "pattern",
+              "scope",
+              "files_hash",
+              "files"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "pattern": {
+                "type": "string"
+              },
+              "scope": {
+                "type": "string"
+              },
+              "regex": {
+                "type": "boolean"
+              },
+              "skip_file": {
+                "type": "string"
+              },
+              "files_hash": {
+                "type": "string"
+              },
+              "files": {
+                "type": "integer"
+              }
+            }
+          }
+        },
+        "path_missing": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "path",
+              "candidates"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "candidates": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "name": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "file": {
+      "type": "object",
+      "required": [
+        "path",
+        "blob"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "blob": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

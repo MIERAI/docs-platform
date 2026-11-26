@@ -194,6 +194,22 @@ MCP server (stdio JSON-RPC: `initialize`, `tools/list`, `tools/call`); the spec 
 policy, the limits and the transcript file. Ollama gets the definitions as native tools and
 the core runs each call in process.
 
+## ledger/v1 and stale/v1
+
+ledger/v1 (`contracts/ledger-v1.schema.json`): `claims[]` - `id` (sha256 of repository,
+document path and normalised line text: stable across line moves), `repo`, `path`, `line`,
+`text`, `doc_blob`, `category`, `verdict`, `verified_at`, `verified_ref` (a commit), `model`,
+`prompt_hash`, `facts[{fact, status, valid}]`, `private`, and `evidence` (validated only):
+`quotes[{repo, path, line, blob}]`, `drift[{id, commits, files[{path, blob}], removed_path}]`,
+`absence[{pattern, scope, regex, skip_file, files_hash, files}]` (the covered file set),
+`path_missing[{path, candidates, name}]`.
+
+stale/v1 (`contracts/stale-v1.schema.json`): one repository at one revision - `counts` and
+`claims[{id, repo, path, line, category, status: fresh|stale|recheck, reasons[{kind, path,
+detail}], new_line, verified_ref}]`; reason kinds `doc_removed`, `doc_line_changed`,
+`evidence_changed`, `evidence_removed`, `drift_evidence_changed`,
+`removed_path_reappeared`, `absence_scope_changed`, `path_appeared`, `no_evidence`.
+
 ## instance/v1
 
 The operator's settings (YAML): `ai.judge` and `ai.draft` (provider, model, effort, timeout,

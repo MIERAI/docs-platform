@@ -11,6 +11,7 @@ import (
 	"github.com/MIERAI/docs-platform/internal/agentic"
 	"github.com/MIERAI/docs-platform/internal/instance"
 	"github.com/MIERAI/docs-platform/internal/judge"
+	"github.com/MIERAI/docs-platform/internal/ledger"
 	"github.com/MIERAI/docs-platform/judgev1"
 )
 
@@ -25,6 +26,8 @@ type Agentic struct {
 	CacheDir  string
 	NoDrift   bool
 	Settings  agentic.Settings
+	// Ledger, when set, receives a claim (with its validated evidence) for every judged line.
+	Ledger string
 }
 
 // DriftSummary reports the drift scan of one repository in an eval run.
@@ -68,6 +71,8 @@ func runAgentic(ctx context.Context, o Options, items []Item, res *Result) {
 	units := planUnits(items, a.Settings)
 	sem := make(chan struct{}, max(1, o.Concurrency))
 	var wg sync.WaitGroup
+	var mu sync.Mutex
+	judged := map[string][]agentic.LineResult{}
 	for _, u := range units {
 		if why, bad := broken[u.repo]; bad {
 			for _, i := range u.idx {
@@ -80,10 +85,43 @@ func runAgentic(ctx context.Context, o Options, items []Item, res *Result) {
 		sem <- struct{}{}
 		go func(u unit) {
 			defer func() { <-sem; wg.Done() }()
-			runUnit(ctx, runners[u.repo], u, items, res.Items)
+			lrs := runUnit(ctx, runners[u.repo], u, items, res.Items)
+			mu.Lock()
+			judged[u.repo] = append(judged[u.repo], lrs...)
+			mu.Unlock()
 		}(u)
 	}
 	wg.Wait()
+	if a.Ledger != "" && !o.DryRun {
+		res.LedgerError = writeLedger(ctx, o, runners, judged)
+	}
+}
+
+// writeLedger records the judged lines of every repository in the ledger file.
+func writeLedger(ctx context.Context, o Options, runners map[string]*agentic.Runner, judged map[string][]agentic.LineResult) string {
+	l, err := ledger.Load(o.Agentic.Ledger)
+	if err != nil {
+		return err.Error()
+	}
+	for repo, lrs := range judged {
+		b, err := ledger.NewBuilder(ctx, o.Agentic.Worktrees[repo], repo, "HEAD")
+		if err != nil {
+			return err.Error()
+		}
+		b.Class, b.Model = o.Agentic.Class, o.Guard.Name()
+		if d, err := runners[repo].Drift(ctx); err == nil {
+			b.Drift = d
+		}
+		for i := range lrs {
+			if c, ok := b.Claim(ctx, &lrs[i]); ok {
+				l.Merge(c)
+			}
+		}
+	}
+	if err := l.Save(o.Agentic.Ledger); err != nil {
+		return err.Error()
+	}
+	return ""
 }
 
 func repoNames(items []Item) []string {
@@ -175,7 +213,7 @@ func planUnits(items []Item, s agentic.Settings) []unit {
 	return out
 }
 
-func runUnit(ctx context.Context, r *agentic.Runner, u unit, items []Item, out []ItemResult) {
+func runUnit(ctx context.Context, r *agentic.Runner, u unit, items []Item, out []ItemResult) []agentic.LineResult {
 	var lines []int
 	for _, i := range u.idx {
 		lines = append(lines, items[i].Claim.Line)
@@ -185,15 +223,17 @@ func runUnit(ctx context.Context, r *agentic.Runner, u unit, items []Item, out [
 			out[i] = baseResult(&items[i])
 			out[i].Error = judge.ErrBudget.Error()
 		}
-		return
+		return nil
 	}
+	lrs := r.Judge(ctx, u.path, lines)
 	byLine := map[int]agentic.LineResult{}
-	for _, lr := range r.Judge(ctx, u.path, lines) {
+	for _, lr := range lrs {
 		byLine[lr.Line] = lr
 	}
 	for _, i := range u.idx {
 		out[i] = fromLine(&items[i], byLine[items[i].Claim.Line])
 	}
+	return lrs
 }
 
 func baseResult(it *Item) ItemResult {

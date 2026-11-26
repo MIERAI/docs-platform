@@ -6,6 +6,21 @@ Direction (approved): keep docs consistent with code over time, not once - remov
 "phantom inventory" with retail inventory control (record accuracy, cycle counting, ABC).
 Design: docs/design.md §12; plan: docs/backlog.md.
 
+### Added
+- **Claim and evidence ledger** (B1; contract ledger/v1, `internal/ledger`): every judged
+  line with the validated evidence its verdict rests on, addressed by git blob - quotes
+  (file blob), drift entries (their files, the removed path), absence searches (pattern,
+  glob, hash of the covered file set), path_missing targets. Stable claim ids (line moves keep
+  the id). Mode 0600, merge by id (newer verification wins). Written by
+  `docsp eval-model -mode agentic -ledger FILE` and `docsp audit -mode agentic -ledger FILE`.
+- **`docsp stale -ledger FILE [-ref REV] [repo]`**: deterministic invalidation (no model):
+  stale when the line was edited or the document removed, a cited file changed or vanished,
+  a file in an absence scope was added/changed/removed, a missing path appeared, or a drift
+  entry's removed path reappeared; claims without evidence → `recheck`. Contract stale/v1.
+- `bench ledger-replay`: replays a ledger over real history (per-commit stale counts) and
+  scores causing-commit recall of ground-truth positives.
+- `ls-tree` joins the read-only git allowlist (tree snapshots).
+
 ## 0.4.2 - 2026-11-26
 
 The 0.4.1 rerun validated every drift entry (22/22, 17/17) but recall fell to 19/30 with
