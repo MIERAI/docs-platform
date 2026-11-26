@@ -37,6 +37,9 @@ func TestInsertApply(t *testing.T) {
 	if err != nil || got != src+"    - 说明: 二\n      结果: { a: 2 }\n" {
 		t.Errorf("%q %v", got, err)
 	}
+	if got, err := (Insert{Path: "d", Anchor: "  结果:  { a: 1 }", Text: "    - 说明: 二"}).Apply(src); err != nil || !strings.HasSuffix(got, "{ a: 1 }\n    - 说明: 二\n") {
+		t.Errorf("an anchor differing in whitespace: %q %v", got, err)
+	}
 	if _, err := (Insert{Path: "d", Anchor: "结果", Text: "x"}).Apply(src); err == nil {
 		t.Error("a partial line is not an anchor")
 	}

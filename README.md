@@ -424,7 +424,11 @@ breaking is proven observable - a verified drafted example, or a factory-derived
 differential), catches it; otherwise it is `undetermined` (possibly an equivalent mutant, or one
 only reachable by inputs the API never passes) and stays out of the coverage. When the drafter
 says a mutant cannot be observed through the API, a different mutant is asked for (up to three).
-An API whose cases fail without any change is `baseline_failing`, not measured. Outcomes are reused while the rule, its design and its code
+An API whose cases fail without any change is `baseline_failing`, not measured. One mutant per
+rule is a sample, not a proof: another run may pick a different mutant (reusing outcomes keeps
+the number stable while nothing changes). On api-factory (24 rules with hand-written code) a
+full run took 9 minutes and $1.00: 11 of 18 measurable rules covered (61%), 7 verified example
+proposals, 6 undetermined. Outcomes are reused while the rule, its design and its code
 are unchanged (`-previous`, default the `-out` file), so a rerun only pays for what changed.
 
 ### `docsp extract [--config FILE] [repo]`, `docsp validate FILE`, `docsp version`

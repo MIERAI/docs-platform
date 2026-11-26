@@ -112,14 +112,12 @@ type Insert struct {
 // Apply applies the insertion to a file's content.
 func (in Insert) Apply(content string) (string, error) {
 	lines := strings.SplitAfter(content, "\n")
-	at := -1
-	for i, l := range lines {
-		if strings.TrimRight(l, "\r\n") == strings.TrimRight(in.Anchor, "\r\n") {
-			if at >= 0 {
-				return "", fmt.Errorf("%s: the anchor line occurs more than once", in.Path)
-			}
-			at = i
-		}
+	at, err := in.find(lines, func(l string) string { return strings.TrimRight(l, "\r\n") })
+	if err == nil && at < 0 { // the quote may differ in whitespace only
+		at, err = in.find(lines, norm)
+	}
+	if err != nil {
+		return "", err
 	}
 	switch {
 	case strings.TrimSpace(in.Anchor) == "":
@@ -137,6 +135,21 @@ func (in Insert) Apply(content string) (string, error) {
 		lines[at] += "\n"
 	}
 	return strings.Join(lines[:at+1], "") + text + strings.Join(lines[at+1:], ""), nil
+}
+
+// find is the one line equal to the anchor under eq (-1 = none).
+func (in Insert) find(lines []string, eq func(string) string) (int, error) {
+	at := -1
+	want := eq(in.Anchor)
+	for i, l := range lines {
+		if want != "" && eq(l) == want {
+			if at >= 0 {
+				return -1, fmt.Errorf("%s: the anchor line occurs more than once", in.Path)
+			}
+			at = i
+		}
+	}
+	return at, nil
 }
 
 // Source is a file given to the model, with its repository-relative path.
