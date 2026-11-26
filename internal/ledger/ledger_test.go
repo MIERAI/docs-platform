@@ -58,7 +58,7 @@ func (g *gitRepo) write(files map[string]string) {
 	}
 }
 
-func (g *gitRepo) commit(msg string) string { //nolint:unparam // the commit id is part of the helper's contract
+func (g *gitRepo) commit(msg string) string {
 	g.git("add", "-A")
 	g.git("commit", "-qm", msg)
 	return g.git("rev-parse", "HEAD")

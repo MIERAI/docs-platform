@@ -13,7 +13,7 @@ import (
 	"github.com/MIERAI/docs-platform/judgev1"
 )
 
-// Footprint rules beyond the validated evidence. They only send a claim back to the judge
+// Rules are footprint rules beyond the validated evidence. They only send a claim back to the judge
 // (stale with a footprint reason); they never decide a verdict. All are off by default:
 //
 //   - weak: the path- or glob-scoped searches the agent ran while judging (search, grep,
@@ -226,7 +226,7 @@ func siblingGlobs(c *Claim) map[string]string {
 	out := map[string]string{}
 	for _, p := range paths {
 		seg := strings.Split(p, "/")
-		for i := 0; i < len(seg)-1; i++ {
+		for i := range len(seg) - 1 {
 			g := append(append(append([]string{}, seg[:i]...), "*"), seg[i+1:]...)
 			out[strings.Join(g, "/")] = p
 		}
