@@ -204,7 +204,9 @@ document path and normalised line text: stable across line moves), `repo`, `path
 `quotes[{repo, path, line, blob}]`, `drift[{id, commits, files[{path, blob}], removed_path}]`,
 `absence[{pattern, scope, regex, skip_file, files_hash, files}]` (the covered file set),
 `path_missing[{path, candidates, name}]`; optional footprints (not evidence; recorded with
-`-footprint`): `weak[{tool, scope}]`, `members[{dir | glob}]`. Repository groups add `target {repo, ref}` (the
+`-footprint`): `weak[{tool, scope}]`, `members[{dir | glob}]`; `pinned[{path, blob}]` (always
+on, kept across re-judging: the files a generator's manifest says the claim governs, written by
+`docsp factory-rules`). Repository groups add `target {repo, ref}` (the
 declared revision the claim was judged against; `verified_ref` is then that target's
 commit) and `doc_ref` (the document repository's commit).
 
@@ -213,7 +215,8 @@ stale/v1 (`contracts/stale-v1.schema.json`): one repository at one revision - `c
 detail}], new_line, verified_ref}]`; reason kinds `doc_removed`, `doc_line_changed`,
 `evidence_changed`, `evidence_removed`, `drift_evidence_changed`,
 `removed_path_reappeared`, `absence_scope_changed`, `path_appeared`, `no_evidence`, and with
-footprint rules `weak_scope_changed`, `sibling_added`, `member_set_changed`.
+footprint rules `weak_scope_changed`, `sibling_added`, `member_set_changed`; `pinned_changed`
+when a pinned file changed (a removed one is `evidence_removed`).
 
 ## schedule/v1 and slo/v1
 
