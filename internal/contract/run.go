@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"sort"
 	"time"
+
+	"github.com/MIERAI/docs-platform/internal/factorymanifest"
 )
 
 // Adapter extracts one side's surface from a source.
@@ -37,6 +39,10 @@ type Options struct {
 	History bool
 	Workers int
 	Now     time.Time
+	// Manifest (an API factory's factory.api-manifest/v1): operations the generator guarantees
+	// (listed, no hand-written code) are dropped from both surfaces before the diff; only the
+	// escape layer is compared. Nil = compare everything.
+	Manifest *factorymanifest.Manifest
 }
 
 // Run extracts both surfaces, diffs them and (optionally) classifies the direction of each
@@ -65,9 +71,34 @@ func Run(ctx context.Context, o Options) (*Document, error) {
 		return nil, err
 	}
 	code.Side = SideCode
+	guaranteed := 0
+	if o.Manifest != nil {
+		idx := o.Manifest.Index()
+		keep := func(op Operation) bool {
+			a, ok := idx[factorymanifest.Key(op.Group, op.Name)]
+			return !ok || a.Escaped()
+		}
+		guaranteed = filterOps(design, keep)
+		filterOps(code, keep)
+	}
 	items := Diff(design, code, DiffOptions{SelectionSubset: o.DesignAdapter == "openapi-graphql"})
 	if o.History {
 		NewHistory(o.Design, o.Code, o.Now).Classify(ctx, items, o.Workers)
 	}
-	return Build(o.DocSet, o.Authority, o.Generator, design, code, items, o.History, o.Now), nil
+	doc := Build(o.DocSet, o.Authority, o.Generator, design, code, items, o.History, o.Now)
+	doc.Summary.GeneratorGuaranteed = guaranteed
+	return doc, nil
+}
+
+// filterOps keeps the operations keep accepts and returns how many it dropped.
+func filterOps(s *Surface, keep func(Operation) bool) int {
+	kept := s.Operations[:0]
+	for _, op := range s.Operations {
+		if keep(op) {
+			kept = append(kept, op)
+		}
+	}
+	n := len(s.Operations) - len(kept)
+	s.Operations = kept
+	return n
 }

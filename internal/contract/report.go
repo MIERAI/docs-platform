@@ -37,7 +37,10 @@ type Summary struct {
 	BySeverity       map[string]int `json:"by_severity"`
 	ByDirection      map[string]int `json:"by_direction"`
 	RenameCandidates int            `json:"rename_candidates"`
-	Groups           []GroupSummary `json:"groups"`
+	// GeneratorGuaranteed counts the design operations left out because an API factory's
+	// manifest says the generator keeps them in step with the design.
+	GeneratorGuaranteed int            `json:"generator_guaranteed,omitempty"`
+	Groups              []GroupSummary `json:"groups"`
 }
 
 // GroupSummary is the summary of one sub-service / domain.

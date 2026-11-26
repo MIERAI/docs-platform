@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/MIERAI/docs-platform/internal/contract"
+	"github.com/MIERAI/docs-platform/internal/factorymanifest"
 	"github.com/MIERAI/docs-platform/internal/instance"
 )
 
@@ -36,6 +37,7 @@ type contractFlags struct {
 	design, code                sideFlags
 	authority, generator        string
 	noHistory                   bool
+	manifest                    string
 	workers                     int
 	out, format                 string
 }
@@ -57,6 +59,7 @@ func (f *contractFlags) register(fs *flag.FlagSet) {
 	}
 	fs.StringVar(&f.authority, "authority", "", "which side is right: design, code or ask (default: the doc set's, else ask)")
 	fs.StringVar(&f.generator, "generator", "", "how to generate the design from the code (shown when the code is the authority)")
+	fs.StringVar(&f.manifest, "factory-manifest", "", "an API factory's manifest (factory export): compare only the APIs with hand-written code")
 	fs.BoolVar(&f.noHistory, "no-history", false, "skip the direction classification from git history")
 	fs.IntVar(&f.workers, "workers", runtime.NumCPU(), "concurrent git calls for the history classification")
 	fs.StringVar(&f.out, "out", "", "write the contract/v1 JSON here (mode 0600)")
@@ -89,10 +92,16 @@ func cmdContract(ctx context.Context, args []string, stdout, stderr io.Writer) (
 	if err != nil {
 		return exitUsage, err //nolint:wrapcheck // already descriptive
 	}
+	var man *factorymanifest.Manifest
+	if f.manifest != "" {
+		if man, err = factorymanifest.Load(f.manifest); err != nil {
+			return exitUsage, err //nolint:wrapcheck // already descriptive
+		}
+	}
 	doc, err := contract.Run(ctx, contract.Options{
 		DocSet: f.docSet, Authority: f.authority, Generator: f.generator,
 		DesignAdapter: f.design.adapter, CodeAdapter: f.code.adapter, Design: design, Code: code,
-		History: !f.noHistory, Workers: f.workers, Now: time.Now(),
+		History: !f.noHistory, Workers: f.workers, Now: time.Now(), Manifest: man,
 	})
 	if err != nil {
 		return exitUsage, err //nolint:wrapcheck // already descriptive
@@ -193,6 +202,9 @@ func writeContract(w io.Writer, d *contract.Document) {
 	_, _ = fmt.Fprintf(w, "  design %s@%s (%s): %d operations; code %s@%s (%s): %d operations; overlap %d\n",
 		d.Design.Source.Repo, d.Design.Source.Ref, d.Design.Adapter.Name, s.DesignOperations,
 		d.Code.Source.Repo, d.Code.Source.Ref, d.Code.Adapter.Name, s.CodeOperations, s.Overlap)
+	if s.GeneratorGuaranteed > 0 {
+		_, _ = fmt.Fprintf(w, "  %d operations left out: the factory's generator keeps them in step with the design (manifest)\n", s.GeneratorGuaranteed)
+	}
 	_, _ = fmt.Fprintf(w, "  %d items: %s\n", s.Items, counts(s.BySeverity))
 	if len(s.ByDirection) > 0 {
 		_, _ = fmt.Fprintf(w, "  direction: %s\n", counts(s.ByDirection))

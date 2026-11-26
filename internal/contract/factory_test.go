@@ -5,6 +5,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/MIERAI/docs-platform/internal/factorymanifest"
 )
 
 // libraryProject is a small design-first project in the generator's layout (invented for
@@ -116,6 +118,15 @@ func findAuthorLogic(req *libv1.FindAuthorRequest, rows []findAuthorRow) (*libv1
 
 func libraryDiff(t *testing.T, override map[string]string) []Item {
 	t.Helper()
+	doc := libraryRun(t, override, nil)
+	if doc.Summary.DesignOperations != 4 || doc.Summary.CodeOperations != 4 || doc.Summary.Overlap != 4 {
+		t.Fatalf("summary %+v", doc.Summary)
+	}
+	return doc.Items
+}
+
+func libraryRun(t *testing.T, override map[string]string, man *factorymanifest.Manifest) *Document {
+	t.Helper()
 	dir := t.TempDir()
 	for p, c := range libraryProject {
 		if o, ok := override[p]; ok {
@@ -132,14 +143,50 @@ func libraryDiff(t *testing.T, override map[string]string) []Item {
 	if err != nil {
 		t.Fatal(err)
 	}
-	doc, err := Run(ctx, Options{DesignAdapter: "factory-design", CodeAdapter: "factory-code", Design: design, Code: code})
+	doc, err := Run(ctx, Options{DesignAdapter: "factory-design", CodeAdapter: "factory-code", Design: design, Code: code, Manifest: man})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if doc.Summary.DesignOperations != 4 || doc.Summary.CodeOperations != 4 || doc.Summary.Overlap != 4 {
-		t.Fatalf("summary %+v", doc.Summary)
+	return doc
+}
+
+// With the factory's manifest, the APIs its generator guarantees are left out: a drift in
+// generated code is the factory's gate's to catch; drifts in the escape layer still show.
+func TestFactoryManifestComparesEscapeLayerOnly(t *testing.T) {
+	man, err := factorymanifest.Parse([]byte(`{"schema": "factory.api-manifest/v1", "apis": [
+	  {"id": "library.get-book", "name": "GetBook", "domain": "library", "source": {"path": "design/library/GetBook.yaml"}, "escape": []},
+	  {"id": "library.list-lent", "name": "ListLent", "domain": "library", "source": {"path": "design/library/ListLent.yaml"}, "escape": []},
+	  {"id": "library.get-shelf-stats", "name": "GetShelfStats", "domain": "library", "source": {"path": "design/library/GetShelfStats.yaml"},
+	   "escape": [{"path": "internal/handler/library/get_shelf_stats_logic.go", "kind": "logic", "exists": true}]},
+	  {"id": "library.find-author", "name": "FindAuthor", "domain": "library", "source": {"path": "specs/library/find-author/spec.yaml"},
+	   "escape": [{"path": "specs/library/find-author/spec.yaml", "line": 9, "kind": "sql", "exists": true}]}]}`))
+	if err != nil {
+		t.Fatal(err)
 	}
-	return doc.Items
+	for _, tc := range []struct {
+		name, file, old, new string
+		want                 []string
+	}{
+		{"generated drift left to the factory", "db/queries/library.get-book.sql", "sqlc.arg(isbn)", "sqlc.arg(code)", nil},
+		{
+			"escape logic drift reported", "internal/handler/library/get_shelf_stats_logic.go", "res.Lent++", "res.Borrowed++",
+			[]string{"GetShelfStats output.missing_in_code outputs.lent", "GetShelfStats output.missing_in_design outputs.borrowed"},
+		},
+		{
+			"escape SQL drift reported", "db/queries/library.find-author.sql", "SELECT a.id, a.name", "SELECT a.id",
+			[]string{"FindAuthor rule.missing_in_code rules.selects.name"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			doc := libraryRun(t, map[string]string{tc.file: strings.Replace(libraryProject[tc.file], tc.old, tc.new, 1)}, man)
+			if doc.Summary.GeneratorGuaranteed != 2 || doc.Summary.DesignOperations != 2 {
+				t.Fatalf("summary %+v", doc.Summary)
+			}
+			if got := itemKeys(doc.Items, SevLow); strings.Join(got, ";") != strings.Join(tc.want, ";") {
+				t.Errorf("got  %v\nwant %v", got, tc.want)
+			}
+		})
+	}
 }
 
 func itemKeys(items []Item, minSev string) []string {
