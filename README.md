@@ -419,8 +419,12 @@ alone) and the factory runs the project with it. The rule is covered when a case
 design (an example or a logic example) fails; a hand-written test or a factory-derived case
 catching it does not count - they guard the code, not the design. For an uncovered rule the
 model drafts a new example (`-propose`, on by default), kept only when the factory shows it
-passes on the current code and fails on the mutant. An API whose cases fail without any change
-is `baseline_failing`, not measured. Outcomes are reused while the rule, its design and its code
+passes on the current code and fails on the mutant. A survivor counts as `uncovered` only when its
+breaking is proven observable - a verified drafted example, or a factory-derived case (auto,
+differential), catches it; otherwise it is `undetermined` (possibly an equivalent mutant, or one
+only reachable by inputs the API never passes) and stays out of the coverage. When the drafter
+says a mutant cannot be observed through the API, a different mutant is asked for (up to three).
+An API whose cases fail without any change is `baseline_failing`, not measured. Outcomes are reused while the rule, its design and its code
 are unchanged (`-previous`, default the `-out` file), so a rerun only pays for what changed.
 
 ### `docsp extract [--config FILE] [repo]`, `docsp validate FILE`, `docsp version`

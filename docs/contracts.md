@@ -242,11 +242,13 @@ document), judged at the head; a draft is `verified` only when the factory accep
 with it - and `acceptance{api: problem}` (the head as it is; "" = passes), `usd`.
 
 rulecover/v1 (`docsp factory-coverage`): `rules[{api, path, line, text, key, status:
-covered|uncovered|unmeasured|baseline_failing, mutant {path, old, new, rationale},
+covered|uncovered|undetermined|unmeasured|baseline_failing, mutant {path, old, new, rationale},
 caught_by[] (design cases), caught_elsewhere[] (auto, differential, hand-written tests),
-proposal {inserts[{path, anchor, text}], rationale, verified, catches[], problem}, problem}]`
-and `summary {rules, measured, covered, uncovered, verified_proposals, coverage, reused}`:
-`coverage` = covered / measured, the rule executable coverage. `key` hashes the rule, its
+proposal {inserts[{path, anchor, text}], rationale, verified, equivalent, catches[], problem},
+problem}]` and `summary {rules, measured, covered, uncovered, undetermined, verified_proposals,
+coverage, reused}`: `coverage` = covered / (covered + uncovered), the rule executable coverage;
+`uncovered` needs proof that the surviving mutant is observable (a verified example or a
+factory-derived case catching it), else the rule is `undetermined` and not counted. `key` hashes the rule, its
 design and its code: a later run reuses the outcome while it is unchanged.
 
 ## schedule/v1 and slo/v1

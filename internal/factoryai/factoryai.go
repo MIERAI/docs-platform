@@ -18,7 +18,7 @@ import (
 )
 
 // PromptVersion of the proposals' prompts.
-const PromptVersion = "docsp-factory/1"
+const PromptVersion = "docsp-factory/2"
 
 // maxRequestUSD bounds one proposal (snippet mode: the files are in the prompt).
 const maxRequestUSD = 0.3

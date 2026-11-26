@@ -36,9 +36,15 @@ const SchemaVersion = "1.0"
 
 // Statuses of a rule.
 const (
-	Covered    = "covered"    // a design case caught the rule's mutant
-	Uncovered  = "uncovered"  // the mutant survived every design case
-	Unmeasured = "unmeasured" // no usable mutant (none proposed, did not apply or build)
+	Covered = "covered" // a design case caught the rule's mutant
+	// Uncovered: the mutant survived every design case and is proven observable - a drafted
+	// example the factory verified catches it, or a factory-derived case (auto, differential)
+	// does. Only then is the gap real.
+	Uncovered = "uncovered"
+	// Undetermined: the mutant survived the design's cases but nothing proved it observable
+	// (it may be equivalent, or reachable only by inputs the API never passes). Not counted.
+	Undetermined = "undetermined"
+	Unmeasured   = "unmeasured" // no usable mutant (none proposed, did not apply or build)
 	// BaselineFailing: the API's cases fail without any change; nothing can be measured.
 	BaselineFailing = "baseline_failing"
 )
@@ -74,9 +80,12 @@ type Proposal struct {
 	Rationale string             `json:"rationale"`
 	// Verified: the factory ran the example - it passes on the current code and fails on
 	// the mutant. Only verified proposals are shown to people.
-	Verified bool     `json:"verified"`
-	Catches  []string `json:"catches,omitempty"`
-	Problem  string   `json:"problem,omitempty"`
+	Verified bool `json:"verified"`
+	// Equivalent: the model says the mutant cannot be observed through the API (the
+	// measurement then asks for another mutant).
+	Equivalent bool     `json:"equivalent,omitempty"`
+	Catches    []string `json:"catches,omitempty"`
+	Problem    string   `json:"problem,omitempty"`
 }
 
 // Report is docs-platform/rulecover/v1.
@@ -90,9 +99,11 @@ type Report struct {
 		Measured  int `json:"measured"`
 		Covered   int `json:"covered"`
 		Uncovered int `json:"uncovered"`
-		Proposals int `json:"verified_proposals"`
-		// Coverage is covered / measured: the share of rules with hand-written code that an
-		// example of the design pins down (nil when nothing was measured).
+		// Undetermined rules are left out of Measured and Coverage.
+		Undetermined int `json:"undetermined"`
+		Proposals    int `json:"verified_proposals"`
+		// Coverage is covered / measured (covered + uncovered): of the rules whose breaking is
+		// observable, the share an example of the design pins down (nil when none).
 		Coverage *float64 `json:"coverage"`
 		Reused   int      `json:"reused"`
 	} `json:"summary"`
@@ -252,6 +263,8 @@ func (rep *Report) summarise() {
 			if r.Proposal != nil && r.Proposal.Verified {
 				s.Proposals++
 			}
+		case Undetermined:
+			s.Undetermined++
 		}
 	}
 	if s.Measured > 0 {
@@ -280,7 +293,7 @@ func sources(j *job) []factoryai.Source {
 func measure(ctx context.Context, o Options, j *job) {
 	r := &j.rule
 	var lastErr string
-	for range 2 {
+	for range 3 {
 		done, problem := tryMutant(ctx, o, j, lastErr)
 		if done {
 			return
@@ -330,16 +343,34 @@ func tryMutant(ctx context.Context, o Options, j *job, lastErr string) (bool, st
 	r.Mutant = &m
 	r.CaughtBy = names(res.Failed(factorytry.Design...))
 	r.CaughtElsewhere = names(res.Failed(factorytry.SourceAuto, factorytry.SourceDifferential, factorytry.SourceHandTest))
-	r.Status = Uncovered
 	if len(r.CaughtBy) > 0 {
 		r.Status = Covered
-	} else if o.Propose {
+		return true, ""
+	}
+	return survivor(ctx, o, j, &m, mutated, len(res.Failed(factorytry.SourceAuto, factorytry.SourceDifferential)) > 0)
+}
+
+// survivor decides a mutant no design case caught: proven observable (a verified drafted
+// example, or a factory-derived case caught it) = uncovered; said to be unobservable = ask
+// for another mutant; otherwise undetermined.
+func survivor(ctx context.Context, o Options, j *job, m *Mutant, mutated string, derived bool) (bool, string) {
+	r := &j.rule
+	if o.Propose {
 		r.Proposal = propose(ctx, o, j, factorytry.File{Path: m.Path, Content: mutated})
+	}
+	switch {
+	case (r.Proposal != nil && r.Proposal.Verified) || derived:
+		r.Status = Uncovered
+	case r.Proposal != nil && r.Proposal.Equivalent:
+		r.Mutant, r.CaughtElsewhere, r.Proposal = nil, nil, nil
+		return false, "that mutant cannot be told apart from the original through the API (" + firstLine(m.Rationale) + "); choose a change of behaviour the API's callers would see"
+	default:
+		r.Status = Undetermined
 	}
 	return true, ""
 }
 
-const exampleSchema = `{"type":"object","properties":{"inserts":{"type":"array","maxItems":3,"items":{"type":"object","properties":{"anchor":{"type":"string"},"text":{"type":"string"}},"required":["anchor","text"],"additionalProperties":false}},"rationale":{"type":"string"}},"required":["inserts","rationale"],"additionalProperties":false}`
+const exampleSchema = `{"type":"object","properties":{"inserts":{"type":"array","maxItems":3,"items":{"type":"object","properties":{"anchor":{"type":"string"},"text":{"type":"string"}},"required":["anchor","text"],"additionalProperties":false}},"rationale":{"type":"string"},"equivalent":{"type":"boolean"}},"required":["inserts","rationale","equivalent"],"additionalProperties":false}`
 
 const exampleTask = `RULE (%s line %d):
 <<<
@@ -355,7 +386,7 @@ MUTANT (%s):
 %s
 >>>
 Propose ONE new example for %s that holds for the current code and for the rule, and that the mutant would fail. Write it exactly in the format, keys, indentation and language of the neighbouring examples. If it needs its own data rows, add them too (prefer values no other example uses, so existing examples keep their results).
-Each insert goes right after the line "anchor", copied exactly from %s (a whole line, occurring once; never the line numbers); "text" is the lines to insert. At most 3 inserts. If the rule cannot be pinned down by an example in this design, reply with no inserts.%s`
+Each insert goes right after the line "anchor", copied exactly from %s (a whole line, occurring once; never the line numbers); "text" is the lines to insert. At most 3 inserts. If no input the API accepts can tell the mutant from the original (it is equivalent, or it only changes a branch the API never reaches), set "equivalent" true and give no inserts. If the rule cannot be pinned down by an example in this design for another reason, give no inserts and "equivalent" false.%s`
 
 func propose(ctx context.Context, o Options, j *job, mutant factorytry.File) *Proposal {
 	p := &Proposal{}
@@ -383,7 +414,8 @@ func proposeOnce(ctx context.Context, o Options, j *job, mutant factorytry.File,
 			Anchor string `json:"anchor"`
 			Text   string `json:"text"`
 		} `json:"inserts"`
-		Rationale string `json:"rationale"`
+		Rationale  string `json:"rationale"`
+		Equivalent bool   `json:"equivalent"`
 	}
 	if err := factoryai.Ask(ctx, o.Guard, judgev1.TaskDraftExample, o.Repo, er.Path, er.Line, r.Text,
 		fmt.Sprintf(exampleTask, er.Path, er.Line, r.Text, r.Mutant.Path, r.Mutant.Old, r.Mutant.New, er.Path, er.Path, retry),
@@ -391,7 +423,7 @@ func proposeOnce(ctx context.Context, o Options, j *job, mutant factorytry.File,
 		p.Problem = err.Error()
 		return true, ""
 	}
-	p.Rationale, p.Inserts = a.Rationale, nil
+	p.Rationale, p.Inserts, p.Equivalent = a.Rationale, nil, a.Equivalent && len(a.Inserts) == 0
 	if len(a.Inserts) == 0 {
 		p.Problem = "the model proposed no example: " + a.Rationale
 		return true, ""

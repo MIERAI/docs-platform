@@ -58,7 +58,7 @@ func (m *model) Judge(_ context.Context, q *judgev1.Request) (*judgev1.Response,
 	case q.Task.Type == judgev1.TaskRuleMutant:
 		a = map[string]string{"path": "logic.go", "old": "return n }", "new": "return n + 1 }", "rationale": "off by one"}
 	case q.Task.Type == judgev1.TaskDraftExample:
-		a = map[string]any{"inserts": []map[string]string{{"anchor": "      结果: { total: 1 }", "text": "    - 说明: 300.5 秒算违约\n      结果: { sla: 1 }"}}, "rationale": "boundary"}
+		a = map[string]any{"inserts": []map[string]string{{"anchor": "      结果: { total: 1 }", "text": "    - 说明: 300.5 秒算违约\n      结果: { sla: 1 }"}}, "rationale": "boundary", "equivalent": false}
 	}
 	b, _ := json.Marshal(a)
 	return judgev1.NewStructuredResponse(q, b, judgev1.ParseSchema, judgev1.Model{Provider: "fake", ID: "m"}, judgev1.Usage{}), nil
@@ -180,4 +180,62 @@ type broken struct{}
 
 func (broken) Try(context.Context, []factorytry.File, []string) (*factorytry.Result, error) {
 	return &factorytry.Result{Schema: factorytry.ResultSchema, Status: factorytry.StatusOK, APIs: []factorytry.API{{ID: "a.calc", Cases: []factorytry.Case{{Name: "x", Source: factorytry.SourceExample}}}}}, nil
+}
+
+// scripted answers the SLA rule's mutants and examples from queues.
+type scripted struct {
+	model
+	mutants, examples []string
+}
+
+func (m *scripted) Judge(_ context.Context, q *judgev1.Request) (*judgev1.Response, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.tasks = append(m.tasks, q.Task.Type)
+	var a string
+	switch {
+	case q.Task.Type == judgev1.TaskRuleMutant && !strings.Contains(q.Claim.Text, "SLA"):
+		a = `{"path": "", "old": "", "new": "", "rationale": "only the SLA rule here"}`
+	case q.Task.Type == judgev1.TaskRuleMutant:
+		a, m.mutants = m.mutants[0], m.mutants[1:]
+	default:
+		a, m.examples = m.examples[0], m.examples[1:]
+	}
+	return judgev1.NewStructuredResponse(q, json.RawMessage(a), judgev1.ParseSchema, judgev1.Model{Provider: "fake", ID: "m"}, judgev1.Usage{}), nil
+}
+
+// An equivalent mutant is replaced; a survivor nobody proves observable is undetermined and
+// stays out of the coverage.
+func TestEquivalentAndUndetermined(t *testing.T) {
+	dir, m, _, _ := setup(t)
+	in, _ := instance.Parse([]byte("version: 1\nclassification: {repos: {af: public}}\n"))
+	run := func(sm *scripted) Rule {
+		t.Helper()
+		g, err := judge.NewGuard("judge", sm, in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rep, err := Measure(context.Background(), Options{Repo: "af", Dir: dir, Manifest: m, Guard: g, Try: &factory{}, Propose: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if rep.Summary.Measured+rep.Summary.Undetermined+1 != rep.Summary.Rules {
+			t.Errorf("summary %+v", rep.Summary)
+		}
+		return rep.Rules[0]
+	}
+	cosmetic := `{"path": "logic.go", "old": "package a", "new": "package a // x", "rationale": "comment"}`
+	threshold := `{"path": "logic.go", "old": "const sla = 300.0", "new": "const sla = 301.0", "rationale": "threshold"}`
+	example := `{"inserts": [{"anchor": "      结果: { total: 1 }", "text": "    - 说明: 300.5 秒算违约\n      结果: { sla: 1 }"}], "rationale": "boundary", "equivalent": false}`
+	r := run(&scripted{
+		mutants:  []string{cosmetic, threshold},
+		examples: []string{`{"inserts": [], "rationale": "a comment changes nothing", "equivalent": true}`, example},
+	})
+	if r.Status != Uncovered || r.Mutant == nil || r.Mutant.New != "const sla = 301.0" || !r.Proposal.Verified {
+		t.Errorf("after an equivalent mutant: %+v, want the second mutant, proven by a verified example", r)
+	}
+	r = run(&scripted{mutants: []string{threshold}, examples: []string{`{"inserts": [], "rationale": "no room", "equivalent": false}`}})
+	if r.Status != Undetermined {
+		t.Errorf("unproven survivor: %s, want undetermined", r.Status)
+	}
 }
