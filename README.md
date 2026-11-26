@@ -320,6 +320,18 @@ Adapters (`-design-adapter`, `-code-adapter`):
 | `openapi-graphql` | design | OpenAPI documents whose paths embed GraphQL: every example `query` and every fenced graphql block; arguments typed from the variable definitions and `components.schemas` |
 | `kotlin-graphql` | code | GraphQL code-first Kotlin (SmallRye): `@Query` / `@Mutation` functions of `@GraphQLApi` classes (`@Name`, default values, the `get` prefix rule), argument types and the fields of the return type's class |
 
+**With a generator's manifest** (`-factory-manifest FILE`, the JSON a design-first API factory
+writes with `factory export`, schema `factory.api-manifest/v1`): the APIs the manifest lists
+without hand-written code are left out of the diff and counted as `generator_guaranteed` - the
+factory's own gates (deterministic generation, an up-to-date check, acceptance built from the
+design's examples) keep them in step, and re-parsing generated code breaks whenever the
+generator changes its output. Only the escape layer (compute logic, custom handlers,
+`datasource.sql`) is compared. The manifest also maps every business rule of an API with
+hand-written code to that code (`factorymanifest.RuleFootprints`): the prose rules are where a
+design goes stale, and they are judged as claims, not diffed. On a real factory repository
+(65 operations) the manifest took the report from 75 items (almost all generator-output
+parsing gaps) to 11 informational ones.
+
 The doc set's **authority** decides the wording: `design` reports "code deviates from design",
 `code` reports "design needs update" and recommends generating the design from the code when
 a generator exists (`-generator`, for example a GraphQL schema export), `ask` stays neutral.
@@ -337,6 +349,7 @@ the newest touch. The output is contract/v1 (`-out FILE`, mode 0600; `-format te
 | `-code DIR`, `-code-ref REV`, `-code-path GLOB`, `-code-adapter NAME`, `-code-repo NAME` | the code side |
 | `-authority design\|code\|ask`, `-generator TEXT` | as above |
 | `-no-history`, `-workers N` | skip the history classification; concurrent git calls |
+| `-factory-manifest FILE` | an API factory's manifest: compare only the APIs with hand-written code |
 
 In a repository group the spec and the code may live in different repositories; the doc set
 declares the adapters and the revisions:
