@@ -104,19 +104,28 @@ func Touched(m *factorymanifest.Manifest, changed map[string]bool) map[string][]
 	return out
 }
 
-// Review judges the touched rules at the head and drafts design edits for the contradicted ones.
-func Review(ctx context.Context, o Options) (*Report, error) {
-	head, err := ledger.Resolve(ctx, o.Dir, "HEAD")
+// Changed is the head commit of dir and the paths changed since base.
+func Changed(ctx context.Context, dir, base string) (string, map[string]bool, error) {
+	head, err := ledger.Resolve(ctx, dir, "HEAD")
 	if err != nil {
-		return nil, err //nolint:wrapcheck // already descriptive
+		return "", nil, err //nolint:wrapcheck // already descriptive
 	}
-	ch, err := ledger.Diff(ctx, o.Dir, o.Base, head)
+	ch, err := ledger.Diff(ctx, dir, base, head)
 	if err != nil {
-		return nil, err //nolint:wrapcheck // already descriptive
+		return "", nil, err //nolint:wrapcheck // already descriptive
 	}
 	changed := map[string]bool{}
 	for p := range ch.Paths {
 		changed[p] = true
+	}
+	return head, changed, nil
+}
+
+// Review judges the touched rules at the head and drafts design edits for the contradicted ones.
+func Review(ctx context.Context, o Options) (*Report, error) {
+	head, changed, err := Changed(ctx, o.Dir, o.Base)
+	if err != nil {
+		return nil, err
 	}
 	rep := &Report{SchemaVersion: SchemaVersion, Repo: o.Repo, Base: o.Base, Head: head, Rules: []Rule{}}
 	touched := Touched(o.Manifest, changed)

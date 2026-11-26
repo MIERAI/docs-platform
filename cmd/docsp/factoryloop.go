@@ -106,36 +106,53 @@ func cmdFactoryPR(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	if err != nil {
 		return exitUsage, err
 	}
-	g, d, err := f.guards()
+	head, changed, err := factorypr.Changed(ctx, root, *base)
+	if err != nil {
+		return exitUsage, err //nolint:wrapcheck // already descriptive
+	}
+	if len(factorypr.Touched(m, changed)) == 0 { // nothing to judge: no model, no factory run
+		rep := &factorypr.Report{SchemaVersion: factorypr.SchemaVersion, Repo: name, Base: *base, Head: head, Rules: []factorypr.Rule{}}
+		return emitPR(ctx, rep, &f, *commentOut, *ghRepo, *post, stdout, stderr)
+	}
+	rep, err := reviewPR(ctx, &f, m, in, root, name, *base, *cache, !*noTry)
 	if err != nil {
 		return exitUsage, err
+	}
+	return emitPR(ctx, rep, &f, *commentOut, *ghRepo, *post, stdout, stderr)
+}
+
+// reviewPR sets up the judge, the drafter and the factory and reviews the change.
+func reviewPR(ctx context.Context, f *factoryFlags, m *factorymanifest.Manifest, in *instance.Instance, root, name, base, cache string, try bool) (*factorypr.Report, error) {
+	g, d, err := f.guards()
+	if err != nil {
+		return nil, err
 	}
 	defer closeGuards(g, d)
 	b, err := ledger.NewBuilder(ctx, root, name, "HEAD")
 	if err != nil {
-		return exitUsage, err //nolint:wrapcheck // already descriptive
+		return nil, err //nolint:wrapcheck // already descriptive
 	}
 	b.Class, b.Model = in.Classification, g.Name()
 	run := agentic.New(agentic.Options{
-		Guard: g, Repo: name, Dir: root, Class: in.Classification, CacheDir: *cache,
+		Guard: g, Repo: name, Dir: root, Class: in.Classification, CacheDir: cache,
 		Settings: agentic.FromInstance(in.AI.Judge.Agentic), Hint: factoryrules.ManifestHint(m),
 	})
 	if dl, err := run.Drift(ctx); err == nil {
 		b.Drift = dl
 	}
-	o := factorypr.Options{Repo: name, Dir: root, Base: *base, Manifest: m, Run: run, Builder: b, Draft: d}
-	if !*noTry {
+	o := factorypr.Options{Repo: name, Dir: root, Base: base, Manifest: m, Run: run, Builder: b, Draft: d}
+	if try {
 		o.Try = f.runner(root)
 	}
 	rep, err := factorypr.Review(ctx, o)
 	if err != nil {
-		return exitUsage, err //nolint:wrapcheck // already descriptive
+		return nil, err //nolint:wrapcheck // already descriptive
 	}
 	rep.USD = g.Stats().CostUSD
 	if d != g {
 		rep.USD += d.Stats().CostUSD
 	}
-	return emitPR(ctx, rep, &f, *commentOut, *ghRepo, *post, stdout, stderr)
+	return rep, nil
 }
 
 // emitPR writes the review: the comment file, the PR comment, then stdout / -out.
