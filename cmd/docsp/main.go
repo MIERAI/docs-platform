@@ -9,6 +9,8 @@
 //	                                    reviewed backlog → findings/v1 JSON
 //	docsp extract [repo]                dump what the extractors found (extract/v1)
 //	docsp validate FILE                 validate a findings/v1 document
+//	docsp contract -design DIR -design-adapter A -code DIR -code-adapter B [flags]
+//	                                    design-first spec vs code (contract/v1; no model)
 //	docsp stale -ledger FILE [-ref REV] [repo]
 //	                                    claims whose evidence changed (no model)
 //	docsp judge-tools-mcp -spec FILE    (internal) serve the read-only judge-tools over MCP stdio
@@ -51,6 +53,7 @@ var commands = map[string]command{
 	"sample":     cmdSample,
 	"slo":        cmdSLO,
 	"group":      cmdGroup,
+	"contract":   cmdContract,
 	"report":     cmdReport,
 	"draft":      cmdDraft,
 	"drafts":     cmdDrafts,
@@ -106,6 +109,7 @@ commands:
   draft      minimal-diff fix proposals for the ledger's problems (checked, logged, never applied)
   drafts     what became of the drafts: acceptance, revert rate, diff size; docs to generate or link instead
   group      repository groups: plan (doc sets, declared targets, shared drift scans), stale, judge
+  contract   design-first specs vs the code: interface diff + which side moved (git history; no model)
   stale      claims of the evidence ledger whose line or evidence changed since judged (no model)
   eval-model score a model provider per task (judge, draft) on a frozen eval set; -dry-run estimates cost
   import-findings

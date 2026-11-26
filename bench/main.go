@@ -6,6 +6,7 @@
 //	go run ./bench replay -gt DIR -work DIR [-pin name=rev ...] [-eval-out set.jsonl] [-md ...] [-json ...]
 //	go run ./bench fetch [-manifest bench/data/manifest.json] -work DIR
 //	go run ./bench mutate [-manifest FILE] -work DIR [-out-dir DIR] [-out mutations.json]
+//	go run ./bench contract-lab [-lab bench/contractlab/lab.json] -work DIR [-json FILE]
 //	go run ./bench verify-offline [-expected FILE] -eval-test F -eval-dev F -ledger-replay F -replay F -evalset F -mutations F
 //
 // The second form is the history replay benchmark (the primary metric of change-time
@@ -53,6 +54,7 @@ var (
 
 // subcommands are the bench modes other than the snapshot check.
 var subcommands = map[string]func(context.Context, []string) error{
+	"contract-lab":    runContractLab,
 	"fetch":           runFetch,
 	"ledger-backtest": runLedgerBacktest,
 	"ledger-replay":   runLedgerReplay,

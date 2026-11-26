@@ -367,6 +367,51 @@
                       }
                     }
                   }
+                },
+                "contract": {
+                  "type": "object",
+                  "description": "the doc set is a design-first specification: docsp contract diffs its interface surface against the code at the first target (contract/v1)",
+                  "required": [
+                    "design_adapter",
+                    "code_adapter"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "design_adapter": {
+                      "type": "string",
+                      "enum": [
+                        "factory-design",
+                        "openapi-graphql"
+                      ]
+                    },
+                    "code_adapter": {
+                      "type": "string",
+                      "enum": [
+                        "factory-code",
+                        "kotlin-graphql"
+                      ]
+                    },
+                    "design_ref": {
+                      "type": "string"
+                    },
+                    "code_paths": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "authority": {
+                      "type": "string",
+                      "enum": [
+                        "design",
+                        "code",
+                        "ask"
+                      ]
+                    },
+                    "generator": {
+                      "type": "string"
+                    }
+                  }
                 }
               }
             }

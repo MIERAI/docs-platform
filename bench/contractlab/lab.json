@@ -1,0 +1,444 @@
+{
+  "description": "Contract-layer lab: escape-hatch drifts injected into scratch clones of two public repositories built with api-factory (never committed). Each mutation replaces one exact snippet; expect lists the items (operation, kind, subject) the contract diff must report and the direction it must give. alarm=false mutations must report nothing new. Regenerate with: go run ./bench contract-lab -lab bench/contractlab/lab.json -work DIR",
+  "repos": [
+    {
+      "name": "storefront",
+      "url": "https://github.com/MIERAI/storefront.git",
+      "commit": "98e4fb39ba31e6e0e3f51768d6ea4911c01ddd4e",
+      "design_paths": [
+        "services/*/design/**",
+        "services/*/db/schema/**",
+        "services/*/specs/**"
+      ],
+      "code_paths": [
+        "services/*/db/**",
+        "services/*/internal/handler/**"
+      ],
+      "mutations": [
+        {
+          "id": "S01-rename-param",
+          "what": "rename a SQL parameter",
+          "file": "services/inventory/db/queries/inventory.get-stock.sql",
+          "old": "sqlc.arg(sku)::text",
+          "new": "sqlc.arg(stock_sku)::text",
+          "alarm": true,
+          "expect": [
+            {
+              "operation": "GetStock",
+              "kind": "input.missing_in_code",
+              "subject": "inputs.sku",
+              "direction": "design_behind_code"
+            },
+            {
+              "operation": "GetStock",
+              "kind": "input.missing_in_design",
+              "subject": "inputs.stock_sku",
+              "direction": "undocumented"
+            }
+          ]
+        },
+        {
+          "id": "S02-rename-filter-column",
+          "what": "filter on another column",
+          "file": "services/payment/db/queries/payment.get-payment-by-order.sql",
+          "old": "WHERE (t1.order_id = sqlc.arg(order_id)::int8)",
+          "new": "WHERE (t1.id = sqlc.arg(order_id)::int8)",
+          "alarm": true,
+          "expect": [
+            {
+              "operation": "GetPaymentByOrder",
+              "kind": "input.filter",
+              "subject": "inputs.order_id",
+              "direction": "design_behind_code"
+            }
+          ]
+        },
+        {
+          "id": "S03-param-type",
+          "what": "change a parameter type",
+          "file": "services/notification/db/queries/notification.list-notifications-by-order.sql",
+          "old": "sqlc.arg(order_id)::int8",
+          "new": "sqlc.arg(order_id)::int4",
+          "alarm": true,
+          "expect": [
+            {
+              "operation": "ListNotificationsByOrder",
+              "kind": "input.type",
+              "subject": "inputs.order_id",
+              "direction": "design_behind_code"
+            }
+          ]
+        },
+        {
+          "id": "S04-filter-operator",
+          "what": "change a filter operator (derived parameter)",
+          "file": "services/order/db/queries/order.list-stuck-orders.sql",
+          "old": "WHERE (t1.updated_at < (",
+          "new": "WHERE (t1.updated_at <= (",
+          "alarm": true,
+          "expect": [
+            {
+              "operation": "ListStuckOrders",
+              "kind": "rule.missing_in_code",
+              "subject": "rules.filter.updated_at",
+              "direction": "design_behind_code"
+            }
+          ]
+        },
+        {
+          "id": "S05-add-column",
+          "what": "select an extra column",
+          "file": "services/catalog/db/queries/catalog.get-product.sql",
+          "old": "t1.updated_at AS updated_at\n",
+          "new": "t1.updated_at AS updated_at, t1.sku AS sku\n",
+          "alarm": true,
+          "expect": [
+            {
+              "operation": "GetProduct",
+              "kind": "output.missing_in_design",
+              "subject": "outputs.sku",
+              "direction": "design_behind_code"
+            }
+          ]
+        },
+        {
+          "id": "S06-remove-column",
+          "what": "drop a selected column",
+          "file": "services/payment/db/queries/payment.get-payment-by-order.sql",
+          "old": "t1.status AS status, t1.reason AS reason,",
+          "new": "t1.status AS status,",
+          "alarm": true,
+          "expect": [
+            {
+              "operation": "GetPaymentByOrder",
+              "kind": "output.missing_in_code",
+              "subject": "outputs.reason",
+              "direction": "removed_in_code"
+            }
+          ]
+        },
+        {
+          "id": "S07-output-source",
+          "what": "an output read from another column",
+          "file": "services/order/db/queries/order.get-order.sql",
+          "old": "t1.total AS total",
+          "new": "t1.version AS total",
+          "alarm": true,
+          "expect": [
+            {
+              "operation": "GetOrder",
+              "kind": "output.column",
+              "subject": "outputs.total",
+              "direction": "design_behind_code"
+            }
+          ]
+        },
+        {
+          "id": "S08-output-cast",
+          "what": "cast an output to another type",
+          "file": "services/catalog/db/queries/catalog.list-products.sql",
+          "old": "t1.price AS price",
+          "new": "t1.price::float8 AS price",
+          "alarm": true,
+          "expect": [
+            {
+              "operation": "ListProducts",
+              "kind": "output.type",
+              "subject": "outputs.price",
+              "direction": "design_behind_code"
+            }
+          ]
+        },
+        {
+          "id": "S09-fixed-condition",
+          "what": "change a fixed condition",
+          "file": "services/catalog/db/queries/catalog.list-products.sql",
+          "old": "(t1.status = 1::int4)",
+          "new": "(t1.status = 2::int4)",
+          "alarm": true,
+          "expect": [
+            {
+              "operation": "ListProducts",
+              "kind": "rule.missing_in_code",
+              "subject": "rules.fixed.status",
+              "direction": "design_behind_code"
+            }
+          ]
+        },
+        {
+          "id": "S10-order-direction",
+          "what": "reverse a sort key",
+          "file": "services/notification/db/queries/notification.list-notifications-by-order.sql",
+          "old": "ORDER BY t2.sent_at, t2.event_id",
+          "new": "ORDER BY t2.sent_at DESC, t2.event_id",
+          "alarm": true,
+          "expect": [
+            {
+              "operation": "ListNotificationsByOrder",
+              "kind": "rule.changed",
+              "subject": "rules.order.1",
+              "direction": "design_behind_code"
+            }
+          ]
+        },
+        {
+          "id": "S11-row-limit",
+          "what": "change the row limit",
+          "file": "services/inventory/db/queries/inventory.list-stock-by-skus.sql",
+          "old": "LIMIT 101;",
+          "new": "LIMIT 201;",
+          "alarm": true,
+          "expect": [
+            {
+              "operation": "ListStockBySkus",
+              "kind": "rule.changed",
+              "subject": "rules.limit.rows",
+              "direction": "design_behind_code"
+            }
+          ]
+        },
+        {
+          "id": "S12-presence",
+          "what": "a required parameter made nullable",
+          "file": "services/order/db/queries/order.list-orders-by-customer.sql",
+          "old": "sqlc.arg(customer_id)::int8",
+          "new": "sqlc.narg(customer_id)::int8",
+          "alarm": true,
+          "expect": [
+            {
+              "operation": "ListOrdersByCustomer",
+              "kind": "input.presence",
+              "subject": "inputs.customer_id",
+              "direction": "design_behind_code"
+            }
+          ]
+        },
+        {
+          "id": "S13-table",
+          "what": "read another table",
+          "file": "services/payment/db/queries/payment.get-payment-by-order.sql",
+          "old": "FROM payments AS t1",
+          "new": "FROM payments_archive AS t1",
+          "alarm": true,
+          "expect": [
+            {
+              "operation": "GetPaymentByOrder",
+              "kind": "rule.missing_in_code",
+              "subject": "rules.table.payments",
+              "direction": "removed_in_code"
+            }
+          ]
+        },
+        {
+          "id": "S14-drop-input",
+          "what": "drop a declared input (its filter)",
+          "file": "services/inventory/db/queries/inventory.get-stock.sql",
+          "old": "\nWHERE (t1.sku = sqlc.arg(sku)::text);",
+          "new": ";",
+          "alarm": true,
+          "expect": [
+            {
+              "operation": "GetStock",
+              "kind": "input.missing_in_code",
+              "subject": "inputs.sku",
+              "direction": "removed_in_code"
+            }
+          ]
+        },
+        {
+          "id": "S15-design-order",
+          "what": "the design changes a sort direction (code not regenerated)",
+          "file": "services/order/design/order/ListOrdersByCustomer.yaml",
+          "old": "排序: [created_at 新到旧, id 大到小]",
+          "new": "排序: [created_at 旧到新, id 大到小]",
+          "alarm": true,
+          "expect": [
+            {
+              "operation": "ListOrdersByCustomer",
+              "kind": "rule.changed",
+              "subject": "rules.order.1",
+              "direction": "code_behind_design"
+            }
+          ]
+        },
+        {
+          "id": "S16-design-output",
+          "what": "the design adds an output (code not regenerated)",
+          "file": "services/inventory/design/inventory/GetStock.yaml",
+          "old": "  reserved:  已预留数量\n",
+          "new": "  reserved:  已预留数量\n  version:   版本号\n",
+          "alarm": true,
+          "expect": [
+            {
+              "operation": "GetStock",
+              "kind": "output.missing_in_code",
+              "subject": "outputs.version",
+              "direction": "code_behind_design"
+            }
+          ]
+        },
+        {
+          "id": "N01-comment",
+          "what": "add a SQL comment",
+          "file": "services/order/db/queries/order.list-stuck-orders.sql",
+          "old": "-- name: ListStuckOrders :many\n",
+          "new": "-- name: ListStuckOrders :many\n-- reviewed: the waiting states are 2..5\n",
+          "alarm": false
+        },
+        {
+          "id": "N02-whitespace",
+          "what": "re-indent a WHERE clause",
+          "file": "services/inventory/db/queries/inventory.get-stock.sql",
+          "old": "WHERE (t1.sku = sqlc.arg(sku)::text);",
+          "new": "WHERE\n    ( t1.sku   =   sqlc.arg(sku)::text )  ;",
+          "alarm": false
+        },
+        {
+          "id": "N03-select-reorder",
+          "what": "reorder the SELECT list",
+          "file": "services/payment/db/queries/payment.get-payment-by-order.sql",
+          "old": "SELECT t1.amount AS amount, t1.status AS status, t1.reason AS reason, t1.created_at AS created_at",
+          "new": "SELECT t1.created_at AS created_at, t1.reason AS reason, t1.status AS status, t1.amount AS amount",
+          "alarm": false
+        },
+        {
+          "id": "N04-and-reorder",
+          "what": "swap two AND conditions",
+          "file": "services/catalog/db/queries/catalog.list-products.sql",
+          "old": "    WHERE (t1.category = sqlc.arg(category)::text)\n      AND (t1.status = 1::int4)",
+          "new": "    WHERE (t1.status = 1::int4)\n      AND (t1.category = sqlc.arg(category)::text)",
+          "alarm": false
+        },
+        {
+          "id": "N05-design-prose",
+          "what": "reword a design description",
+          "file": "services/order/design/order/GetOrder.yaml",
+          "old": "说明: 返回一个订单和它的明细(按行号)",
+          "new": "说明: 返回一个订单以及它的全部明细(按行号排列)",
+          "alarm": false
+        }
+      ]
+    },
+    {
+      "name": "api-factory",
+      "url": "https://github.com/MIERAI/api-factory.git",
+      "commit": "c96fe1a3cea8aaa63dd447bad9875063bf5495d6",
+      "design_paths": [
+        "design/**",
+        "specs/**",
+        "db/schema/**"
+      ],
+      "code_paths": [
+        "db/**",
+        "internal/handler/**"
+      ],
+      "mutations": [
+        {
+          "id": "F01-compute-signature",
+          "what": "change a compute function's signature",
+          "file": "internal/handler/sales/get_daily_sales_summary_logic.go",
+          "old": "rows []getDailySalesSummaryRow) (*salesv1",
+          "new": "rows []getDailySalesSummaryRow, scale int) (*salesv1",
+          "alarm": true,
+          "expect": [
+            {
+              "operation": "GetDailySalesSummary",
+              "kind": "rule.changed",
+              "subject": "rules.signature.getDailySalesSummaryLogic",
+              "direction": "design_behind_code"
+            }
+          ]
+        },
+        {
+          "id": "F02-compute-drops-output",
+          "what": "a compute function stops setting a declared output",
+          "file": "internal/handler/sales/get_daily_sales_summary_logic.go",
+          "old": "\t\tUnclosedStores: unclosed,\n",
+          "new": "",
+          "alarm": true,
+          "expect": [
+            {
+              "operation": "GetDailySalesSummary",
+              "kind": "output.missing_in_code",
+              "subject": "outputs.unclosed_stores",
+              "direction": "removed_in_code"
+            }
+          ]
+        },
+        {
+          "id": "F03-compute-reads-column",
+          "what": "a compute function reads an undeclared column",
+          "file": "internal/handler/jobs/get_job_summary_logic.go",
+          "old": "\tfor _, r := range rows {\n",
+          "new": "\tfor _, r := range rows {\n\t\t_ = r.JobType\n",
+          "alarm": true,
+          "expect": [
+            {
+              "operation": "GetJobSummary",
+              "kind": "rule.missing_in_design",
+              "subject": "rules.reads.job_type",
+              "direction": "design_behind_code"
+            }
+          ]
+        },
+        {
+          "id": "F04-compute-reads-input",
+          "what": "a compute function reads an undeclared input",
+          "file": "internal/handler/jobs/get_job_summary_logic.go",
+          "old": "\t_ = req //",
+          "new": "\t_ = req.GetRegion() //",
+          "alarm": true,
+          "expect": [
+            {
+              "operation": "GetJobSummary",
+              "kind": "rule.missing_in_design",
+              "subject": "rules.reads_input.region",
+              "direction": "undocumented"
+            }
+          ]
+        },
+        {
+          "id": "F05-hand-sql-column",
+          "what": "hand SQL (datasource.sql) query file drops a column",
+          "file": "db/queries/shop.get-order-with-items.sql",
+          "old": "i.quantity, i.unit_price",
+          "new": "i.quantity",
+          "alarm": true,
+          "expect": [
+            {
+              "operation": "GetOrderWithItems",
+              "kind": "rule.missing_in_code",
+              "subject": "rules.selects.unit_price",
+              "direction": "removed_in_code"
+            }
+          ]
+        },
+        {
+          "id": "F06-hand-sql-param-type",
+          "what": "hand SQL (datasource.sql) query file changes a parameter type",
+          "file": "db/queries/shop.get-order-with-items.sql",
+          "old": "sqlc.arg(order_id)::int8",
+          "new": "sqlc.arg(order_id)::int4",
+          "alarm": true,
+          "expect": [
+            {
+              "operation": "GetOrderWithItems",
+              "kind": "input.type",
+              "subject": "inputs.order_id",
+              "direction": "design_behind_code"
+            }
+          ]
+        },
+        {
+          "id": "N06-compute-local-rename",
+          "what": "rename a local variable in a compute function",
+          "file": "internal/handler/sales/get_daily_sales_summary_logic.go",
+          "old": "totalAmount",
+          "new": "sumAmount",
+          "all": true,
+          "alarm": false
+        }
+      ]
+    }
+  ]
+}

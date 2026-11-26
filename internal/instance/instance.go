@@ -89,6 +89,44 @@ type DocSet struct {
 	Targets []Target `yaml:"targets"`
 	// Generated docs are judged at their generator input, not on their text.
 	Generated []Generated `yaml:"generated"`
+	// Contract: the doc set is a design-first specification; `docsp contract` diffs its
+	// interface surface against the code at the first target (docs/design.md §13).
+	Contract *Contract `yaml:"contract"`
+}
+
+// Contract configures the contract layer of a doc set.
+type Contract struct {
+	// DesignAdapter reads the doc set's docs (factory-design, openapi-graphql); CodeAdapter
+	// reads the code (factory-code, kotlin-graphql).
+	DesignAdapter string `yaml:"design_adapter"`
+	CodeAdapter   string `yaml:"code_adapter"`
+	// DesignRef is the revision of the docs repository read (default HEAD); the code is
+	// read at the first target's revision. Both are read with git show, never checked out.
+	DesignRef string `yaml:"design_ref"`
+	// CodePaths are globs of the code side (default: the whole repository).
+	CodePaths []string `yaml:"code_paths"`
+	// Authority: design (the code deviates), code (the design needs an update) or ask
+	// (neutral; the default).
+	Authority string `yaml:"authority"`
+	// Generator names how to produce the design from the code when code is the authority
+	// (for example a schema export of the GraphQL server).
+	Generator string `yaml:"generator"`
+}
+
+var contractAuthorities = map[string]bool{"": true, "design": true, "code": true, "ask": true}
+
+func (c *Contract) problem() string {
+	switch {
+	case c == nil:
+		return ""
+	case c.DesignAdapter == "" || c.CodeAdapter == "":
+		return "contract: design_adapter and code_adapter are required"
+	case !contractAuthorities[c.Authority]:
+		return "contract: authority must be design, code or ask"
+	case c.DesignRef != "" && (strings.HasPrefix(c.DesignRef, "-") || strings.Contains(c.DesignRef, "..")):
+		return "contract: design_ref is not a revision"
+	}
+	return ""
 }
 
 // Target is a repository at a declared revision.
@@ -139,6 +177,9 @@ func (g Group) validate(i int) []error {
 			if !repos[t.Repo] || t.Ref == "" || strings.HasPrefix(t.Ref, "-") || strings.Contains(t.Ref, "..") {
 				bad("doc_set %q: target %s@%s: a repo of the group and a revision are required", d.Name, t.Repo, t.Ref)
 			}
+		}
+		if msg := d.Contract.problem(); msg != "" {
+			bad("doc_set %q: %s", d.Name, msg)
 		}
 	}
 	return errs
