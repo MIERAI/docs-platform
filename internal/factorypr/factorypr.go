@@ -187,6 +187,8 @@ func acceptance(ctx context.Context, t factorytry.Runner, files []factorytry.Fil
 		return err.Error()
 	case res.Status != factorytry.StatusOK:
 		return fmt.Sprintf("%s at %s: %s", res.Status, res.Stage, firstLine(res.Message))
+	case res.Problem() != "":
+		return "acceptance did not run: " + firstLine(res.Problem())
 	}
 	if f := res.Failed(); len(f) > 0 {
 		names := make([]string, 0, len(f))

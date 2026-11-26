@@ -213,6 +213,8 @@ func baselineProblem(res *factorytry.Result, err error) string {
 		return err.Error()
 	case res.Status != factorytry.StatusOK:
 		return fmt.Sprintf("%s at %s: %s", res.Status, res.Stage, firstLine(res.Message))
+	case res.Problem() != "":
+		return "acceptance did not run: " + firstLine(res.Problem())
 	case len(res.Failed()) > 0:
 		return fmt.Sprintf("%d cases fail without any change (first: %s)", len(res.Failed()), res.Failed()[0].Name)
 	case res.Ran(factorytry.Design...) == 0:
@@ -322,6 +324,9 @@ func tryMutant(ctx context.Context, o Options, j *job, lastErr string) (bool, st
 	if res.Status != factorytry.StatusOK {
 		return false, fmt.Sprintf("the mutant did not get through the factory (%s at %s: %s)", res.Status, res.Stage, firstLine(res.Message))
 	}
+	if p := res.Problem(); p != "" { // e.g. the server crashes: every input notices, not this rule
+		return false, "with the mutant the acceptance could not run (" + firstLine(p) + "): break the rule, not the service"
+	}
 	r.Mutant = &m
 	r.CaughtBy = names(res.Failed(factorytry.Design...))
 	r.CaughtElsewhere = names(res.Failed(factorytry.SourceAuto, factorytry.SourceDifferential, factorytry.SourceHandTest))
@@ -417,6 +422,9 @@ func verify(ctx context.Context, o Options, api string, design, mutant factorytr
 	if res.Status != factorytry.StatusOK {
 		return false, fmt.Sprintf("the design with the example does not get through the factory (%s at %s: %s)", res.Status, res.Stage, firstLine(res.Message))
 	}
+	if p := res.Problem(); p != "" {
+		return false, "with the example the acceptance could not run: " + firstLine(p)
+	}
 	if f := res.Failed(); len(f) > 0 {
 		return false, fmt.Sprintf("the example fails on the current code (%s: %s)", f[0].Name, firstLine(f[0].Detail))
 	}
@@ -425,7 +433,7 @@ func verify(ctx context.Context, o Options, api string, design, mutant factorytr
 		return false, err.Error()
 	}
 	caught := names(res.Failed(factorytry.Design...))
-	if res.Status != factorytry.StatusOK || len(caught) == 0 {
+	if res.Status != factorytry.StatusOK || res.Problem() != "" || len(caught) == 0 {
 		return false, "the example passes on the mutant too: it does not pin the rule down"
 	}
 	p.Catches = caught

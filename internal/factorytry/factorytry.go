@@ -68,10 +68,22 @@ type Case struct {
 	Detail string `json:"detail,omitempty"`
 }
 
-// API is the cases of one API.
+// API is the cases of one API. Error says its acceptance could not run (the server did not
+// start, for example); its cases are then only the unit tests.
 type API struct {
 	ID    string `json:"id"`
 	Cases []Case `json:"cases"`
+	Error string `json:"error,omitempty"`
+}
+
+// Problem is the first API whose acceptance could not run ("" = none).
+func (r *Result) Problem() string {
+	for _, a := range r.APIs {
+		if a.Error != "" {
+			return a.ID + ": " + a.Error
+		}
+	}
+	return ""
 }
 
 // Count is passed and failed cases.
