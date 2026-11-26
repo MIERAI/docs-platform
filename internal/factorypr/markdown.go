@@ -50,7 +50,7 @@ func (r *Report) Markdown() string {
 		}
 		b.WriteString("\n</details>\n")
 	}
-	b.WriteString("\n<sub>判定由 AI 做,改稿只有在工厂的生成、编译、测试和验收全部通过时才标为已验证。不会自动修改任何文件。</sub>\n")
+	b.WriteString("\n<sub>判定由 AI 做。改稿只有在工厂重新生成、编译并通过设计书的全部用例(例子、逻辑样例、自动用例、差分用例)时才标为已验证;手写测试属于代码,不算在内。不会自动修改任何文件。</sub>\n")
 	return b.String()
 }
 
@@ -76,7 +76,7 @@ func writeDraft(b *strings.Builder, d *Draft) {
 		fmt.Fprintf(b, "\n设计书改稿: 没有提出 (%s)\n", d.Problem)
 		return
 	case d.Verified:
-		b.WriteString("\n设计书改稿 — ✅ 工厂验收通过(重新生成 + 编译 + 测试 + 验收):\n")
+		b.WriteString("\n设计书改稿 — ✅ 工厂验证通过(重新生成 + 编译 + 设计书的全部用例):\n")
 	default:
 		fmt.Fprintf(b, "\n设计书改稿 — ⚠️ 未通过验证 (%s),仅供参考:\n", d.Problem)
 	}

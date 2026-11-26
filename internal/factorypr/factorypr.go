@@ -179,8 +179,13 @@ func judged(ctx context.Context, o Options, er factorymanifest.EscapedRule, touc
 	return r
 }
 
-// acceptance runs the factory and says what is wrong ("" = everything passes).
-func acceptance(ctx context.Context, t factorytry.Runner, files []factorytry.File, api string) string {
+// designSources are the cases a design draft answers for: hand-written tests belong to the
+// code (a change that breaks them is the code's business, whatever the design says).
+var designSources = []string{factorytry.SourceExample, factorytry.SourceLogicExample, factorytry.SourceAuto, factorytry.SourceDifferential}
+
+// acceptance runs the factory and says what is wrong ("" = everything passes); with sources,
+// only failures of those sources count.
+func acceptance(ctx context.Context, t factorytry.Runner, files []factorytry.File, api string, sources ...string) string {
 	res, err := t.Try(ctx, files, []string{api})
 	switch {
 	case err != nil:
@@ -190,7 +195,7 @@ func acceptance(ctx context.Context, t factorytry.Runner, files []factorytry.Fil
 	case res.Problem() != "":
 		return "acceptance did not run: " + firstLine(res.Problem())
 	}
-	if f := res.Failed(); len(f) > 0 {
+	if f := res.Failed(sources...); len(f) > 0 {
 		names := make([]string, 0, len(f))
 		for _, c := range f[:min(3, len(f))] {
 			names = append(names, fmt.Sprintf("%s (%s)", c.Name, c.Source))
@@ -200,7 +205,7 @@ func acceptance(ctx context.Context, t factorytry.Runner, files []factorytry.Fil
 	return ""
 }
 
-const draftSchema = `{"type":"object","properties":{"edits":{"type":"array","maxItems":8,"items":{"type":"object","properties":{"old":{"type":"string"},"new":{"type":"string"}},"required":["old","new"],"additionalProperties":false}},"rationale":{"type":"string"}},"required":["edits","rationale"],"additionalProperties":false}`
+const draftSchema = `{"type":"object","properties":{"edits":{"type":"array","maxItems":12,"items":{"type":"object","properties":{"old":{"type":"string"},"new":{"type":"string"}},"required":["old","new"],"additionalProperties":false}},"rationale":{"type":"string"}},"required":["edits","rationale"],"additionalProperties":false}`
 
 const draftTask = `RULE (%s line %d):
 <<<
@@ -209,7 +214,7 @@ const draftTask = `RULE (%s line %d):
 At the head of a change, the hand-written code no longer does what this rule says. Facts checked against the code:
 %s
 Propose the smallest edits to %s that make the design state what the code does now: the rule's wording, and the expected results of any example that encodes the old behaviour. Keep every other word, the language, keys and indentation exactly. Do not change inputs or data rows unless an example cannot be fixed otherwise. Whether the design is stale or the code is wrong is decided by a person; you only draft the design side.
-Each edit replaces "old" - text copied exactly from %s (whole lines, occurring exactly once; never the line numbers) - with "new". At most 8 edits; quote each old text from the file, without the "  42| " line-number prefix.%s`
+Each edit replaces "old" - text copied exactly from %s (whole lines, occurring exactly once; never the line numbers) - with "new". At most 12 edits: one edit may cover several adjacent lines (an example's description and its result together). Quote each old text from the file without the "  42| " line-number prefix.%s`
 
 func draft(ctx context.Context, o Options, er factorymanifest.EscapedRule, r *Rule) *Draft {
 	doc, err := os.ReadFile(filepath.Join(o.Dir, filepath.FromSlash(er.Path)))
@@ -277,7 +282,7 @@ func draftOnce(ctx context.Context, o Options, er factorymanifest.EscapedRule, d
 		d.Problem = "not verified: no factory configured"
 		return true, ""
 	}
-	if p := acceptance(ctx, o.Try, []factorytry.File{{Path: er.Path, Content: edited}}, er.API); p != "" {
+	if p := acceptance(ctx, o.Try, []factorytry.File{{Path: er.Path, Content: edited}}, er.API, designSources...); p != "" {
 		return false, "the factory does not accept the design with it: " + p
 	}
 	d.Verified, d.Problem = true, ""

@@ -143,7 +143,7 @@ func TestReviewDraftsAVerifiedDesignEdit(t *testing.T) {
 		t.Error("the head as it is fails the design's example: acceptance must say so")
 	}
 	md := rep.Markdown()
-	for _, s := range []string{Marker, "❌ 代码和规则矛盾", "✅ 工厂验收通过", "- " + "    结果: 超过 300 秒算违约", "+ " + "    结果: 超过 600 秒算违约", "依据: `logic.go:3`"} {
+	for _, s := range []string{Marker, "❌ 代码和规则矛盾", "✅ 工厂验证通过", "- " + "    结果: 超过 300 秒算违约", "+ " + "    结果: 超过 600 秒算违约", "依据: `logic.go:3`"} {
 		if !strings.Contains(md, s) {
 			t.Errorf("comment lacks %q:\n%s", s, md)
 		}
