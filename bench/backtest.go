@@ -146,8 +146,13 @@ func backtestVariants(ctx context.Context, l *ledger.Ledger, repos dirFlag, gt m
 	for _, v := range []struct {
 		name  string
 		rules ledger.Rules
-	}{{"ledger", ledger.Rules{}}, {"ledger+weak", ledger.Rules{Weak: true}}, {"ledger+siblings", ledger.Rules{Siblings: true}},
-		{"ledger+members", ledger.Rules{Members: true}}, {"ledger+all", ledger.Rules{Weak: true, Siblings: true, Members: true}}} {
+	}{
+		{"ledger", ledger.Rules{}},
+		{"ledger+weak", ledger.Rules{Weak: true}},
+		{"ledger+siblings", ledger.Rules{Siblings: true}},
+		{"ledger+members", ledger.Rules{Members: true}},
+		{"ledger+all", ledger.Rules{Weak: true, Siblings: true, Members: true}},
+	} {
 		bv := btVariant{Name: v.name, Rules: v.rules.String()}
 		for _, name := range sortedKeys(repos) {
 			rr, err := backtestRepo(ctx, l, name, repos[name], gtFor(gt, name), set, v.rules)

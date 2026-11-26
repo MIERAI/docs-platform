@@ -24,6 +24,7 @@ a swappable contract. Implemented so far:
 | ④b model judgement + draft | a configured model judges "does this change contradict this section?" and drafts an edit (proposal only) | **implemented** (behind `judge/v1`) |
 | model evaluation | per-task scores of any provider on a frozen eval set; config-driven switching rule | **implemented** (`docsp eval-model`) |
 | backlog import | a reviewed defect backlog becomes findings the ledger tracks | **implemented** (`docsp import-findings`) |
+| contract layer | design-first specs vs the code that implements them: interface diff (operations, inputs, outputs, types, declared rules) and, from git history, which side moved; no model | **implemented** (`docsp contract`) |
 
 The design (in Chinese) is [docs/design.md](docs/design.md); the data contracts are described in
 [docs/contracts.md](docs/contracts.md).
@@ -288,6 +289,80 @@ type, fix, evidence_paths`) into findings/v1 (collector `docs-backlog`, check
 `docs.backlog.<type>`, `detector_layer: review`) so the shared ledger tracks it. Ids are stable
 (re-importing is idempotent); the document has empty coverage, so an import never marks
 anything fixed. `--owner` sets the finding owner, `--out FILE` writes the JSON (mode 0600).
+
+### `docsp contract [flags]`
+
+The contract layer, for design-first teams: the spec is written first, the code follows, and
+later the code changes while the spec does not. `docsp contract` reduces both sides to a
+normalized interface surface - operations, inputs (type, presence, the column a filter
+compares), outputs (type, source column), declared machine-readable rules (table, filters,
+fixed conditions, ordering, row limit, function signature, columns a function reads) -
+diffs them, and classifies every mismatch from git history:
+
+| Class | Meaning | Evidence |
+|---|---|---|
+| `design_behind_code` | the code changed it after the design last did | last commit on each side naming the item (`git log -G`) |
+| `code_behind_design` | the design changed it later, or the code never implemented it | same; `git log -S` finds no code commit for "never" |
+| `diverged` | both sides changed it since they last agreed | the two newest touches on each side |
+| `undocumented` | only in the code; the design never named it | `git log -S` on the design paths is empty |
+| `removed_in_code` | the design still lists what the code deleted | the deletion and the addition commits (`git log -S`) |
+
+History is searched in the files that define the operation on each side, for the item's
+name in its snake_case, lowerCamel and UpperCamel spellings. A fuzzy name match on the other
+side is attached as `rename_candidate` - a hint, never a fact. No model is called.
+
+Adapters (`-design-adapter`, `-code-adapter`):
+
+| Adapter | Side | Reads |
+|---|---|---|
+| `factory-design` | design | a design-first generator's design language (`design/<domain>/<API>.yaml` with the domain file and the schema SQL; hand-written `specs/**/spec.yaml`, including the escape hatch `datasource.sql`) |
+| `factory-code` | code | the files the generator cannot keep in step: SQL query files (`db/queries/*.sql`, simple parsing: parameters and casts, SELECT list through derived tables, tables, WHERE comparisons, ORDER BY, LIMIT) and compute functions (`internal/handler/**/*_logic.go`, go/parser: signature, response fields set, row and request fields read) |
+| `openapi-graphql` | design | OpenAPI documents whose paths embed GraphQL: every example `query` and every fenced graphql block; arguments typed from the variable definitions and `components.schemas` |
+| `kotlin-graphql` | code | GraphQL code-first Kotlin (SmallRye): `@Query` / `@Mutation` functions of `@GraphQLApi` classes (`@Name`, default values, the `get` prefix rule), argument types and the fields of the return type's class |
+
+The doc set's **authority** decides the wording: `design` reports "code deviates from design",
+`code` reports "design needs update" and recommends generating the design from the code when
+a generator exists (`-generator`, for example a GraphQL schema export), `ask` stays neutral.
+
+Each side is read at a revision with `git ls-tree` / `git show` (checkouts are never touched)
+or, without `-design-ref` / `-code-ref`, from the working tree, where an uncommitted change is
+the newest touch. The output is contract/v1 (`-out FILE`, mode 0600; `-format text|json|none`).
+
+| Flag | Meaning |
+|---|---|
+| `-instance-config FILE` | take everything from a group doc set's `contract:` block (below); flags given override it |
+| `-group NAME`, `-doc-set NAME` | which group / doc set (default: the only doc set with a contract) |
+| `-checkout repo=DIR` | a clone of a group repository; it need not be at the revision |
+| `-design DIR`, `-design-ref REV`, `-design-path GLOB`, `-design-adapter NAME`, `-design-repo NAME` | the design side (path flags repeat) |
+| `-code DIR`, `-code-ref REV`, `-code-path GLOB`, `-code-adapter NAME`, `-code-repo NAME` | the code side |
+| `-authority design\|code\|ask`, `-generator TEXT` | as above |
+| `-no-history`, `-workers N` | skip the history classification; concurrent git calls |
+
+In a repository group the spec and the code may live in different repositories; the doc set
+declares the adapters and the revisions:
+
+```yaml
+groups:
+  - name: shop
+    repos:
+      - {name: spec, role: api-spec, path: /srv/spec}
+      - {name: api, role: code, path: /srv/api}
+    doc_sets:
+      - name: graphql
+        repo: spec
+        docs: ["api/graphql/**"]
+        targets: [{repo: api, ref: origin/develop}]
+        contract:
+          design_adapter: openapi-graphql
+          code_adapter: kotlin-graphql
+          design_ref: origin/main
+          code_paths: ["services/**"]
+          authority: code
+          generator: "export the GraphQL schema from the server"
+```
+
+`go run ./bench contract-lab -lab bench/contractlab/lab.json -work DIR` replays the lab of design/§13 (drifts injected into
+pinned public clones, expected detections in `bench/contractlab/lab.json`).
 
 ### `docsp extract [--config FILE] [repo]`, `docsp validate FILE`, `docsp version`
 

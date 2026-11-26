@@ -81,3 +81,9 @@ var SLO []byte
 //
 //go:embed report-v1.schema.json
 var Report []byte
+
+// Contract is docs-platform/contract/v1: a design-first specification and its code reduced to
+// interface surfaces, their mismatches and which side moved (git history).
+//
+//go:embed contract-v1.schema.json
+var Contract []byte

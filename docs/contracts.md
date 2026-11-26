@@ -19,6 +19,7 @@ docs-platform parts are coupled only through versioned, language-neutral JSON Sc
 | judge-tools/v1 | `contracts/judge-tools-v1.schema.json` | agentic provider ↔ core (read-only worktree tools) |
 | instance/v1 | `contracts/instance-v1.schema.json` | the operator's instance configuration → `docsp` |
 | eval/v1 | `contracts/eval-v1.schema.json` | `docsp eval-model` → stored results, comparison over time |
+| contract/v1 | `contracts/contract-v1.schema.json` | `docsp contract` → reviewers, a findings importer, dashboards (design/code surfaces, mismatch items, direction from history) |
 
 ## findings/v1
 

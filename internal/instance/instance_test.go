@@ -97,6 +97,14 @@ groups:
   - name: shop
     repos: [{name: api, role: code}, {name: docs, role: docs, path: /srv/docs}]
     doc_sets: [{name: design, repo: docs, docs: ["design/**"], targets: [{repo: api, ref: develop}, {repo: api, ref: prod}]}]
+  - name: specs
+    repos: [{name: api, role: code}, {name: spec, role: api-spec}]
+    doc_sets:
+      - name: graphql
+        repo: spec
+        docs: ["api/graphql/**"]
+        targets: [{repo: api, ref: origin/develop}]
+        contract: {design_adapter: openapi-graphql, code_adapter: kotlin-graphql, design_ref: origin/main, code_paths: ["svc/**"], authority: code, generator: schema export}
 `
 	if _, err := Parse([]byte(ok)); err != nil {
 		t.Fatal(err)
@@ -108,6 +116,9 @@ groups:
 		"version: 1\ngroups: [{name: g, repos: [{name: a, role: code, path: rel}]}]\n",
 		"version: 1\ngroups: [{name: g, repos: [{name: a, role: docs}], doc_sets: [{name: d, repo: a, docs: [x], targets: [{repo: b, ref: main}]}]}]\n",
 		"version: 1\ngroups: [{name: g, repos: [{name: a, role: docs}], doc_sets: [{name: d, repo: a, docs: [x], targets: [{repo: a, ref: '-x'}]}]}]\n",
+		"version: 1\ngroups: [{name: g, repos: [{name: a, role: docs}], doc_sets: [{name: d, repo: a, docs: [x], contract: {design_adapter: x}}]}]\n",
+		"version: 1\ngroups: [{name: g, repos: [{name: a, role: docs}], doc_sets: [{name: d, repo: a, docs: [x], contract: {design_adapter: x, code_adapter: y, authority: boss}}]}]\n",
+		"version: 1\ngroups: [{name: g, repos: [{name: a, role: docs}], doc_sets: [{name: d, repo: a, docs: [x], contract: {design_adapter: x, code_adapter: y, unknown: 1}}]}]\n",
 	} {
 		if _, err := Parse([]byte(bad)); err == nil {
 			t.Errorf("accepted:\n%s", bad)

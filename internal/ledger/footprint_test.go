@@ -61,12 +61,14 @@ func TestFootprintRulesOnHistory(t *testing.T) {
 	g := newRepo(t)
 	g.write(map[string]string{"clusters/lab/extras/log.yaml": "x\n", "apps/a/app.yaml": "a\n"})
 	base := g.commit("lab only")
-	c := Claim{ID: "c", Repo: "demo", Path: "clusters/lab/extras/log.yaml", Line: 1, Text: "x", Category: "unverifiable_in_repo",
+	c := Claim{
+		ID: "c", Repo: "demo", Path: "clusters/lab/extras/log.yaml", Line: 1, Text: "x", Category: "unverifiable_in_repo",
 		VerifiedRef: base, Evidence: Evidence{
 			Quotes:  []Quote{{Path: "config.yaml", Line: 1}},
 			Weak:    []Scope{{Tool: judgev1.ToolSearch, Scope: "platform/*"}},
 			Members: []Member{{Dir: "apps"}, {Glob: "**/app.yaml"}},
-		}}
+		},
+	}
 	tests := []struct {
 		name   string
 		files  map[string]string

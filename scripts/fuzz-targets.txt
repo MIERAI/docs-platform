@@ -27,3 +27,10 @@
 ./internal/judge FuzzMCPServer
 ./internal/ledger FuzzParse
 ./internal/draft FuzzConstrain
+./internal/contract FuzzParseSQLQuery
+./internal/contract FuzzParseSchema
+./internal/contract FuzzParseGraphQL
+./internal/contract FuzzOpenAPIOps
+./internal/contract FuzzParseKotlin
+./internal/contract FuzzLogicOps
+./internal/contract FuzzFactoryDesign

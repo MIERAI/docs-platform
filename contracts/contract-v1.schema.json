@@ -1,0 +1,535 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/MIERAI/docs-platform/contracts/contract-v1.schema.json",
+  "title": "docs-platform/contract/v1",
+  "description": "A design-first specification and the code that implements it, each reduced to a normalized interface surface (operations, inputs, outputs, types, declared rules) by an adapter; the mismatches between the two; and, from git history, which side moved. Deterministic: no model is involved.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "generated_at",
+    "authority",
+    "history",
+    "design",
+    "code",
+    "items",
+    "summary"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^1\\.[0-9]+$"
+    },
+    "generated_at": {
+      "type": "string",
+      "description": "RFC 3339, UTC"
+    },
+    "doc_set": {
+      "type": "string",
+      "description": "the instance doc set, when the run came from a group configuration"
+    },
+    "authority": {
+      "type": "string",
+      "enum": [
+        "design",
+        "code",
+        "ask"
+      ],
+      "description": "which side is right when they differ: design (the code deviates), code (the design needs an update), ask (neutral)"
+    },
+    "generator": {
+      "type": "string",
+      "description": "how to generate the design from the code (shown when the code is the authority)"
+    },
+    "history": {
+      "type": "boolean",
+      "description": "items carry a direction from git history"
+    },
+    "design": {
+      "$ref": "#/$defs/surface"
+    },
+    "code": {
+      "$ref": "#/$defs/surface"
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/item"
+      }
+    },
+    "summary": {
+      "$ref": "#/$defs/summary"
+    }
+  },
+  "$defs": {
+    "surface": {
+      "type": "object",
+      "required": [
+        "side",
+        "adapter",
+        "source",
+        "operations"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "side": {
+          "type": "string",
+          "enum": [
+            "design",
+            "code"
+          ]
+        },
+        "adapter": {
+          "type": "object",
+          "required": [
+            "name",
+            "version"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "factory-design, factory-code, openapi-graphql, kotlin-graphql, ..."
+            },
+            "version": {
+              "type": "string"
+            }
+          }
+        },
+        "source": {
+          "type": "object",
+          "required": [
+            "repo",
+            "ref"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "repo": {
+              "type": "string"
+            },
+            "ref": {
+              "type": "string",
+              "description": "the revision read, or WORKTREE"
+            },
+            "commit": {
+              "type": "string",
+              "pattern": "^([0-9a-f]{40})?$"
+            },
+            "paths": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "worktree": {
+              "type": "boolean"
+            }
+          }
+        },
+        "operations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/operation"
+          }
+        },
+        "gaps": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "files that failed to parse: their operations are unknown, not absent"
+        }
+      },
+      "description": "one side's normalized contract"
+    },
+    "operation": {
+      "type": "object",
+      "required": [
+        "name",
+        "path"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "description": "adapter kind: query, mutation, get_by_id, list_all, list_keyset, top_n, compute, custom"
+        },
+        "group": {
+          "type": "string",
+          "description": "sub-service or domain"
+        },
+        "path": {
+          "type": "string"
+        },
+        "line": {
+          "type": "integer"
+        },
+        "inputs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/field"
+          }
+        },
+        "outputs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/field"
+          }
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/rule"
+          }
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "every file defining the operation (history is searched there)"
+        },
+        "partial": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "parts the adapter could not read (inputs, outputs): not compared"
+        }
+      }
+    },
+    "field": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "description": "normalized: factory type ids (int32, text, list<int64> ...) or GraphQL notation ([obj:Dto], Int, integer = any integer ...); nullability is presence"
+        },
+        "presence": {
+          "type": "string",
+          "enum": [
+            "required",
+            "optional"
+          ]
+        },
+        "column": {
+          "type": "string",
+          "description": "the column an output is read from"
+        },
+        "filter": {
+          "type": "string",
+          "description": "how an input restricts rows: 'column op' pairs, comma-separated"
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/field"
+          }
+        }
+      }
+    },
+    "rule": {
+      "type": "object",
+      "required": [
+        "kind",
+        "subject"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "table",
+            "filter",
+            "order",
+            "fixed",
+            "limit",
+            "signature",
+            "selects",
+            "reads",
+            "reads_input"
+          ]
+        },
+        "subject": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      }
+    },
+    "item": {
+      "type": "object",
+      "required": [
+        "id",
+        "operation",
+        "kind",
+        "severity",
+        "message"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{12}$"
+        },
+        "operation": {
+          "type": "string"
+        },
+        "group": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "operation.missing_in_code",
+            "operation.missing_in_design",
+            "input.missing_in_code",
+            "input.missing_in_design",
+            "input.type",
+            "input.presence",
+            "input.filter",
+            "output.missing_in_code",
+            "output.missing_in_design",
+            "output.type",
+            "output.column",
+            "rule.missing_in_code",
+            "rule.missing_in_design",
+            "rule.changed"
+          ]
+        },
+        "subject": {
+          "type": "string",
+          "description": "inputs.<name>, outputs.<name>[.<sub>], rules.<kind>.<subject>; empty for an operation"
+        },
+        "design": {
+          "type": "string"
+        },
+        "code": {
+          "type": "string"
+        },
+        "severity": {
+          "type": "string",
+          "enum": [
+            "high",
+            "medium",
+            "low",
+            "info"
+          ]
+        },
+        "design_path": {
+          "type": "string"
+        },
+        "design_line": {
+          "type": "integer"
+        },
+        "code_path": {
+          "type": "string"
+        },
+        "code_line": {
+          "type": "integer"
+        },
+        "rename_candidate": {
+          "type": "object",
+          "required": [
+            "name",
+            "score"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "score": {
+              "type": "number"
+            }
+          },
+          "description": "a fuzzy name match on the other side: a hint, never a fact"
+        },
+        "direction": {
+          "$ref": "#/$defs/direction"
+        },
+        "message": {
+          "type": "string",
+          "description": "authority-dependent"
+        },
+        "recommendation": {
+          "type": "string"
+        }
+      }
+    },
+    "direction": {
+      "type": "object",
+      "required": [
+        "class",
+        "reason"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "class": {
+          "type": "string",
+          "enum": [
+            "design_behind_code",
+            "code_behind_design",
+            "diverged",
+            "undocumented",
+            "removed_in_code",
+            "unknown"
+          ]
+        },
+        "reason": {
+          "type": "string"
+        },
+        "design_last": {
+          "$ref": "#/$defs/evidence"
+        },
+        "code_last": {
+          "$ref": "#/$defs/evidence"
+        },
+        "removed_by": {
+          "$ref": "#/$defs/evidence"
+        },
+        "added_by": {
+          "$ref": "#/$defs/evidence"
+        },
+        "design_ever": {
+          "type": "boolean"
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "required": [
+        "commit",
+        "date",
+        "side",
+        "term"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "commit": {
+          "type": "string",
+          "pattern": "^([0-9a-f]{40}|WORKTREE)$"
+        },
+        "date": {
+          "type": "string"
+        },
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "side": {
+          "type": "string",
+          "enum": [
+            "design",
+            "code"
+          ]
+        },
+        "term": {
+          "type": "string",
+          "description": "the name searched (git log -G / -S, all spellings)"
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": [
+        "design_operations",
+        "code_operations",
+        "overlap",
+        "items",
+        "by_kind",
+        "by_severity",
+        "by_direction",
+        "rename_candidates",
+        "groups"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "design_operations": {
+          "type": "integer"
+        },
+        "code_operations": {
+          "type": "integer"
+        },
+        "overlap": {
+          "type": "integer"
+        },
+        "items": {
+          "type": "integer"
+        },
+        "by_kind": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
+          }
+        },
+        "by_severity": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
+          }
+        },
+        "by_direction": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
+          }
+        },
+        "rename_candidates": {
+          "type": "integer"
+        },
+        "groups": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "group",
+              "design_operations",
+              "code_operations",
+              "overlap",
+              "items",
+              "by_direction"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "group": {
+                "type": "string"
+              },
+              "design_operations": {
+                "type": "integer"
+              },
+              "code_operations": {
+                "type": "integer"
+              },
+              "overlap": {
+                "type": "integer"
+              },
+              "items": {
+                "type": "integer"
+              },
+              "by_direction": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
