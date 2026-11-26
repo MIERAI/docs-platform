@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/MIERAI/docs-platform/internal/judge"
+	"github.com/MIERAI/docs-platform/internal/repo"
 )
 
 // minAbsencePattern is the shortest search an absence may rest on.
@@ -21,6 +22,8 @@ type Validator struct {
 	// Doc and Line are the documentation line under test.
 	Doc  string
 	Line int
+	// External are path globs whose content is not evidence (vendored, mirrored, submodules).
+	External []string
 }
 
 // EvidenceCheck is the outcome for one piece of evidence.
@@ -42,6 +45,10 @@ type EvidenceCheck struct {
 //     (a bare name) as any file or directory name in the repository.
 func (v *Validator) Check(ctx context.Context, e Evidence) EvidenceCheck {
 	c := EvidenceCheck{Evidence: e}
+	if e.Kind == KindQuote && v.external(e.Path) {
+		c.Reason = "external source: not this repository's to verify"
+		return c
+	}
 	switch e.Kind {
 	case KindQuote:
 		v.Tools.SetDoc(judge.Doc{Path: v.Doc, Lines: []int{v.Line}})
@@ -60,6 +67,11 @@ func (v *Validator) Check(ctx context.Context, e Evidence) EvidenceCheck {
 		c.Reason = "unknown evidence kind " + e.Kind
 	}
 	return c
+}
+
+func (v *Validator) external(p string) bool {
+	c, err := judge.CleanPath(p)
+	return err == nil && repo.MatchAny(v.External, c)
 }
 
 func (v *Validator) absence(ctx context.Context, e Evidence) (bool, string) {

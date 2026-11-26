@@ -226,6 +226,121 @@
           }
         }
       }
+    },
+    "groups": {
+      "type": "array",
+      "description": "Repository groups (docs/design.md §12.4): documentation in one repository checked against code in others, at the revisions each doc set declares.",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "repos"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "repos": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "role"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "role": {
+                  "type": "string",
+                  "enum": [
+                    "code",
+                    "docs",
+                    "api-spec",
+                    "db-migration",
+                    "infra"
+                  ]
+                },
+                "path": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "doc_sets": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "repo",
+                "docs"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "repo": {
+                  "type": "string"
+                },
+                "docs": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "targets": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "repo",
+                      "ref"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "repo": {
+                        "type": "string"
+                      },
+                      "ref": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "generated": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "docs"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "docs": {
+                        "type": "string"
+                      },
+                      "input": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "external": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
     }
   },
   "$defs": {

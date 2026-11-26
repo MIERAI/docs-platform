@@ -19,11 +19,13 @@
       "pattern": "^1\\.[0-9]+$"
     },
     "repo": {
-      "type": "string"
+      "type": "string",
+      "description": "the repository, or the group (CheckGroup)"
     },
     "ref": {
       "type": "string",
-      "pattern": "^[0-9a-f]{40}$"
+      "pattern": "^([0-9a-f]{40})?$",
+      "description": "the revision checked; empty for a repository group (each claim's target is resolved on its own)"
     },
     "checked_at": {
       "type": "string"
@@ -107,6 +109,22 @@
                 "detail": {
                   "type": "string"
                 }
+              }
+            }
+          },
+          "target": {
+            "type": "object",
+            "required": [
+              "repo",
+              "ref"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "repo": {
+                "type": "string"
+              },
+              "ref": {
+                "type": "string"
               }
             }
           }

@@ -120,6 +120,29 @@
         },
         "private": {
           "type": "boolean"
+        },
+        "target": {
+          "type": "object",
+          "required": [
+            "repo",
+            "ref"
+          ],
+          "additionalProperties": false,
+          "description": "repository groups: what the claim was judged against (verified_ref is then the target's commit)",
+          "properties": {
+            "repo": {
+              "type": "string"
+            },
+            "ref": {
+              "type": "string",
+              "description": "the declared revision, e.g. develop or prod"
+            }
+          }
+        },
+        "doc_ref": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$",
+          "description": "repository groups: the document repository's commit"
         }
       }
     },

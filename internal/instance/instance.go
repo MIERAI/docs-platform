@@ -46,6 +46,101 @@ type Instance struct {
 	// Consistency is the continuous-consistency policy: freshness (cycle counting), ABC
 	// classes, the per-run budget and the SLO (docs/design.md §12).
 	Consistency Consistency `yaml:"consistency"`
+	// Groups are repository groups: documentation in one repository checked against code in
+	// others, at the revisions each doc set declares (docs/design.md §12.4).
+	Groups []Group `yaml:"groups"`
+}
+
+// Repository roles in a group.
+const (
+	RoleCode        = "code"
+	RoleDocs        = "docs"
+	RoleAPISpec     = "api-spec"
+	RoleDBMigration = "db-migration"
+	RoleInfra       = "infra"
+)
+
+// Group is a set of repositories whose documentation and code are checked together.
+type Group struct {
+	Name    string      `yaml:"name"`
+	Repos   []GroupRepo `yaml:"repos"`
+	DocSets []DocSet    `yaml:"doc_sets"`
+	// External are path globs (in any repository of the group) whose content is not this
+	// group's to verify (vendored sources, mirrors): evidence there does not count.
+	External []string `yaml:"external"`
+}
+
+// GroupRepo is a repository of a group; Path is its default checkout (a -checkout flag
+// overrides it).
+type GroupRepo struct {
+	Name string `yaml:"name"`
+	Role string `yaml:"role"`
+	Path string `yaml:"path"`
+}
+
+// DocSet is documentation in one repository that describes code at declared revisions.
+type DocSet struct {
+	Name string   `yaml:"name"`
+	Repo string   `yaml:"repo"`
+	Docs []string `yaml:"docs"`
+	// Targets are what the docs describe: repository and revision (a branch, tag or commit;
+	// several allowed, e.g. develop and prod). Empty = the doc's own repository at HEAD.
+	Targets []Target `yaml:"targets"`
+	// Generated docs are judged at their generator input, not on their text.
+	Generated []Generated `yaml:"generated"`
+}
+
+// Target is a repository at a declared revision.
+type Target struct {
+	Repo string `yaml:"repo"`
+	Ref  string `yaml:"ref"`
+}
+
+// Generated maps generated documents (glob) to the input they are generated from.
+type Generated struct {
+	Docs  string `yaml:"docs"`
+	Input string `yaml:"input"`
+}
+
+var roles = map[string]bool{RoleCode: true, RoleDocs: true, RoleAPISpec: true, RoleDBMigration: true, RoleInfra: true}
+
+// problem says what is wrong with a group repository ("" = nothing).
+func (r GroupRepo) problem() string {
+	switch {
+	case r.Name == "" || !roles[r.Role]:
+		return "name and a role (code, docs, api-spec, db-migration, infra) are required"
+	case r.Path != "" && !filepath.IsAbs(r.Path):
+		return "path must be absolute"
+	}
+	return ""
+}
+
+func (g Group) validate(i int) []error {
+	var errs []error
+	bad := func(format string, a ...any) {
+		errs = append(errs, fmt.Errorf("groups[%d]: "+format, append([]any{i}, a...)...))
+	}
+	if g.Name == "" {
+		bad("name is required")
+	}
+	repos := map[string]bool{}
+	for _, r := range g.Repos {
+		if msg := r.problem(); msg != "" {
+			bad("repo %q: %s", r.Name, msg)
+		}
+		repos[r.Name] = true
+	}
+	for _, d := range g.DocSets {
+		if d.Name == "" || !repos[d.Repo] || len(d.Docs) == 0 {
+			bad("doc_set %q: name, a repo of the group and docs globs are required", d.Name)
+		}
+		for _, t := range d.Targets {
+			if !repos[t.Repo] || t.Ref == "" || strings.HasPrefix(t.Ref, "-") || strings.Contains(t.Ref, "..") {
+				bad("doc_set %q: target %s@%s: a repo of the group and a revision are required", d.Name, t.Repo, t.Ref)
+			}
+		}
+	}
+	return errs
 }
 
 // Consistency is the continuous-consistency policy (0 / empty = the default).
@@ -340,6 +435,9 @@ func (in *Instance) Validate() error {
 	errs = append(errs, in.AI.Draft.validate("ai.draft")...)
 	errs = append(errs, in.Classification.validate()...)
 	errs = append(errs, in.Consistency.validate()...)
+	for i, g := range in.Groups {
+		errs = append(errs, g.validate(i)...)
+	}
 	for id, p := range in.Prices {
 		if p.Input < 0 || p.Output < 0 || p.CacheRead < 0 {
 			errs = append(errs, fmt.Errorf("prices[%s]: must not be negative", id))

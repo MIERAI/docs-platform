@@ -13,14 +13,17 @@ import (
 
 // Builder turns agentic judgments of one repository at one revision into claims.
 type Builder struct {
-	Dir   string
-	Repo  string
-	Tree  *Tree
-	Drift *agentic.DriftList
-	Class instance.Classification
-	Model string
-	Now   func() time.Time
-	docs  map[string][]string
+	// Dir and Repo hold the documents; Tree is the evidence tree (the target's, when set).
+	Dir     string
+	Repo    string
+	Tree    *Tree
+	DocTree *Tree
+	Target  *Target
+	Drift   *agentic.DriftList
+	Class   instance.Classification
+	Model   string
+	Now     func() time.Time
+	docs    map[string][]string
 }
 
 // NewBuilder snapshots dir at ref.
@@ -29,14 +32,29 @@ func NewBuilder(ctx context.Context, dir, repoName, ref string) (*Builder, error
 	if err != nil {
 		return nil, err
 	}
-	return &Builder{Dir: dir, Repo: repoName, Tree: t, Now: time.Now, docs: map[string][]string{}}, nil
+	return &Builder{Dir: dir, Repo: repoName, Tree: t, DocTree: t, Now: time.Now, docs: map[string][]string{}}, nil
+}
+
+// NewTargetBuilder records claims of documents in docDir (repository docRepo at docRef)
+// judged against another repository (target.Repo, checked out in evDir at evRef, the
+// commit of the declared revision target.Ref).
+func NewTargetBuilder(ctx context.Context, docDir, docRepo, docRef, evDir string, target Target, evRef string) (*Builder, error) {
+	dt, err := ReadTree(ctx, docDir, docRef)
+	if err != nil {
+		return nil, err
+	}
+	et, err := ReadTree(ctx, evDir, evRef)
+	if err != nil {
+		return nil, err
+	}
+	return &Builder{Dir: docDir, Repo: docRepo, Tree: et, DocTree: dt, Target: &target, Now: time.Now, docs: map[string][]string{}}, nil
 }
 
 // lineText is line n of a document at the builder's revision.
 func (b *Builder) lineText(ctx context.Context, p string, n int) (string, bool) {
 	ls, ok := b.docs[p]
 	if !ok {
-		text, found := FileAt(ctx, b.Dir, b.Tree.Ref, p)
+		text, found := FileAt(ctx, b.Dir, b.DocTree.Ref, p)
 		if found {
 			ls = strings.Split(strings.TrimSuffix(text, "\n"), "\n")
 		}
@@ -60,12 +78,16 @@ func (b *Builder) Claim(ctx context.Context, lr *agentic.LineResult) (Claim, boo
 	}
 	c := Claim{
 		ID: ClaimID(b.Repo, lr.Path, text), Repo: b.Repo, Path: lr.Path, Line: lr.Line, Text: text,
-		DocBlob: b.Tree.Blobs[lr.Path], Category: lr.Category, Verdict: lr.Verdict,
+		DocBlob: b.DocTree.Blobs[lr.Path], Category: lr.Category, Verdict: lr.Verdict,
 		VerifiedAt: b.Now().UTC().Format(time.RFC3339), VerifiedRef: b.Tree.Ref, Model: lr.Model, PromptHash: lr.PromptHash,
 		Private: b.Class.ClassOf(b.Repo, lr.Path) == instance.Private,
 	}
 	if b.Model != "" {
 		c.Model = b.Model
+	}
+	if b.Target != nil {
+		t := *b.Target
+		c.ID, c.Target, c.DocRef = TargetClaimID(b.Repo, lr.Path, text, t), &t, b.DocTree.Ref
 	}
 	for _, f := range lr.Facts {
 		c.Facts = append(c.Facts, Fact{Fact: f.Fact, Status: f.Status, Valid: f.Valid})
@@ -82,22 +104,33 @@ func (b *Builder) add(c *Claim, doc string, e agentic.Evidence) {
 	switch e.Kind {
 	case agentic.KindQuote:
 		if p, err := judge.CleanPath(e.Path); err == nil {
-			c.Evidence.Quotes = append(c.Evidence.Quotes, Quote{Repo: b.Repo, Path: p, Line: e.Line, Blob: b.Tree.Blobs[p]})
+			c.Evidence.Quotes = append(c.Evidence.Quotes, Quote{Repo: b.evRepo(), Path: p, Line: e.Line, Blob: b.Tree.Blobs[p]})
 		}
 	case agentic.KindAbsence:
 		scope := e.SearchScope
 		if strings.TrimSpace(scope) == "" {
 			scope = "*"
 		}
-		h, n, err := b.Tree.ScopeHash(scope, doc)
+		skip := doc
+		if b.Target != nil && b.Target.Repo != b.Repo {
+			skip = "" // the document is not in the searched repository
+		}
+		h, n, err := b.Tree.ScopeHash(scope, skip)
 		if err == nil {
-			c.Evidence.Absence = append(c.Evidence.Absence, Absence{Pattern: e.SearchPattern, Scope: scope, Regex: e.SearchRegex, SkipFile: doc, FilesHash: h, Files: n})
+			c.Evidence.Absence = append(c.Evidence.Absence, Absence{Pattern: e.SearchPattern, Scope: scope, Regex: e.SearchRegex, SkipFile: skip, FilesHash: h, Files: n})
 		}
 	case agentic.KindDrift:
 		c.Evidence.Drift = append(c.Evidence.Drift, b.drift(strings.TrimSpace(e.DriftID)))
 	case agentic.KindPathMissing:
 		c.Evidence.PathMissing = append(c.Evidence.PathMissing, pathMissing(doc, e.Path))
 	}
+}
+
+func (b *Builder) evRepo() string {
+	if b.Target != nil {
+		return b.Target.Repo
+	}
+	return b.Repo
 }
 
 func (b *Builder) drift(id string) Drift {

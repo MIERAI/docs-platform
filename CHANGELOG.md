@@ -37,6 +37,17 @@ Design: docs/design.md §12; plan: docs/backlog.md.
     open dangling_reference claims); the accuracy error budget (initial objective 80%); a
     burned budget triggers a full re-audit of the document and a halved max age (`-apply`
     writes them to the `-state` file the scheduler reads); cost of the sample and the run.
+- **Repository groups and declared revisions** (B3; instance `groups:`, `internal/group`,
+  `docsp group plan|judge|stale`): repositories with roles (code, docs, api-spec,
+  db-migration, infra); doc sets in one repository declaring the revisions they document
+  (several allowed: design docs → develop, runbooks → prod); claims judged against a target
+  carry it (`target`, `doc_ref` in ledger/v1; evidence addressed `repo@ref:path:line`) and are
+  invalidated across repositories (`ledger.CheckGroup`: the document repository and the
+  target repository are diffed separately); one drift scan per code `repo@commit`, shared by
+  every doc set; generated documents (configured, or a generated marker in their first
+  lines) are not judged on their text but at their generator input; submodules and the
+  group's external globs never count as evidence. docsp never changes a checkout: a target
+  needs a checkout at its revision (`-checkout repo@ref=DIR`), otherwise the plan says so.
 
 ## 0.4.2 - 2026-11-26
 

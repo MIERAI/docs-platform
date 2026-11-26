@@ -202,7 +202,9 @@ document path and normalised line text: stable across line moves), `repo`, `path
 `prompt_hash`, `facts[{fact, status, valid}]`, `private`, and `evidence` (validated only):
 `quotes[{repo, path, line, blob}]`, `drift[{id, commits, files[{path, blob}], removed_path}]`,
 `absence[{pattern, scope, regex, skip_file, files_hash, files}]` (the covered file set),
-`path_missing[{path, candidates, name}]`.
+`path_missing[{path, candidates, name}]`. Repository groups add `target {repo, ref}` (the
+declared revision the claim was judged against; `verified_ref` is then that target's
+commit) and `doc_ref` (the document repository's commit).
 
 stale/v1 (`contracts/stale-v1.schema.json`): one repository at one revision - `counts` and
 `claims[{id, repo, path, line, category, status: fresh|stale|recheck, reasons[{kind, path,

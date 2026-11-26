@@ -40,11 +40,11 @@ classification. Order = implementation order. Every item: tests, docs, no model 
 
 ## B3 Repo groups and declared refs
 
-- [ ] B3.1 Instance repo groups with roles (code, docs, api-spec, db-migration, infra).
-- [ ] B3.2 Evidence across repositories (`repo@ref:path`), invalidation across repositories.
-- [ ] B3.3 One drift scan per code `repo@ref`, shared by the group.
-- [ ] B3.4 Doc sets declare the ref(s) they document (design docs → develop, runbooks → prod).
-- [ ] B3.5 Generated docs judged at the generator input; submodules / external sources →
+- [x] B3.1 Instance repo groups with roles (code, docs, api-spec, db-migration, infra).
+- [x] B3.2 Evidence across repositories (`repo@ref:path`), invalidation across repositories.
+- [x] B3.3 One drift scan per code `repo@ref`, shared by the group.
+- [x] B3.4 Doc sets declare the ref(s) they document (design docs → develop, runbooks → prod).
+- [x] B3.5 Generated docs judged at the generator input; submodules / external sources →
       unverifiable.
 
 ## B4 No forced updates

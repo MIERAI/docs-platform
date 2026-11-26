@@ -52,16 +52,24 @@ type ClaimStatus struct {
 	Status   string   `json:"status"`
 	Reasons  []Reason `json:"reasons,omitempty"`
 	// NewLine is the line's number at the new revision when the document changed around it.
-	NewLine     int    `json:"new_line,omitempty"`
-	VerifiedRef string `json:"verified_ref"`
+	NewLine     int     `json:"new_line,omitempty"`
+	VerifiedRef string  `json:"verified_ref"`
+	Target      *Target `json:"target,omitempty"`
 }
 
-// Invalidate decides one claim from the paths changed since its verified revision; doc
-// returns a document's content at the new revision. No model is involved.
+// Invalidate decides one claim from the paths changed since its verified revision (one
+// repository: the same changes for the document and its evidence); doc returns a
+// document's content at the new revision. No model is involved.
 func Invalidate(c *Claim, ch *Changes, doc func(string) (string, bool)) ClaimStatus {
-	s := ClaimStatus{ID: c.ID, Repo: c.Repo, Path: c.Path, Line: c.Line, Category: c.Category, VerifiedRef: c.VerifiedRef}
+	return InvalidateAcross(c, ch, ch, doc)
+}
+
+// InvalidateAcross decides a claim whose document and evidence may live in different
+// repositories: docCh are the document repository's changes, ch the evidence repository's.
+func InvalidateAcross(c *Claim, docCh, ch *Changes, doc func(string) (string, bool)) ClaimStatus {
+	s := ClaimStatus{ID: c.ID, Repo: c.Repo, Path: c.Path, Line: c.Line, Category: c.Category, VerifiedRef: c.VerifiedRef, Target: c.Target}
 	var rs []Reason
-	rs = append(rs, docReasons(c, ch, doc, &s)...)
+	rs = append(rs, docReasons(c, docCh, doc, &s)...)
 	for _, q := range c.Evidence.Quotes {
 		rs = append(rs, fileReason(ch, q.Path, ReasonEvidenceChanged)...)
 	}
@@ -246,8 +254,8 @@ func Check(ctx context.Context, l *Ledger, dir, repoName, ref string, now time.T
 	}
 	for i := range l.Claims {
 		c := &l.Claims[i]
-		if c.Repo != repoName {
-			continue
+		if c.Repo != repoName || c.Target != nil {
+			continue // claims of other repositories, or judged against a declared target (CheckGroup)
 		}
 		ch, ok := diffs[c.VerifiedRef]
 		if !ok {
@@ -267,6 +275,106 @@ func Check(ctx context.Context, l *Ledger, dir, repoName, ref string, now time.T
 		return r.Claims[i].Line < r.Claims[j].Line
 	})
 	return r, nil
+}
+
+// CheckGroup evaluates the claims judged against declared targets (repository groups): the
+// document's repository is diffed from the claim's DocRef to its checkout's HEAD, the
+// target repository from VerifiedRef to the commit the declared revision now names. dirs
+// maps "repo@ref" (preferred) or "repo" to checkouts; claims whose repositories have no
+// checkout are skipped.
+func CheckGroup(ctx context.Context, l *Ledger, group string, dirs map[string]string, now time.Time) (*Report, error) {
+	r := &Report{SchemaVersion: StaleSchemaVersion, Repo: group, CheckedAt: now.UTC().Format(time.RFC3339),
+		Counts: map[string]int{Fresh: 0, Stale: 0, Recheck: 0}, Claims: []ClaimStatus{}}
+	g := &groupState{ctx: ctx, dirs: dirs, heads: map[string]string{}, diffs: map[string]*Changes{}, docs: map[string]docAt{}}
+	for i := range l.Claims {
+		c := &l.Claims[i]
+		if c.Target == nil || g.dir(c.Repo, "HEAD") == "" || g.dir(c.Target.Repo, c.Target.Ref) == "" {
+			continue
+		}
+		docTo, err := g.head(c.Repo, "HEAD")
+		if err != nil {
+			return nil, err
+		}
+		evTo, err := g.head(c.Target.Repo, c.Target.Ref)
+		if err != nil {
+			return nil, err
+		}
+		docCh, err := g.diff(c.Repo, c.docRef(), docTo)
+		if err != nil {
+			return nil, fmt.Errorf("claim %s: %w", c.ID, err)
+		}
+		evCh, err := g.diffIn(g.dir(c.Target.Repo, c.Target.Ref), c.VerifiedRef, evTo)
+		if err != nil {
+			return nil, fmt.Errorf("claim %s: %w", c.ID, err)
+		}
+		s := InvalidateAcross(c, docCh, evCh, func(p string) (string, bool) { return g.doc(c.Repo, docTo, p) })
+		r.Counts[s.Status]++
+		r.Claims = append(r.Claims, s)
+	}
+	sort.SliceStable(r.Claims, func(i, j int) bool {
+		a, b := r.Claims[i], r.Claims[j]
+		if a.Repo+a.Path != b.Repo+b.Path {
+			return a.Repo+a.Path < b.Repo+b.Path
+		}
+		return a.Line < b.Line
+	})
+	return r, nil
+}
+
+type groupState struct {
+	ctx   context.Context
+	dirs  map[string]string
+	heads map[string]string
+	diffs map[string]*Changes
+	docs  map[string]docAt
+}
+
+// dir is the checkout serving repo@ref: a "repo@ref" entry, else the "repo" entry.
+func (g *groupState) dir(repoName, ref string) string {
+	if d := g.dirs[repoName+"@"+ref]; d != "" {
+		return d
+	}
+	return g.dirs[repoName]
+}
+
+func (g *groupState) head(repoName, ref string) (string, error) {
+	k := repoName + "@" + ref
+	if h, ok := g.heads[k]; ok {
+		return h, nil
+	}
+	h, err := Resolve(g.ctx, g.dir(repoName, ref), ref)
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", k, err)
+	}
+	g.heads[k] = h
+	return h, nil
+}
+
+func (g *groupState) diff(repoName, from, to string) (*Changes, error) {
+	return g.diffIn(g.dir(repoName, "HEAD"), from, to)
+}
+
+func (g *groupState) diffIn(dir, from, to string) (*Changes, error) {
+	k := dir + "\x00" + from + "\x00" + to
+	if ch, ok := g.diffs[k]; ok {
+		return ch, nil
+	}
+	ch, err := Diff(g.ctx, dir, from, to)
+	if err != nil {
+		return nil, err
+	}
+	g.diffs[k] = ch
+	return ch, nil
+}
+
+func (g *groupState) doc(repoName, ref, p string) (string, bool) {
+	k := repoName + "\x00" + ref + "\x00" + p
+	d, ok := g.docs[k]
+	if !ok {
+		d.text, d.ok = FileAt(g.ctx, g.dir(repoName, "HEAD"), ref, p)
+		g.docs[k] = d
+	}
+	return d.text, d.ok
 }
 
 type docAt struct {

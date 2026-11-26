@@ -227,6 +227,33 @@ consistency:
   accuracy, freshness and phantom rate against their objectives, the error budget, the
   actions a burned budget triggers (full re-audit, halved max age), and the cost (slo/v1).
 
+### Repository groups: `docsp group plan|judge|stale`
+
+```yaml
+groups:
+  - name: shop
+    repos:
+      - {name: api, role: code}
+      - {name: docs, role: docs, path: /srv/checkouts/docs}
+    doc_sets:
+      - {name: design, repo: docs, docs: ["design/**"], targets: [{repo: api, ref: develop}]}
+      - name: runbooks
+        repo: docs
+        docs: ["runbooks/**"]
+        targets: [{repo: api, ref: prod}]
+        generated: [{docs: "runbooks/cli.md", input: "cmd/gen-cli/main.go"}]
+    external: ["vendor/", "third_party/"]
+```
+
+- `docsp group plan -instance-config I [-group NAME] -checkout repo[@ref]=DIR ...`: each doc
+  set's documents (generated ones listed with their input), its targets resolved to commits
+  and checkouts, the drift scans needed (one per code `repo@commit`, shared), and problems
+  (a target without a checkout at its revision: docsp never changes a checkout).
+- `docsp group judge ... -doc-set NAME -line PATH:LINE ... -ledger L`: judges the lines
+  against every declared target (agentic; the tools explore the target, the statement comes
+  from the docs repository) and records claims with their target.
+- `docsp group stale ... -ledger L`: invalidates the group's claims across repositories.
+
 ### `docsp import-findings --repo-name NAME [--repo owner/name] FILE.jsonl`
 
 Turns a reviewed backlog (the ground-truth JSON Lines format: `repo, file, line, claim, actual,

@@ -89,3 +89,28 @@ func FuzzParse(f *testing.F) {
 		}
 	})
 }
+
+func TestGroupsAndConsistencyValidation(t *testing.T) {
+	ok := `version: 1
+consistency: {max_age_days: 30, classes: [{name: A, max_age_days: 7, docs: ["README.md"]}], slo: {accuracy: 0.8}}
+groups:
+  - name: shop
+    repos: [{name: api, role: code}, {name: docs, role: docs, path: /srv/docs}]
+    doc_sets: [{name: design, repo: docs, docs: ["design/**"], targets: [{repo: api, ref: develop}, {repo: api, ref: prod}]}]
+`
+	if _, err := Parse([]byte(ok)); err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range []string{
+		"version: 1\nconsistency: {slo: {accuracy: 1.5}}\n",
+		"version: 1\nconsistency: {classes: [{name: A}]}\n",
+		"version: 1\ngroups: [{name: g, repos: [{name: a, role: wiki}]}]\n",
+		"version: 1\ngroups: [{name: g, repos: [{name: a, role: code, path: rel}]}]\n",
+		"version: 1\ngroups: [{name: g, repos: [{name: a, role: docs}], doc_sets: [{name: d, repo: a, docs: [x], targets: [{repo: b, ref: main}]}]}]\n",
+		"version: 1\ngroups: [{name: g, repos: [{name: a, role: docs}], doc_sets: [{name: d, repo: a, docs: [x], targets: [{repo: a, ref: '-x'}]}]}]\n",
+	} {
+		if _, err := Parse([]byte(bad)); err == nil {
+			t.Errorf("accepted:\n%s", bad)
+		}
+	}
+}

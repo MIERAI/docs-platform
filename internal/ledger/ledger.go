@@ -55,6 +55,34 @@ type Claim struct {
 	Evidence    Evidence `json:"evidence"`
 	// Private: the document is classified private (the claim must not reach a cloud model).
 	Private bool `json:"private,omitempty"`
+	// Target (repository groups) is what the claim was judged against when that is not the
+	// document's own repository at the same revision: VerifiedRef is then the target's
+	// commit, and DocRef the document repository's commit.
+	Target *Target `json:"target,omitempty"`
+	DocRef string  `json:"doc_ref,omitempty"`
+}
+
+// Target is the repository and declared revision a claim was judged against.
+type Target struct {
+	Repo string `json:"repo"`
+	// Ref is the declared revision (e.g. develop, prod); the commit is VerifiedRef.
+	Ref string `json:"ref"`
+}
+
+// docRef is the document repository's commit the claim was judged at.
+func (c *Claim) docRef() string {
+	if c.DocRef != "" {
+		return c.DocRef
+	}
+	return c.VerifiedRef
+}
+
+// evidenceRepo is the repository the claim's evidence lives in.
+func (c *Claim) evidenceRepo() string {
+	if c.Target != nil {
+		return c.Target.Repo
+	}
+	return c.Repo
 }
 
 // Fact is a fact of the claim with its status and whether its evidence validated.
@@ -127,6 +155,12 @@ type PathMissing struct {
 func ClaimID(repo, path, text string) string {
 	h := sha256.Sum256([]byte(repo + "\x00" + path + "\x00" + strings.Join(strings.Fields(text), " ")))
 	return hex.EncodeToString(h[:])[:16]
+}
+
+// TargetClaimID is the id of a claim judged against a declared target: a line documenting
+// both develop and prod is two claims.
+func TargetClaimID(repo, path, text string, t Target) string {
+	return ClaimID(repo+"\x00"+t.Repo+"@"+t.Ref, path, text)
 }
 
 // Load reads a ledger; a missing file is an empty ledger.
