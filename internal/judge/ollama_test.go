@@ -17,7 +17,7 @@ import (
 func TestIsLocalIP(t *testing.T) {
 	cases := map[string]bool{
 		"127.0.0.1": true, "10.1.2.3": true, "192.168.8.1": true, "172.16.0.1": true,
-		"100.106.140.35": true, "169.254.1.1": true, "::1": true, "fd00::1": true,
+		"100.100.1.2": true, "169.254.1.1": true, "::1": true, "fd00::1": true,
 		"8.8.8.8": false, "100.128.0.1": false, "2001:4860::8888": false, "1.1.1.1": false,
 	}
 	for ip, want := range cases {
