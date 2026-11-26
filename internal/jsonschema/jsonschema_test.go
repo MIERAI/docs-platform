@@ -2,6 +2,7 @@ package jsonschema
 
 import (
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -54,4 +55,23 @@ func TestBadRef(t *testing.T) {
 	if errs := s.ValidateJSON([]byte(`1`)); len(errs) == 0 {
 		t.Error("unresolvable $ref must be reported")
 	}
+}
+
+// One schema validates from many goroutines (the judge guard checks concurrent responses).
+func TestConcurrentValidate(t *testing.T) {
+	s, err := Compile([]byte(`{"type":"object","properties":{"v":{"type":"string","pattern":"^1\\.[0-9]+$"}}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if errs := s.ValidateJSON([]byte(`{"v":"1.3"}`)); len(errs) > 0 {
+				t.Error(errs)
+			}
+		}()
+	}
+	wg.Wait()
 }
