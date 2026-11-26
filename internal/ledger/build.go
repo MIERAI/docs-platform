@@ -22,8 +22,10 @@ type Builder struct {
 	Drift   *agentic.DriftList
 	Class   instance.Classification
 	Model   string
-	Now     func() time.Time
-	docs    map[string][]string
+	// Rules: footprints to record from each judgment's transcript (weak scopes, member sets).
+	Rules Rules
+	Now   func() time.Time
+	docs  map[string][]string
 }
 
 // NewBuilder snapshots dir at ref.
@@ -96,6 +98,9 @@ func (b *Builder) Claim(ctx context.Context, lr *agentic.LineResult) (Claim, boo
 				b.add(&c, lr.Path, e.Evidence)
 			}
 		}
+	}
+	if b.Rules.Weak || b.Rules.Members {
+		_ = AddFootprints(&c, lr.Transcript, b.Rules) // no transcript: no footprint
 	}
 	return c, true
 }

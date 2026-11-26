@@ -93,6 +93,10 @@ type Changes struct {
 	From, To string
 	// Status by path: A (added), D (deleted), M (modified, including type changes).
 	Paths map[string]byte
+	// for existedBefore: the repository and the tree at From, read lazily
+	ctx    context.Context
+	dir    string
+	before *Tree
 }
 
 // Diff lists the paths changed from one commit to another (renames as delete + add).
@@ -101,7 +105,7 @@ func Diff(ctx context.Context, dir, from, to string) (*Changes, error) {
 	if err != nil {
 		return nil, fmt.Errorf("ledger: %w", err)
 	}
-	c := &Changes{From: from, To: to, Paths: map[string]byte{}}
+	c := &Changes{From: from, To: to, Paths: map[string]byte{}, ctx: ctx, dir: dir}
 	f := strings.Split(out, "\x00")
 	for i := 0; i+1 < len(f); i += 2 {
 		if st := f[i]; st != "" {

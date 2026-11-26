@@ -28,6 +28,8 @@ type Agentic struct {
 	Settings  agentic.Settings
 	// Ledger, when set, receives a claim (with its validated evidence) for every judged line.
 	Ledger string
+	// Footprint records footprints beyond the evidence in the ledger (weak scopes, member sets).
+	Footprint ledger.Rules
 }
 
 // DriftSummary reports the drift scan of one repository in an eval run.
@@ -108,7 +110,7 @@ func writeLedger(ctx context.Context, o Options, runners map[string]*agentic.Run
 		if err != nil {
 			return err.Error()
 		}
-		b.Class, b.Model = o.Agentic.Class, o.Guard.Name()
+		b.Class, b.Model, b.Rules = o.Agentic.Class, o.Guard.Name(), o.Agentic.Footprint
 		if d, err := runners[repo].Drift(ctx); err == nil {
 			b.Drift = d
 		}

@@ -19,6 +19,7 @@ import (
 	"github.com/MIERAI/docs-platform/internal/findings"
 	"github.com/MIERAI/docs-platform/internal/instance"
 	"github.com/MIERAI/docs-platform/internal/judge"
+	"github.com/MIERAI/docs-platform/internal/ledger"
 )
 
 type evalFlags struct {
@@ -34,6 +35,7 @@ type agenticFlags struct {
 	noDrift, noCache        bool
 	worktrees               worktreeFlag
 	ledger                  string
+	footprint               string
 }
 
 func (a *agenticFlags) register(fs *flag.FlagSet, worktrees bool) {
@@ -43,6 +45,7 @@ func (a *agenticFlags) register(fs *flag.FlagSet, worktrees bool) {
 	fs.BoolVar(&a.noCache, "no-drift-cache", false, "agentic: always run the drift scan, cache nothing")
 	fs.BoolVar(&a.noDrift, "no-drift", false, "agentic: skip the drift scan (per-line judgment without drift context)")
 	fs.StringVar(&a.ledger, "ledger", "", "agentic: claim ledger file (mode 0600) receiving every judged line with its validated evidence")
+	fs.StringVar(&a.footprint, "footprint", "", "agentic: also record footprints from the tool transcript: weak (scoped searches), members (listed sets of enumerating claims); comma-separated, or all")
 	if worktrees {
 		fs.Var(&a.worktrees, "worktree", "agentic: NAME=DIR, a checkout of repository NAME (repeatable; at the items' revision)")
 	}
@@ -65,6 +68,19 @@ func (a *agenticFlags) settings(in instance.Agentic) (agentic.Settings, string, 
 		cache = ""
 	}
 	return s, cache, nil
+}
+
+// evalOptions are the agentic options of an eval run.
+func (a *agenticFlags) evalOptions(ai instance.Agentic, class instance.Classification) (*evalmodel.Agentic, error) {
+	st, cache, err := a.settings(ai)
+	if err != nil {
+		return nil, err
+	}
+	fp, err := ledger.ParseRules(a.footprint)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // already descriptive
+	}
+	return &evalmodel.Agentic{Worktrees: a.worktrees, Class: class, CacheDir: cache, NoDrift: a.noDrift, Settings: st, Ledger: a.ledger, Footprint: fp}, nil
 }
 
 // worktreeFlag collects NAME=DIR pairs.
@@ -179,11 +195,9 @@ func evalTask(ctx context.Context, set *evalmodel.Set, in *instance.Instance, ta
 		if task != evalmodel.TaskJudge {
 			return nil, errors.New("-mode agentic evaluates the judge task only")
 		}
-		st, cache, err := f.agentic.settings(t.Agentic)
-		if err != nil {
+		if o.Agentic, err = f.agentic.evalOptions(t.Agentic, in.Classification); err != nil {
 			return nil, err
 		}
-		o.Agentic = &evalmodel.Agentic{Worktrees: f.agentic.worktrees, Class: in.Classification, CacheDir: cache, NoDrift: f.agentic.noDrift, Settings: st, Ledger: f.agentic.ledger}
 	default:
 		return nil, fmt.Errorf("-mode %q: want snippet or agentic", f.agentic.mode)
 	}

@@ -46,6 +46,24 @@ Design: docs/design.md §12; plan: docs/backlog.md.
   stale when the line was edited or the document removed, a cited file changed or vanished,
   a file in an absence scope was added/changed/removed, a missing path appeared, or a drift
   entry's removed path reappeared; claims without evidence → `recheck`. Contract stale/v1.
+- **Footprint rules** (opt-in, off by default; `internal/ledger/footprint.go`): beyond the
+  validated evidence, a claim can be re-opened (stale, never decided) by
+  - `weak`: the path- or glob-scoped searches of its judgment (from the tool transcript; whole-
+    repository searches do not count) - a file added, changed or removed inside one;
+  - `siblings`: its document and quoted files with one directory level wildcarded - a newly
+    added match (a statement about the lab goes stale when the laptop gets the same file);
+  - `members`: for an enumerating claim, the directories it listed and globs it expanded - an
+    entry added or removed.
+  Recorded with `-footprint weak,members` on `eval-model` / `audit` (ledger/v1 `evidence.weak`,
+  `evidence.members`), applied with `docsp stale -footprint weak,siblings,members|all`; reason
+  kinds `weak_scope_changed`, `sibling_added`, `member_set_changed`. With no flag, recording
+  and invalidation are unchanged (`make repro-offline`: all 46 numbers reproduced).
+- `bench ledger-backtest` reports the ledger alone, with each footprint rule and with all,
+  each with its per-commit stale cost, plus the impact selection and ledger OR impact on the
+  same items (`-impact replay.json`); `-transcripts` / `-transcript-sets` add footprints to
+  a ledger recorded without them. On the TEST backtest (20 scorable positives): ledger 8/12
+  (first / any causing commit), +weak 12/16, +siblings 10/14, +members 8/12, all 14/18 at 1.14
+  stale claims per commit (ledger 0.62); ledger OR impact 10/13. Still to be confirmed on DEV.
 - `bench ledger-backtest`: scores invalidation without hindsight - claims judged at
   revisions before their causing commits, history replayed forward from each claim's own
   verified revision; reports first/any-causing catch rates, per-commit cost, and for every

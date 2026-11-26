@@ -251,6 +251,8 @@ type AgenticAudit struct {
 	NoDrift  bool
 	// Ledger, when set, receives a claim for every judged line (mode 0600).
 	Ledger string
+	// Footprint records footprints beyond the evidence (weak scopes, member sets).
+	Footprint ledger.Rules
 }
 
 // AuditResult of one audit.
@@ -304,7 +306,7 @@ func Audit(ctx context.Context, o AuditOptions) (*AuditResult, error) {
 		return nil, fmt.Errorf("audit: %w", err)
 	}
 	if o.Agentic != nil && o.Agentic.Ledger != "" && so.Agentic != nil {
-		if err := recordClaims(ctx, o.Agentic.Ledger, r.Root, so, in, judged); err != nil {
+		if err := recordClaims(ctx, o.Agentic.Ledger, r.Root, so, in, judged, o.Agentic.Footprint); err != nil {
 			return nil, err
 		}
 	}
@@ -317,7 +319,7 @@ func Audit(ctx context.Context, o AuditOptions) (*AuditResult, error) {
 }
 
 // recordClaims merges the audit's judged lines into the claim ledger.
-func recordClaims(ctx context.Context, file, root string, so semantic.Options, in *instance.Instance, judged []agentic.LineResult) error {
+func recordClaims(ctx context.Context, file, root string, so semantic.Options, in *instance.Instance, judged []agentic.LineResult, fp ledger.Rules) error {
 	l, err := ledger.Load(file)
 	if err != nil {
 		return err //nolint:wrapcheck // already descriptive
@@ -326,7 +328,7 @@ func recordClaims(ctx context.Context, file, root string, so semantic.Options, i
 	if err != nil {
 		return err //nolint:wrapcheck // already descriptive
 	}
-	b.Class, b.Model = in.Classification, so.Judge.Name()
+	b.Class, b.Model, b.Rules = in.Classification, so.Judge.Name(), fp
 	if d, err := so.Agentic.Drift(ctx); err == nil {
 		b.Drift = d
 	}

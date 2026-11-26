@@ -194,6 +194,11 @@ vanished, a file inside one of its absence searches was added, changed or remove
 calls missing appeared, or a drift entry's removed path reappeared. A claim with no evidence
 (unknown, unverifiable) is `recheck`: only the periodic recheck can renew it. Everything else
 is `fresh`. Output: stale/v1 JSON (`-format json`, `-out FILE`, mode 0600) or a text summary.
+`-footprint weak,siblings,members` (or `all`) also re-opens claims by footprint rules - the
+scoped searches of the judgment (recorded with `-footprint weak` on `eval-model` / `audit`), a
+newly added sibling of the document or a quoted file (one directory level wildcarded), an
+entry added to or removed from a set an enumerating claim listed (recorded with `-footprint
+members`). Footprints only re-open a claim; they never decide a verdict. Off by default.
 The ledger is private data (documentation text and paths): mode 0600, never inside an
 inspected repository.
 
@@ -541,6 +546,19 @@ causing commit, or at any (`--max-commits N` causing commits per item, default 2
 commits at a time). Items with no identifiable causing commit are reported separately;
 the cost side is how many sections each change asks to re-read. `-eval-out` freezes the model
 eval set from the same history.
+
+**Ledger backtest (evidence-based invalidation without hindsight):**
+
+```sh
+go run ./bench ledger-backtest -ledger <ledger judged before the causing commits> -gt <dir> -set <eval set> \
+  -repo name=<checkout with history> ... [-impact replay.json] [-transcripts '<eval results glob>' -transcript-sets '<sets glob>'] [-json out.json]
+```
+
+It replays history forward from each claim's verified revision and reports, for the ledger
+alone, with each footprint rule (weak, siblings, members) and with all of them, how many
+ground-truth positives were caught at their first / any causing commit and the per-commit
+stale cost; `-impact` adds the change-time impact selection and ledger OR impact on the same
+items; `-transcripts` with `-transcript-sets` adds footprints to a ledger recorded without them.
 
 **Snapshot check / audit:**
 

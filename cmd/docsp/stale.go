@@ -23,6 +23,7 @@ func cmdStale(ctx context.Context, args []string, stdout, stderr io.Writer) (int
 	repoName := fs.String("repo-name", "", "logical repository name of the claims (default: directory name)")
 	out := fs.String("out", "", "write the stale/v1 JSON here (mode 0600) instead of stdout")
 	format := fs.String("format", "text", "stdout format: text, json or none")
+	footprint := fs.String("footprint", "", "also re-open claims by footprint rules: weak, siblings, members (comma-separated) or all")
 	if err := fs.Parse(args); err != nil {
 		return flagErr(err)
 	}
@@ -38,7 +39,11 @@ func cmdStale(ctx context.Context, args []string, stdout, stderr io.Writer) (int
 	if err != nil {
 		return exitUsage, err //nolint:wrapcheck // already descriptive
 	}
-	r, err := ledger.Check(ctx, l, root, name, *ref, time.Now())
+	rules, err := ledger.ParseRules(*footprint)
+	if err != nil {
+		return exitUsage, err //nolint:wrapcheck // already descriptive
+	}
+	r, err := ledger.CheckWith(ctx, l, root, name, *ref, time.Now(), rules)
 	if err != nil {
 		return exitUsage, err //nolint:wrapcheck // already descriptive
 	}

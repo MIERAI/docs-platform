@@ -496,3 +496,9 @@ Ground truth 质量抽查（15 条分歧：10 条工具漏掉的 GT + 5 条 GT �
 | B3 仓库组与声明修订号 | `docsp group plan / judge / stale`；实例 `groups:`；台账 `target`、`doc_ref` | 已实现；docsp 不改 checkout，目标需在其修订号上有 checkout |
 | B4 不强制更新 | `docsp report / draft / drafts`；report/v1；实例 `batch_days`、`suppressions`、`recommend_after` | 已实现 |
 
+### 12.9 无偏回测与足迹规则（2026-11-26）
+
+- 无偏回测（TEST，断言在致因提交之前判定，Sonnet 付费 $3.61）：20 条可打分正例，台账 首个致因 8/20、任一 12/20；变更时影响选择同一批 6/20、9/20；台账 ∪ 影响 10/20、13/20。基准时只有一半判为 confirmed，没有证据足迹的断言抓不到。
+- 足迹规则（默认关闭，`-footprint`）：weak（判定时有路径/glob 限定的搜索范围内有文件变化）、siblings（文档或被引文件把一级目录换成通配后出现新增匹配）、members（列举型断言列过的目录/展开过的 glob 出现增删）。只把断言送回重判，从不决定判定。
+- TEST 上：+weak 12/16、+siblings 10/14、+members 8/12、全部 14/18，每提交 stale 0.62 → 1.14 条。规则是在 TEST 上分析出来的，采纳前在 DEV（api-factory）上验证。
+

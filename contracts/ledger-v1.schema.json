@@ -263,6 +263,42 @@
               }
             }
           }
+        },
+        "weak": {
+          "type": "array",
+          "description": "footprint, not evidence (recorded with -footprint weak): path- or glob-scoped searches of the judgment; a change inside one re-opens the claim",
+          "items": {
+            "type": "object",
+            "required": [
+              "tool",
+              "scope"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "tool": {
+                "type": "string"
+              },
+              "scope": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "members": {
+          "type": "array",
+          "description": "footprint, not evidence (recorded with -footprint members, enumerating claims only): listed directories and expanded globs; an entry added or removed re-opens the claim",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "dir": {
+                "type": "string"
+              },
+              "glob": {
+                "type": "string"
+              }
+            }
+          }
         }
       }
     },

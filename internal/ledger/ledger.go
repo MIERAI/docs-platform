@@ -90,6 +90,10 @@ type Evidence struct {
 	Drift       []Drift       `json:"drift,omitempty"`
 	Absence     []Absence     `json:"absence,omitempty"`
 	PathMissing []PathMissing `json:"path_missing,omitempty"`
+	// Weak and Members are footprints, not evidence (recorded only when their rules are on):
+	// they can send the claim back to the judge, never support a verdict.
+	Weak    []Scope  `json:"weak,omitempty"`
+	Members []Member `json:"members,omitempty"`
 }
 
 // Empty reports whether the claim rests on no evidence (it cannot be invalidated, only

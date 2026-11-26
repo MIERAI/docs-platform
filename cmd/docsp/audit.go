@@ -8,6 +8,7 @@ import (
 
 	"github.com/MIERAI/docs-platform/internal/agentic"
 	"github.com/MIERAI/docs-platform/internal/check"
+	"github.com/MIERAI/docs-platform/internal/ledger"
 )
 
 // cmdAudit is layer ④(c): the semantic audit. Its findings are proposals for a human
@@ -83,5 +84,9 @@ func auditAgentic(af *agenticFlags) (*check.AgenticAudit, error) {
 	if af.noCache {
 		cache = ""
 	}
-	return &check.AgenticAudit{Group: af.group, CacheDir: cache, NoDrift: af.noDrift, Ledger: af.ledger}, nil
+	fp, err := ledger.ParseRules(af.footprint)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // already descriptive
+	}
+	return &check.AgenticAudit{Group: af.group, CacheDir: cache, NoDrift: af.noDrift, Ledger: af.ledger, Footprint: fp}, nil
 }

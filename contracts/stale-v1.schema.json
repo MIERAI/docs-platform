@@ -100,7 +100,10 @@
                     "removed_path_reappeared",
                     "absence_scope_changed",
                     "path_appeared",
-                    "no_evidence"
+                    "no_evidence",
+                    "weak_scope_changed",
+                    "sibling_added",
+                    "member_set_changed"
                   ]
                 },
                 "path": {

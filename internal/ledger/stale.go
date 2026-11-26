@@ -67,6 +67,12 @@ func Invalidate(c *Claim, ch *Changes, doc func(string) (string, bool)) ClaimSta
 // InvalidateAcross decides a claim whose document and evidence may live in different
 // repositories: docCh are the document repository's changes, ch the evidence repository's.
 func InvalidateAcross(c *Claim, docCh, ch *Changes, doc func(string) (string, bool)) ClaimStatus {
+	return InvalidateWith(c, docCh, ch, doc, Rules{})
+}
+
+// InvalidateWith is InvalidateAcross with footprint rules: when a rule is on, a change in
+// the claim's footprint also makes it stale (with that rule's reason kind).
+func InvalidateWith(c *Claim, docCh, ch *Changes, doc func(string) (string, bool), r Rules) ClaimStatus {
 	s := ClaimStatus{ID: c.ID, Repo: c.Repo, Path: c.Path, Line: c.Line, Category: c.Category, VerifiedRef: c.VerifiedRef, Target: c.Target}
 	var rs []Reason
 	rs = append(rs, docReasons(c, docCh, doc, &s)...)
@@ -88,6 +94,9 @@ func InvalidateAcross(c *Claim, docCh, ch *Changes, doc func(string) (string, bo
 	}
 	for _, pm := range c.Evidence.PathMissing {
 		rs = append(rs, appearedReasons(ch, pm)...)
+	}
+	if r.Any() {
+		rs = append(rs, footprintReasons(c, ch, r)...)
 	}
 	s.Reasons = dedupReasons(rs)
 	switch {
@@ -236,6 +245,11 @@ type Report struct {
 // Check evaluates every claim of repoName in the ledger against ref of the checkout dir:
 // one diff per distinct verified revision, documents read at ref only when they changed.
 func Check(ctx context.Context, l *Ledger, dir, repoName, ref string, now time.Time) (*Report, error) {
+	return CheckWith(ctx, l, dir, repoName, ref, now, Rules{})
+}
+
+// CheckWith is Check with footprint rules.
+func CheckWith(ctx context.Context, l *Ledger, dir, repoName, ref string, now time.Time, rules Rules) (*Report, error) {
 	to, err := Resolve(ctx, dir, ref)
 	if err != nil {
 		return nil, err
@@ -266,7 +280,7 @@ func Check(ctx context.Context, l *Ledger, dir, repoName, ref string, now time.T
 			}
 			diffs[c.VerifiedRef] = ch
 		}
-		s := Invalidate(c, ch, doc)
+		s := InvalidateWith(c, ch, ch, doc, rules)
 		r.Counts[s.Status]++
 		r.Claims = append(r.Claims, s)
 	}
