@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sync"
 
 	"github.com/MIERAI/docs-platform/judgev1"
@@ -34,7 +35,13 @@ func WriteMCPSpec(t *Tools, file, transcript string) error {
 	if t.policy == nil {
 		return errors.New("judge tools: an out-of-process tool server needs a classification policy (NewPolicyTools)")
 	}
-	b, err := json.Marshal(MCPSpec{Root: t.dir, Policy: *t.policy, Limits: t.limits, Doc: t.docRef(), Transcript: transcript})
+	// The tool server runs in the CLI's scratch directory, not ours: a relative root would
+	// resolve there and every tool call would fail (the judge then answers from the prompt alone).
+	root, err := filepath.Abs(t.dir)
+	if err != nil {
+		return fmt.Errorf("tool spec root: %w", err)
+	}
+	b, err := json.Marshal(MCPSpec{Root: root, Policy: *t.policy, Limits: t.limits, Doc: t.docRef(), Transcript: transcript})
 	if err != nil {
 		return fmt.Errorf("encode tool spec: %w", err)
 	}
