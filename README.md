@@ -397,6 +397,32 @@ hand-written files. The manifest must be exported from the commit being judged: 
 that is missing or does not contain the rule's condition is an error, not a guess. `-dry-run`
 lists what would be judged without a model; `-out FILE` writes the plan and result as JSON.
 
+### `docsp factory-pr -base REV ...` and `docsp factory-coverage ...`: the factory proves the proposals
+
+Both work on a checkout of an API factory's project with its manifest, a judge
+(`-instance-config`) and the factory itself (`-factory`, default `go run ./factory/cmd/factory`),
+whose `factory try` applies file changes to a temporary copy of the revision, regenerates,
+builds and runs its tests and acceptance. The model only proposes; the factory's run decides.
+
+**`docsp factory-pr`** reviews a change from the design's side. The rules with hand-written code
+it touches - a change to their code or to their own design - are judged at the head (the
+agentic judge, told where the code is). For a rule the code now contradicts, the drafter
+proposes the smallest design edit (the rule's wording and any example encoding the old
+behaviour); it is marked verified only when the factory accepts the design with it at the
+head. The comment says what was found and leaves the decision - stale design or wrong code -
+to a person; `-comment-out FILE` writes it, `-post-pr N -github-repo owner/name` posts it with
+`gh` (one comment, updated in place), `-no-try` skips the factory.
+
+**`docsp factory-coverage`** measures the **rule executable coverage**: for each rule with
+hand-written code the model proposes a mutant (the smallest code edit that breaks that rule
+alone) and the factory runs the project with it. The rule is covered when a case written in the
+design (an example or a logic example) fails; a hand-written test or a factory-derived case
+catching it does not count - they guard the code, not the design. For an uncovered rule the
+model drafts a new example (`-propose`, on by default), kept only when the factory shows it
+passes on the current code and fails on the mutant. An API whose cases fail without any change
+is `baseline_failing`, not measured. Outcomes are reused while the rule, its design and its code
+are unchanged (`-previous`, default the `-out` file), so a rerun only pays for what changed.
+
 ### `docsp extract [--config FILE] [repo]`, `docsp validate FILE`, `docsp version`
 
 `extract` prints what the extractors found (contract extract/v1) - useful when tuning a

@@ -40,10 +40,13 @@
             "change_contradiction",
             "draft_edit",
             "repo_drift",
+            "rule_mutant",
+            "draft_example",
+            "draft_rule",
             "claim_facts",
             "doc_facts"
           ],
-          "description": "claim_contradiction: does the evidence contradict the claim? claim_incomplete: does the evidence show members/steps the claim omits? change_contradiction: does this code change make the doc section wrong? draft_edit: propose a corrected text for the claim (only after a judge said yes). (1.2, agentic mode only) repo_drift: list the changes in the repository's history that make older documentation wrong (a drift list the core validates: commits are ancestors of HEAD, quotes are verbatim, removed paths are really gone). claim_facts: check one documentation line fact by fact; the answer is a list of facts with statuses and evidence the core re-checks, and the core derives the verdict. doc_facts: the same for up to a few lines of one document (claims[])."
+          "description": "claim_contradiction: does the evidence contradict the claim? claim_incomplete: does the evidence show members/steps the claim omits? change_contradiction: does this code change make the doc section wrong? draft_edit: propose a corrected text for the claim (only after a judge said yes). (1.2, agentic mode only) repo_drift: list the changes in the repository's history that make older documentation wrong (a drift list the core validates: commits are ancestors of HEAD, quotes are verbatim, removed paths are really gone). claim_facts: check one documentation line fact by fact; the answer is a list of facts with statuses and evidence the core re-checks, and the core derives the verdict. doc_facts: the same for up to a few lines of one document (claims[]). (1.3, structured, snippet mode) rule_mutant: the smallest edit of hand-written code that breaks one business rule; draft_example: an example for a design that pins a rule down; draft_rule: the smallest rewording of a rule the code contradicts. The core applies each and keeps it only when the code owner's acceptance run proves it."
         },
         "question": {
           "type": "string",

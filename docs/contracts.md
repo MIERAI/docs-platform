@@ -115,7 +115,7 @@ path|identifier|rule, subject, changed, doc_line}]}`, plus `judgement {verdict, 
 quote_rejected, model, prompt_hash, error}` and `draft` when a model is configured. Sections are
 advisory: the verdict is decided by the explicit rules only.
 
-## judge/v1 (1.2)
+## judge/v1 (1.3)
 
 The only coupling between docs-platform and a model. Request: `id`, `task.type`
 (`claim_contradiction`, `claim_incomplete`, `change_contradiction`, `draft_edit`), `claim`
@@ -160,6 +160,16 @@ describes each allowed tool (name, description, JSON Schema of the arguments) so
 can hand them to its model. A consumer of 1.1 that ignores unknown fields is unaffected; a
 1.1 provider never receives the new task types (it does not declare `agentic`, or the core's
 Guard refuses the mode).
+
+1.3 (additive) adds three structured task types in snippet mode (the files are in the
+prompt), for projects of a design-first API factory whose proposals the factory itself checks
+(`factory try`): `rule_mutant` (`{path, old, new, rationale}`: the smallest edit of
+hand-written code that breaks one business rule; `path` "" = none), `draft_example`
+(`{inserts: [{anchor, text}], rationale}`: a new example inserted after exact anchor lines of
+the design) and `draft_rule` (`{edits: [{old, new}], rationale}`: the smallest rewording of a
+rule - and of the examples encoding the old behaviour - that the code contradicts). The core
+applies each as an exact text edit and keeps it only when the factory's run proves it; the
+model never decides an outcome.
 
 Who may receive what is decided by the core, not the provider: a provider declares `Cloud()`
 and its `modes`; the instance configuration classifies repositories and paths `public` /
@@ -217,6 +227,27 @@ detail}], new_line, verified_ref}]`; reason kinds `doc_removed`, `doc_line_chang
 `removed_path_reappeared`, `absence_scope_changed`, `path_appeared`, `no_evidence`, and with
 footprint rules `weak_scope_changed`, `sibling_added`, `member_set_changed`; `pinned_changed`
 when a pinned file changed (a removed one is `evidence_removed`).
+
+## factory-pr/v1 and rulecover/v1 (API factory projects)
+
+Both read a factory's `factory.api-manifest/v1` and run its `factory try`
+(`factory.try-request/v1` → `factory.try-result/v1`: the given file changes applied to a
+temporary copy, deterministic regeneration, build, unit tests and acceptance; cases labelled
+`example`, `logic_example`, `auto`, `differential` or `hand_test`). Neither applies anything.
+
+factory-pr/v1 (`docsp factory-pr`): `base`, `head`, `rules[{api, path, line, text, touched[],
+category, facts[], quotes[], error, draft {edits[{path, old, new}], rationale, verified,
+problem}}]` - the rules with hand-written code a change touches (their code or their own
+document), judged at the head; a draft is `verified` only when the factory accepts the design
+with it - and `acceptance{api: problem}` (the head as it is; "" = passes), `usd`.
+
+rulecover/v1 (`docsp factory-coverage`): `rules[{api, path, line, text, key, status:
+covered|uncovered|unmeasured|baseline_failing, mutant {path, old, new, rationale},
+caught_by[] (design cases), caught_elsewhere[] (auto, differential, hand-written tests),
+proposal {inserts[{path, anchor, text}], rationale, verified, catches[], problem}, problem}]`
+and `summary {rules, measured, covered, uncovered, verified_proposals, coverage, reused}`:
+`coverage` = covered / measured, the rule executable coverage. `key` hashes the rule, its
+design and its code: a later run reuses the outcome while it is unchanged.
 
 ## schedule/v1 and slo/v1
 

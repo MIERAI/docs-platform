@@ -14,7 +14,7 @@ import (
 )
 
 // SchemaVersion of judge/v1 produced by this package.
-const SchemaVersion = "1.2"
+const SchemaVersion = "1.3"
 
 // Task types.
 const (
@@ -28,12 +28,25 @@ const (
 	TaskClaimFacts = "claim_facts"
 	// TaskDocFacts (1.2, agentic): check up to a few lines of one document (claims[]) at once.
 	TaskDocFacts = "doc_facts"
+	// TaskRuleMutant (1.3, structured): break one business rule in its hand-written code with
+	// the smallest edit; the core applies it and lets the code's owner run its examples.
+	TaskRuleMutant = "rule_mutant"
+	// TaskDraftExample (1.3, structured): propose an example for a design that pins a rule
+	// down; the core keeps it only when the owner's acceptance proves it.
+	TaskDraftExample = "draft_example"
+	// TaskDraftRule (1.3, structured): propose the smallest rewording of a design's rule
+	// that the code contradicts; the core keeps it only when the owner's acceptance passes.
+	TaskDraftRule = "draft_rule"
 )
 
 // Structured reports whether a task's answer is a structured object (Response.Answer) from
 // which the core derives the verdict itself, rather than a yes/no verdict with a quote.
 func Structured(task string) bool {
-	return task == TaskRepoDrift || task == TaskClaimFacts || task == TaskDocFacts
+	switch task {
+	case TaskRepoDrift, TaskClaimFacts, TaskDocFacts, TaskRuleMutant, TaskDraftExample, TaskDraftRule:
+		return true
+	}
+	return false
 }
 
 // Answer parse outcomes (Response.AnswerParse).
