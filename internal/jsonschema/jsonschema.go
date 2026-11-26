@@ -10,11 +10,13 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 )
 
 // Schema is a compiled schema document.
 type Schema struct {
 	root map[string]any
+	mu   sync.Mutex // guards re: one Schema validates concurrent judge responses
 	re   map[string]*regexp.Regexp
 }
 
@@ -95,6 +97,8 @@ func (s *Schema) checkString(x string, sch map[string]any, at string) []string {
 }
 
 func (s *Schema) regexp(p string) (*regexp.Regexp, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if re, ok := s.re[p]; ok {
 		return re, nil
 	}

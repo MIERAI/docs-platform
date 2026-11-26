@@ -97,6 +97,9 @@ func Parse(b []byte) (*Manifest, error) {
 		}
 		return nil, fmt.Errorf("factory manifest: schema %q is not an API manifest (want %s)", m.Schema, Schema)
 	}
+	if pr := m.Project; strings.HasPrefix(pr, "/") || pr == ".." || strings.HasPrefix(pr, "../") || strings.Contains(pr, "/../") {
+		return nil, fmt.Errorf("factory manifest: project %q is outside the repository: export it from the checkout (factory export)", pr)
+	}
 	for i, a := range m.APIs {
 		if a.ID == "" || a.Name == "" || a.Source.Path == "" {
 			return nil, fmt.Errorf("factory manifest: api %d: id, name and source are required", i)

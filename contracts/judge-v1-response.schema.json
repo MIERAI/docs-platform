@@ -220,7 +220,7 @@
     },
     "answer": {
       "type": "object",
-      "description": "(1.2) structured tasks (repo_drift, claim_facts, doc_facts): the model's answer object, passed through unchanged. The core validates it against the prompt's reply schema shape, re-checks every piece of evidence in it and derives the verdict; verdict stays unknown here."
+      "description": "(1.2) structured tasks (repo_drift, claim_facts, doc_facts; 1.3: rule_mutant, draft_example, draft_rule): the model's answer object, passed through unchanged. The core validates it against the prompt's reply schema shape, re-checks every piece of evidence in it and derives the verdict; verdict stays unknown here."
     },
     "answer_parse": {
       "type": "string",

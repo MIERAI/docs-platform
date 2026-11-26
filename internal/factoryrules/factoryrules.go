@@ -96,6 +96,15 @@ func (p *Plan) Hint() func(path string, line int) string {
 	return func(path string, line int) string { return h[fmt.Sprintf("%s:%d", path, line)] }
 }
 
+// ManifestHint is the agentic runner's hint for every escaped rule of a manifest.
+func ManifestHint(m *factorymanifest.Manifest) func(path string, line int) string {
+	p := &Plan{}
+	for _, r := range m.EscapedRules() {
+		p.Items = append(p.Items, Item{Path: r.Path, Line: r.Line, Files: r.Files})
+	}
+	return p.Hint()
+}
+
 // Result summarises a run.
 type Result struct {
 	Judged  int            `json:"judged"`

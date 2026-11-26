@@ -45,6 +45,7 @@ func TestParseRejects(t *testing.T) {
 		{`{"schema": "contract/v1", "apis": []}`, "not an API manifest"},
 		{`{"schema": "factory.api-manifest/v1", "apis": [{"id": "x"}]}`, "required"},
 		{`{`, "factory manifest"},
+		{`{"schema": "factory.api-manifest/v1", "project": "../../x", "apis": []}`, "outside the repository"},
 	} {
 		if _, err := Parse([]byte(tc.in)); err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("%s: err %v, want %q", tc.in, err, tc.want)
