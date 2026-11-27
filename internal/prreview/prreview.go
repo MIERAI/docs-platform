@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/MIERAI/docs-platform/internal/agentic"
 	"github.com/MIERAI/docs-platform/internal/factorypr"
 	"github.com/MIERAI/docs-platform/internal/ledger"
 )
@@ -23,9 +24,6 @@ const SchemaVersion = "1.0"
 
 // Marker identifies the review's PR comment (updated in place, never duplicated).
 const Marker = "<!-- docsp:pr -->"
-
-// Problem categories.
-var problem = map[string]bool{"contradicted": true, "outdated_wording": true, "incomplete_list": true, "dangling_reference": true}
 
 // Line is one line of a file at the head.
 type Line struct {
@@ -76,7 +74,7 @@ func Compare(ctx context.Context, before, after *ledger.Ledger, head string, lin
 		if o := before.Find(c.ID); o != nil {
 			was = o.Category
 		}
-		if !problem[c.Category] || problem[was] {
+		if !agentic.IsProblem(c.Category) || agentic.IsProblem(was) {
 			continue
 		}
 		p := Problem{ID: c.ID, Path: c.Path, Line: c.Line, Text: c.Text, Category: c.Category, Before: was, Facts: c.Facts}
