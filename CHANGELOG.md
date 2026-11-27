@@ -60,6 +60,13 @@ Design: docs/design.md §12; plan: docs/backlog.md.
   a history whose first commit is replayed for a ground-truth item).
 
 ### Added
+- **Rules stage before the model** (`internal/rulejudge`, "deterministic first"): typed Go
+  facts read with go/ast (flag defaults, exported constants, environment defaults, config
+  constructor defaults, HTTP routes) decide documentation lines that name exactly one of them
+  - `go_fact_mismatch` findings with a token-replacement draft, ledger claims with model
+  `rules/go-ast` - before any judge question; unclear lines go to the model unchanged.
+  `docsp recheck` and `docsp draft` use it too; `go test -v -run TestMeasureRulesShare
+  ./internal/rulejudge` measures the share it decides offline.
 - **Precision of docs-platform's own reports** (`docsp outcome`, outcome/v1, no model): an
   append-only stream of what happened to reported problems (reported, resolved and how,
   verdict flips on unchanged inputs, PR ticks, random-audit labels); `outcome report` gives

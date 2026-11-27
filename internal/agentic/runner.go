@@ -113,6 +113,10 @@ type Options struct {
 	// is a pointer for the search, not evidence: the verdict still rests on what the tools
 	// find. "" = no hint.
 	Hint func(path string, line int) string
+	// Rules, when set, decides lines deterministically before any request (typed code facts:
+	// a flag's default, a constant): a decided line never reaches the model; its evidence is
+	// validated like a model's. nil = every line goes to the model.
+	Rules Decider
 }
 
 // crossRepo reports whether the documents live in another repository than the tools.
@@ -317,6 +321,9 @@ func (r *Runner) Judge(ctx context.Context, docPath string, lines []int) []LineR
 	src, err := readLines(r.o.docDir(), docPath)
 	var sts []statement
 	var out []LineResult
+	if err == nil {
+		out, lines = r.rulesFirst(ctx, docPath, src, lines)
+	}
 	for _, n := range lines {
 		if err != nil || n < 1 || n > len(src) {
 			out = append(out, LineResult{Path: docPath, Line: n, Category: Unknown, Verdict: judgev1.Unknown, Error: lineErr(err, docPath, n)})

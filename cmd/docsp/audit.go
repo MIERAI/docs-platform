@@ -9,6 +9,7 @@ import (
 	"github.com/MIERAI/docs-platform/internal/agentic"
 	"github.com/MIERAI/docs-platform/internal/check"
 	"github.com/MIERAI/docs-platform/internal/ledger"
+	"github.com/MIERAI/docs-platform/internal/semantic"
 )
 
 // cmdAudit is layer ④(c): the semantic audit. Its findings are proposals for a human
@@ -50,10 +51,8 @@ func cmdAudit(ctx context.Context, args []string, stdout, stderr io.Writer) (int
 		return exitUsage, err
 	}
 	st := res.Stats
-	_, err = fmt.Fprintf(stderr, "docsp audit: judge %s, %d claims, %d questions, %d model requests (%d tokens, $%.4f), %d quotes rejected, %d refused (private), kept from the judge by audit.skip %v, %.1fs\n",
-		res.Judge, st.CheckableClaims, st.Questions, st.ModelRequests, st.ModelTokens, st.ModelUSD, st.QuotesRejected, st.Refused, st.Skipped, st.Seconds)
-	if err != nil {
-		return exitUsage, fmt.Errorf("write summary: %w", err)
+	if err := auditSummary(stderr, res.Judge, &st); err != nil {
+		return exitUsage, err
 	}
 	if ag != nil {
 		_, err = fmt.Fprintf(stderr, "docsp audit (agentic): drift %d entries, %d validated (cached %v); categories %v; parse failures %d\n",
@@ -89,4 +88,18 @@ func auditAgentic(af *agenticFlags) (*check.AgenticAudit, error) {
 		return nil, err //nolint:wrapcheck // already descriptive
 	}
 	return &check.AgenticAudit{Group: af.group, CacheDir: cache, NoDrift: af.noDrift, Ledger: af.ledger, Footprint: fp}, nil
+}
+
+// auditSummary writes the audit's summary lines (the judge's work and the rules stage's).
+func auditSummary(w io.Writer, judgeName string, st *semantic.Stats) error {
+	_, err := fmt.Fprintf(w, "docsp audit: judge %s, %d claims, %d questions, %d model requests (%d tokens, $%.4f), %d quotes rejected, %d refused (private), kept from the judge by audit.skip %v, %.1fs\n",
+		judgeName, st.CheckableClaims, st.Questions, st.ModelRequests, st.ModelTokens, st.ModelUSD, st.QuotesRejected, st.Refused, st.Skipped, st.Seconds)
+	if err == nil {
+		_, err = fmt.Fprintf(w, "docsp audit (rules): %d lines decided without a model (%d confirmed, %d contradicted), %d questions saved, %d left to the judge\n",
+			st.RulesDecided, st.RulesConfirmed, st.RulesContradicted, st.RulesSaved, st.Candidates)
+	}
+	if err != nil {
+		return fmt.Errorf("write summary: %w", err)
+	}
+	return nil
 }
