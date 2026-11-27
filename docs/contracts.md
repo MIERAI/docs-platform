@@ -236,10 +236,16 @@ temporary copy, deterministic regeneration, build, unit tests and acceptance; ca
 `example`, `logic_example`, `auto`, `differential` or `hand_test`). Neither applies anything.
 
 factory-pr/v1 (`docsp factory-pr`): `base`, `head`, `rules[{api, path, line, text, touched[],
-category, facts[], quotes[], error, draft {edits[{path, old, new}], rationale, verified,
+category, facts[], quotes[], code[{path, line, text}], evidence: executed|read, error, draft
+{edits[{path, old, new}], patch, rationale, summary, question, counterexample, verified,
 problem}}]` - the rules with hand-written code a change touches (their code or their own
 document), judged at the head; a draft is `verified` only when the factory accepts the design
-with it - and `acceptance{api: problem}` (the head as it is; "" = passes), `usd`.
+with it; a problem's `evidence` is `executed` when the design's examples of its API fail at the
+head, `read` when only the judge says so - and `acceptance{api: problem}` (the head as it is;
+"" = passes), `failing{api: [case]}` (the design's cases failing at the head; a problem is `executed` only when its verified draft rewrites that very rule), `block` per rule, `diffs{path:
+hunk}`, `github` (owner/name, for links), `feedback[{rule, option: design_stale|code_wrong|
+not_a_problem, category, evidence}]` (the boxes ticked in the posted comment before
+the run; `-feedback-only` prints just these as `{pr, comment, feedback}`), `usd`.
 
 rulecover/v1 (`docsp factory-coverage`): `rules[{api, path, line, text, key, status:
 covered|uncovered|undetermined|unmeasured|baseline_failing, mutant {path, old, new, rationale},
