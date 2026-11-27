@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"slices"
 	"sort"
 	"sync"
@@ -85,6 +86,8 @@ type Guard struct {
 	mu       sync.Mutex
 	st       Stats
 	refused  []Refusal
+	// spendLogged: the spend was appended to SpendLogEnv (once per guard).
+	spendLogged bool
 }
 
 // NewGuard wraps p (nil = none → nil guard) for task ("judge" or "draft").
@@ -143,10 +146,36 @@ func (g *Guard) Refusals() []Refusal {
 
 // Close closes the provider.
 func (g *Guard) Close() error {
+	g.logSpend()
 	if err := g.p.Close(); err != nil {
 		return fmt.Errorf("close %s: %w", g.Name(), err)
 	}
 	return nil
+}
+
+// SpendLogEnv names a file every guard appends its spend to when it closes (one line: the
+// provider and the USD), so a caller running several commands - a CI job against a monthly
+// budget - can add up what they cost.
+const SpendLogEnv = "DOCSP_SPEND_LOG"
+
+func (g *Guard) logSpend() {
+	p := os.Getenv(SpendLogEnv)
+	if p == "" {
+		return
+	}
+	g.mu.Lock()
+	usd, logged := g.st.CostUSD, g.spendLogged
+	g.spendLogged = true
+	g.mu.Unlock()
+	if logged {
+		return
+	}
+	f, err := os.OpenFile(p, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600) //nolint:gosec // the operator names the log
+	if err != nil {
+		return
+	}
+	_, _ = fmt.Fprintf(f, "%s %.6f\n", g.Name(), usd)
+	_ = f.Close()
 }
 
 // Judge sends one request through the rules: classification, budget, the provider, contract

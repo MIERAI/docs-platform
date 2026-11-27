@@ -228,6 +228,14 @@ detail}], new_line, verified_ref}]`; reason kinds `doc_removed`, `doc_line_chang
 footprint rules `weak_scope_changed`, `sibling_added`, `member_set_changed`; `pinned_changed`
 when a pinned file changed (a removed one is `evidence_removed`).
 
+## pr-review/v1 (`docsp pr-comment`)
+
+`schema_version`, `repo`, `head`, `github`, `rechecked` (claims judged at the head), `problems
+[{id, path, line, text, category, before, facts[], code[{path, line, text}]}]` - claims judged at
+the head that are problems now and were not in the default branch's ledger (`before`: their
+category there, "" = absent) - and `feedback[]` (as factory-pr/v1). Every judge also appends
+`<provider:model> <usd>` to the file `DOCSP_SPEND_LOG` names when it closes.
+
 ## factory-pr/v1 and rulecover/v1 (API factory projects)
 
 Both read a factory's `factory.api-manifest/v1` and run its `factory try`

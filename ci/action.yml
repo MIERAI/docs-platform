@@ -1,0 +1,105 @@
+name: docs-platform CI
+description: >-
+  Event-driven documentation consistency for a repository: `main` keeps the claim ledger
+  (built on first run, rechecked on every push and weekly) in the Actions cache; `pr` judges the
+  claims a pull request makes stale at its head and comments the problems it introduces;
+  `factory-pr` does the same for an API factory project's business rules, with drafts the
+  factory verifies. AI runs only within a monthly budget; past it, nothing paid runs.
+inputs:
+  task:
+    description: "main (push to the default branch, schedule), pr or factory-pr (pull_request)"
+    required: true
+  claude-oauth-token:
+    description: Claude Code OAuth token (secrets.CLAUDE_CODE_OAUTH_TOKEN). Empty = no AI (fork PRs get none).
+    default: ""
+  github-token:
+    description: token for comments, the spend artifacts and the cache
+    default: ${{ github.token }}
+  model:
+    description: Claude model of the judge
+    default: claude-sonnet-5-5
+  monthly-usd:
+    description: AI budget of the repository per calendar month (all tasks together)
+    default: "20"
+  run-usd:
+    description: cap of one run (default per task - main 3, pr 1, factory-pr 1)
+    default: ""
+  bootstrap-usd:
+    description: cap of the first run that builds the ledger (task main)
+    default: "8"
+  claude-code-version:
+    description: the Claude Code CLI release the judge runs
+    default: "2.1.326"
+  factory:
+    description: "factory-pr: the factory command, run in the checkout"
+    default: go run ./factory/cmd/factory
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+      with:
+        go-version-file: ${{ github.action_path }}/../go.mod
+        cache: false
+    - name: build docsp
+      shell: bash
+      working-directory: ${{ github.action_path }}/..
+      run: go build -trimpath -o "$RUNNER_TEMP/docsp" ./cmd/docsp
+    - name: budget
+      id: budget
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        DOCSP_TASK: ${{ inputs.task }}
+        DOCSP_HAS_TOKEN: ${{ inputs.claude-oauth-token != '' }}
+        DOCSP_PRIVATE: ${{ github.event.repository.private }}
+        DOCSP_MONTHLY: ${{ inputs.monthly-usd }}
+        DOCSP_RUN_USD: ${{ inputs.run-usd }}
+      run: bash "${{ github.action_path }}/run.sh" budget
+    - name: restore the ledger
+      if: inputs.task != 'factory-pr'
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ runner.temp }}/docsp-ledger
+        key: docsp-ledger-${{ github.run_id }}-${{ github.run_attempt }}
+        restore-keys: docsp-ledger-
+    - name: install Claude Code
+      if: steps.budget.outputs.ai == 'true'
+      shell: bash
+      env:
+        DOCSP_CLAUDE_VERSION: ${{ inputs.claude-code-version }}
+      run: npm install --global --no-fund --no-audit "@anthropic-ai/claude-code@${DOCSP_CLAUDE_VERSION}"
+    - name: run
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude-oauth-token }}
+        DOCSP_TASK: ${{ inputs.task }}
+        DOCSP_AI: ${{ steps.budget.outputs.ai }}
+        DOCSP_RUN_CAP: ${{ steps.budget.outputs.run_cap }}
+        DOCSP_BOOTSTRAP_USD: ${{ inputs.bootstrap-usd }}
+        DOCSP_MODEL: ${{ inputs.model }}
+        DOCSP_FACTORY: ${{ inputs.factory }}
+        DOCSP_PR: ${{ github.event.pull_request.number }}
+        DOCSP_BASE: ${{ github.event.pull_request.base.sha }}
+        DOCSP_FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
+      run: bash "${{ github.action_path }}/run.sh" "$DOCSP_TASK"
+    - name: save the ledger
+      if: inputs.task == 'main' && hashFiles(format('{0}/docsp-ledger/ledger.json', runner.temp)) != ''
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ runner.temp }}/docsp-ledger
+        key: docsp-ledger-${{ github.run_id }}-${{ github.run_attempt }}
+    - name: spend
+      id: spend
+      if: always()
+      shell: bash
+      env:
+        DOCSP_TASK: ${{ inputs.task }}
+      run: bash "${{ github.action_path }}/run.sh" spend
+    - name: record the spend
+      if: always() && steps.spend.outputs.name != ''
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: ${{ steps.spend.outputs.name }}
+        path: ${{ runner.temp }}/docsp-spend.log
+        retention-days: 45

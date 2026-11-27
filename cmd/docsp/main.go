@@ -56,6 +56,7 @@ var commands = map[string]command{
 	"contract":         cmdContract,
 	"factory-rules":    cmdFactoryRules,
 	"factory-pr":       cmdFactoryPR,
+	"pr-comment":       cmdPRComment,
 	"factory-coverage": cmdFactoryCoverage,
 	"report":           cmdReport,
 	"draft":            cmdDraft,

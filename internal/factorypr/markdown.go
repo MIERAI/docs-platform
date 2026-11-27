@@ -34,7 +34,7 @@ const (
 func (r *Report) Markdown() string { return r.MarkdownWith(nil) }
 
 // MarkdownWith renders the comment keeping the boxes people ticked in the previous version
-// (by Feedback.key: a tick on a verdict that changed is not carried over). Only what deciding
+// (by Feedback.Key: a tick on a verdict that changed is not carried over). Only what deciding
 // takes is shown: per problem one sentence, one question answered by ticking; the evidence
 // and the draft are folded.
 func (r *Report) MarkdownWith(ticked map[string]bool) string {
@@ -209,7 +209,7 @@ func writeChoices(b *strings.Builder, x Rule, ticked map[string]bool) {
 	for _, o := range opts {
 		f := Feedback{Rule: fmt.Sprintf("%s:%d", x.Path, x.Line), Option: o[0], Category: x.Category, Evidence: x.Evidence}
 		box := " "
-		if ticked[f.key()] {
+		if ticked[f.Key()] {
 			box = "x"
 		}
 		fmt.Fprintf(b, "- [%s] %s %s%s %s %s %s -->\n", box, o[1], feedbackMarkPrefix, f.Rule, f.Option, f.Category, f.Evidence)
@@ -280,7 +280,8 @@ type Feedback struct {
 	Evidence string `json:"evidence"`
 }
 
-func (f Feedback) key() string { return f.Rule + " " + f.Option + " " + f.Category }
+// Key identifies a box: the rule, the option and the verdict it was ticked on.
+func (f Feedback) Key() string { return f.Rule + " " + f.Option + " " + f.Category }
 
 var tickedBox = regexp.MustCompile(`(?m)^\s*[-*] \[[xX]\] .*<!-- docsp:fb (\S+) (\S+) (\S+) (\S*) ?-->`)
 
@@ -297,7 +298,7 @@ func Ticked(body string) []Feedback {
 func TickedKeys(fb []Feedback) map[string]bool {
 	m := map[string]bool{}
 	for _, f := range fb {
-		m[f.key()] = true
+		m[f.Key()] = true
 	}
 	return m
 }

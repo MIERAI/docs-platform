@@ -1,0 +1,33 @@
+# docs-platform on itself: the claim ledger kept on every push (and weekly), and a comment on a
+# pull request that makes the documentation disagree with the code. Other repositories use
+# MIERAI/docs-platform/ci@<commit> the same way.
+name: docs-consistency
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "23 2 * * 1"
+  workflow_dispatch:
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  actions: read
+concurrency:
+  group: docs-consistency-${{ github.event.pull_request.number || 'main' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: ./ci
+        with:
+          task: ${{ github.event_name == 'pull_request' && 'pr' || 'main' }}
+          claude-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}

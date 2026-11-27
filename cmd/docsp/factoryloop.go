@@ -185,7 +185,7 @@ func emitPR(ctx context.Context, rep *factorypr.Report, f *factoryFlags, comment
 	var id, body string
 	if post > 0 { // what people ticked: read back, kept in the new version
 		var err error
-		if id, body, err = findComment(ctx, ghRepo, post); err != nil {
+		if id, body, err = findComment(ctx, ghRepo, post, factorypr.Marker); err != nil {
 			return exitUsage, err
 		}
 		rep.Feedback = factorypr.Ticked(body)
@@ -199,7 +199,7 @@ func emitPR(ctx context.Context, rep *factorypr.Report, f *factoryFlags, comment
 	if post > 0 && id != "" && rep.Unchanged(body) {
 		_, _ = fmt.Fprintln(stderr, "docsp factory-pr: the posted comment already says this: not updated")
 	} else if post > 0 {
-		if err := postComment(ctx, ghRepo, post, id, md); err != nil {
+		if err := postComment(ctx, ghRepo, post, id, md, factorypr.NoRulesComment()); err != nil {
 			return exitUsage, err
 		}
 	}
@@ -229,9 +229,9 @@ func closeGuards(g, d *judge.Guard) {
 
 // findComment is the review's comment on a pull request (by factorypr.Marker): its id and
 // body ("" when there is none yet).
-func findComment(ctx context.Context, repo string, pr int) (string, string, error) {
+func findComment(ctx context.Context, repo string, pr int, marker string) (string, string, error) {
 	out, err := exec.CommandContext(ctx, "gh", "api", "--paginate", //nolint:gosec // fixed program, argv vector
-		fmt.Sprintf("repos/%s/issues/%d/comments", repo, pr), "--jq", `.[] | select(.body | contains("`+factorypr.Marker+`")) | {id, body}`).Output()
+		fmt.Sprintf("repos/%s/issues/%d/comments", repo, pr), "--jq", `.[] | select(.body | contains("`+marker+`")) | {id, body}`).Output()
 	if err != nil {
 		return "", "", fmt.Errorf("post-pr: list comments: %w", err)
 	}
@@ -256,7 +256,7 @@ func readFeedback(ctx context.Context, repo string, pr int, out string, stdout i
 	if pr <= 0 || repo == "" {
 		return exitUsage, errors.New("-feedback-only needs -post-pr and -github-repo")
 	}
-	id, body, err := findComment(ctx, repo, pr)
+	id, body, err := findComment(ctx, repo, pr, factorypr.Marker)
 	if err != nil {
 		return exitUsage, err
 	}
@@ -274,12 +274,12 @@ func readFeedback(ctx context.Context, repo string, pr int, out string, stdout i
 // postComment creates (id "") or updates the review's comment on a pull request with the gh
 // CLI. An empty body updates an existing comment to say nothing is touched any more and
 // creates none.
-func postComment(ctx context.Context, repo string, pr int, id, body string) error {
+func postComment(ctx context.Context, repo string, pr int, id, body, gone string) error {
 	if body == "" {
 		if id == "" {
 			return nil
 		}
-		body = factorypr.NoRulesComment()
+		body = gone
 	}
 	tmp, err := os.CreateTemp("", "docsp-comment-*.json")
 	if err != nil {
