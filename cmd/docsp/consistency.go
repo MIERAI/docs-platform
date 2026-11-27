@@ -13,6 +13,7 @@ import (
 
 	"github.com/MIERAI/docs-platform/internal/agentic"
 	"github.com/MIERAI/docs-platform/internal/check"
+	"github.com/MIERAI/docs-platform/internal/config"
 	"github.com/MIERAI/docs-platform/internal/consistency"
 	"github.com/MIERAI/docs-platform/internal/evalmodel"
 	"github.com/MIERAI/docs-platform/internal/instance"
@@ -97,7 +98,14 @@ func cmdSchedule(ctx context.Context, args []string, stdout, stderr io.Writer) (
 	if err != nil {
 		return exitUsage, err
 	}
-	s, err := consistency.Plan(ctx, consistency.Input{Ledger: l, Repo: name, Dir: root, Ref: c.ref, Policy: in.Consistency, State: st, Now: time.Now()})
+	cfg, err := config.Load(root, "")
+	if err != nil {
+		return exitUsage, err //nolint:wrapcheck // already descriptive
+	}
+	s, err := consistency.Plan(ctx, consistency.Input{
+		Ledger: l, Repo: name, Dir: root, Ref: c.ref, Policy: in.Consistency, State: st, Now: time.Now(),
+		Skip: cfg.Audit.Skip.Filter().Text,
+	})
 	if err != nil {
 		return exitUsage, err //nolint:wrapcheck // already descriptive
 	}

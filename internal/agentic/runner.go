@@ -49,11 +49,17 @@ type Settings struct {
 	DriftUSD  float64
 	Group     string
 	GroupSize int
+	// NoRubric selects the evaluated docsp-agentic/3 prompt without the judging rubric and
+	// the sources_conflict status (ai.judge.agentic.rubric: false).
+	NoRubric bool
 }
 
 // FromInstance reads the settings of a judge task, filling defaults.
 func FromInstance(a instance.Agentic) Settings {
-	s := Settings{LineSteps: a.MaxSteps, DriftSteps: a.DriftMaxSteps, LineUSD: a.MaxRequestUSD, DriftUSD: a.DriftMaxRequestUSD, Group: a.Group}
+	s := Settings{
+		LineSteps: a.MaxSteps, DriftSteps: a.DriftMaxSteps, LineUSD: a.MaxRequestUSD, DriftUSD: a.DriftMaxRequestUSD, Group: a.Group,
+		NoRubric: a.Rubric != nil && !*a.Rubric,
+	}
 	return s.withDefaults()
 }
 
@@ -221,6 +227,9 @@ func (r *Runner) Drift(ctx context.Context) (*DriftList, error) {
 	return r.drift, r.driftErr
 }
 
+// TemplateHash identifies the templates this runner's settings select.
+func (r *Runner) TemplateHash() string { return TemplateHashFor(r.o.Settings) }
+
 func (r *Runner) scan(ctx context.Context) (*DriftList, error) {
 	head, err := Head(ctx, r.o.Dir)
 	if err != nil {
@@ -274,7 +283,7 @@ func (r *Runner) request(id, task string, cl judgev1.Claim, p prompts, steps int
 	req := &judgev1.Request{
 		SchemaVersion: judgev1.SchemaVersion, ID: id, Task: judgev1.Task{Type: task}, Claim: cl,
 		Evidence: []judgev1.Evidence{}, Mode: judgev1.ModeAgentic, DryRun: r.o.DryRun,
-		Prompt: judgev1.Prompt{Version: PromptVersion, System: p.system, User: p.user, ReplySchema: p.schema, Hash: p.hash()},
+		Prompt: judgev1.Prompt{Version: p.version, System: p.system, User: p.user, ReplySchema: p.schema, Hash: p.hash()},
 		Limits: judgev1.Limits{MaxTurns: steps},
 	}
 	if usd > 0 {
@@ -350,7 +359,7 @@ func (r *Runner) tools(steps, total int) (*judge.Tools, error) {
 
 func (r *Runner) judgeOne(ctx context.Context, s statement, text string) LineResult {
 	dtext, ids := r.driftText(ctx)
-	p := linePrompts(s, dtext, r.repoCtx(ctx))
+	p := linePrompts(templateFor(r.o.Settings), s, dtext, r.repoCtx(ctx))
 	steps := r.o.Settings.LineSteps
 	req := r.request(fmt.Sprintf("line-%s-%d", hash16(r.o.docRepo()+r.o.Repo, s.Path)[:8], s.Line), judgev1.TaskClaimFacts,
 		judgev1.Claim{Repo: r.o.docRepo(), Path: s.Path, Line: s.Line, Text: text}, p, steps, r.o.Settings.LineUSD)
@@ -404,7 +413,7 @@ func (r *Runner) derive(ctx context.Context, t *judge.Tools, ids map[string]bool
 
 func (r *Runner) judgeGroup(ctx context.Context, sts []statement, text func(int) string) []LineResult {
 	dtext, ids := r.driftText(ctx)
-	p := docPrompts(sts, dtext, r.repoCtx(ctx))
+	p := docPrompts(templateFor(r.o.Settings), sts, dtext, r.repoCtx(ctx))
 	n := len(sts)
 	steps := min(docGroupMaxSteps, docGroupStepsBase+docGroupStepsPerRow*n)
 	claims := make([]judgev1.Claim, 0, n)

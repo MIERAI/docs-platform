@@ -89,7 +89,7 @@ func idents(s string, spans []string) []string {
 	seen := map[string]bool{}
 	var out []string
 	add := func(x string) {
-		x = strings.Trim(strings.TrimSpace(x), "`\"'.,:;()（）")
+		x = identKey(x)
 		if len(x) < 2 || len(x) > 200 || seen[x] {
 			return
 		}
@@ -113,3 +113,6 @@ func idents(s string, spans []string) []string {
 	}
 	return out
 }
+
+// identKey is an identifier as Claim.Idents holds it (quotes, brackets, punctuation trimmed).
+func identKey(x string) string { return strings.Trim(strings.TrimSpace(x), "`\"'.,:;()（）") }

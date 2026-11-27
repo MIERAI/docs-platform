@@ -23,6 +23,7 @@ import (
 	"github.com/MIERAI/docs-platform/internal/factorytry"
 	"github.com/MIERAI/docs-platform/internal/judge"
 	"github.com/MIERAI/docs-platform/internal/ledger"
+	"github.com/MIERAI/docs-platform/internal/prtext"
 	"github.com/MIERAI/docs-platform/judgev1"
 )
 
@@ -99,6 +100,14 @@ type Report struct {
 	// Feedback is what people ticked in the posted comment before this run.
 	Feedback []Feedback `json:"feedback,omitempty"`
 	USD      float64    `json:"usd"`
+	// Incomplete lists why the run did not finish (prtext.Reason*), as the caller states it;
+	// judge failures on touched rules are added when rendering.
+	Incomplete []string `json:"incomplete,omitempty"`
+
+	// Rendering options (not part of the report).
+	Lang        prtext.Lang `json:"-"` // "" = zh
+	MaxProblems int         `json:"-"` // problems one comment shows (0 = prtext.DefaultMaxProblems)
+	SummaryURL  string      `json:"-"` // where the full list is (the job summary)
 }
 
 // Problem categories: the rule no longer says what the code does.

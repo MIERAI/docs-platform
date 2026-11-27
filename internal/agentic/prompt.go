@@ -9,8 +9,15 @@ import (
 )
 
 // PromptVersion names the agentic prompt templates and reply schemas; it changes whenever
-// their meaning does (recorded in every request and in eval results).
-const PromptVersion = "docsp-agentic/3"
+// their meaning does (recorded in every request and in eval results). docsp-agentic/4 is
+// docsp-agentic/3 plus the judging rubric and the sources_conflict status (rubricBlock,
+// conflictStatus); it was not evaluated with a paid run.
+const PromptVersion = "docsp-agentic/4"
+
+// PromptVersionPlain is the evaluated prompt without the rubric (ai.judge.agentic.rubric:
+// false): its requests are byte for byte those of docsp-agentic/3. The drift prompt did not
+// change in /4 and keeps this version, so drift caches keyed by its hash stay valid.
+const PromptVersionPlain = "docsp-agentic/3"
 
 // systemPrompt is appended to a CLI's own agent prompt (claude-code) or is the whole system
 // prompt (ollama). The answer format is enforced by the reply schema, not by the prompt.
@@ -23,13 +30,25 @@ var (
 		`"path":{"type":"string"},"line":{"type":"integer"},"quote":{"type":"string"},` +
 		`"search_pattern":{"type":"string"},"search_scope":{"type":"string"},"search_regex":{"type":"boolean"},` +
 		`"drift_id":{"type":"string"}}}`
-	factsSchema = `{"type":"array","items":{"type":"object","required":["fact","status","evidence"],"properties":{` +
-		`"fact":{"type":"string"},"status":{"type":"string","enum":["confirmed","unverifiable_in_repo","contradicted","dangling_reference","incomplete_list","outdated_wording"]},` +
-		`"evidence":{"type":"array","items":` + evidenceSchema + `}}}}`
-	// LineSchema is the claim_facts reply schema.
-	LineSchema = json.RawMessage(`{"type":"object","required":["facts","reason"],"properties":{"facts":` + factsSchema + `,"reason":{"type":"string"}}}`)
-	// DocSchema is the doc_facts reply schema.
-	DocSchema = json.RawMessage(`{"type":"object","required":["lines"],"properties":{"lines":{"type":"array","items":{"type":"object","required":["line","facts","reason"],"properties":{"line":{"type":"integer"},"facts":` + factsSchema + `,"reason":{"type":"string"}}}}}}`)
+	statusesPlain = `"confirmed","unverifiable_in_repo","contradicted","dangling_reference","incomplete_list","outdated_wording"`
+	factsSchema   = func(statuses string) string {
+		return `{"type":"array","items":{"type":"object","required":["fact","status","evidence"],"properties":{` +
+			`"fact":{"type":"string"},"status":{"type":"string","enum":[` + statuses + `]},` +
+			`"evidence":{"type":"array","items":` + evidenceSchema + `}}}}`
+	}
+	lineSchema = func(facts string) json.RawMessage {
+		return json.RawMessage(`{"type":"object","required":["facts","reason"],"properties":{"facts":` + facts + `,"reason":{"type":"string"}}}`)
+	}
+	docSchema = func(facts string) json.RawMessage {
+		return json.RawMessage(`{"type":"object","required":["lines"],"properties":{"lines":{"type":"array","items":{"type":"object","required":["line","facts","reason"],"properties":{"line":{"type":"integer"},"facts":` + facts + `,"reason":{"type":"string"}}}}}}`)
+	}
+	// LineSchema is the claim_facts reply schema (docsp-agentic/4: with sources_conflict).
+	LineSchema = lineSchema(factsSchema(statusesPlain + `,"sources_conflict"`))
+	// DocSchema is the doc_facts reply schema (docsp-agentic/4).
+	DocSchema = docSchema(factsSchema(statusesPlain + `,"sources_conflict"`))
+	// lineSchemaPlain and docSchemaPlain are the docsp-agentic/3 schemas.
+	lineSchemaPlain = lineSchema(factsSchema(statusesPlain))
+	docSchemaPlain  = docSchema(factsSchema(statusesPlain))
 	// DriftSchema is the repo_drift reply schema.
 	DriftSchema = json.RawMessage(`{"type":"object","required":["drift"],"properties":{"drift":{"type":"array","items":{` +
 		`"type":"object","required":["kind","old","new","summary"],"properties":{` +
@@ -44,7 +63,7 @@ Look for: files/directories renamed, moved or deleted; components, hosts, machin
 Method: git_log on "." (max_count 30, then older), git_changes (kind "DR", then "A"), git_show for the important commits, and read the CURRENT files (read_file, search) to confirm the current state. You have about 35 tool calls.
 Output 15-40 entries, most impactful first. For each: kind, old (what older text would say), new (what is true now), summary (one sentence), commits (short hashes from git_log/git_changes), evidence (1-3 quotes from CURRENT files showing the new state: path, line number, text copied exactly from that line). Quotes and commits are checked automatically; unverifiable entries are dropped.`
 
-const taskPrompt = `You audit documentation against a git repository checked out at its current revision (your working directory; reach it through the tools).
+const taskHead = `You audit documentation against a git repository checked out at its current revision (your working directory; reach it through the tools).
 Documentation is often stale. Check each statement under test (a line marked ` + "`>>`" + `; other lines are context) fact by fact against the CURRENT repository.
 1. Break the statement into concrete facts (names, paths, hosts, numbers, versions, statuses, list members, behaviours, references to files/docs).
 2. For each fact find what decides it: code, config, scripts, tests, git history. Other documentation (including the same file) is not proof, since it may be stale too. Use the drift list below as leads: it was built from git history and its entries are verified.
@@ -55,12 +74,34 @@ Documentation is often stale. Check each statement under test (a line marked ` +
    - outdated_wording: literally still true, but it describes as pending / planned / in progress / "first X, then Y" something that has since been done, or names a state that no longer applies.
    - dangling_reference: a file, directory, link, document section or name it refers to does not exist in this repository.
    - unverifiable_in_repo: it depends on things outside this repository (other repositories, machines, private notes, measurements, intentions).
-4. Evidence for every status except unverifiable_in_repo (all are checked automatically; unverifiable evidence voids the fact):
+`
+
+const taskTail = `4. Evidence for every status except unverifiable_in_repo (all are checked automatically; unverifiable evidence voids the fact):
    - {"kind": "quote", "path": "<repo-relative path>", "line": <n>, "quote": "<text copied exactly from that line>"}
    - {"kind": "absence", "search_pattern": "<text>", "search_scope": "<path glob, e.g. * or scripts/* or .github/workflows/*>", "search_regex": false}: you searched and found nothing; the harness re-runs exactly this search (case-insensitive fixed string unless regex) and accepts it only if it also finds nothing.
    - {"kind": "drift", "drift_id": "D<n>"}: a drift-list entry that decides the fact.
    - {"kind": "path_missing", "path": "<repo-relative path>"}: a file or directory the statement names does not exist; the harness checks that it exists neither at that path, nor next to the document, nor (for a bare file name) anywhere in the repository.
 The harness derives the verdict from your validated facts. Be literal and specific; do not explain away a mismatch (a similar thing under another name, on another host, or in a later state is a mismatch).`
+
+// taskPrompt is the evaluated task text (docsp-agentic/3).
+const taskPrompt = taskHead + taskTail
+
+// conflictStatus and rubricBlock are what docsp-agentic/4 adds to it: the sources_conflict
+// status (the repository disagrees with itself, so the line is not judged against one truth)
+// and a small judging rubric against the false positives seen in practice. Keep them small:
+// every word here changes every request and was not evaluated with a paid run.
+const conflictStatus = `   - sources_conflict: the places in the repository that decide the fact disagree with each other (e.g. two code paths set different defaults), so there is no single truth to judge the statement against. Give a quote from each place.
+`
+
+const rubricBlock = `
+Judging rules:
+- A documented default, limit, port, version or other value that the repository now sets differently is contradicted, however small the difference.
+- Code that starts enforcing or implementing what the documentation already states does not make the statement stale: it is confirmed.
+- Wording that is merely less precise, shorter or more general than the code, without being false, is confirmed, not contradicted.
+- A statement about the past (what something used to be, what an earlier version did) is history: do not mark it contradicted because the present differs.`
+
+// taskPromptRubric is the docsp-agentic/4 task text.
+const taskPromptRubric = taskHead + conflictStatus + taskTail + rubricBlock
 
 const toolNote = `
 
@@ -68,17 +109,35 @@ Tools: read_file, search, glob (repo-relative paths), plus git_log, git_show, gi
 
 // Prompts of one request.
 type prompts struct {
-	system, user string
-	schema       json.RawMessage
+	version, system, user string
+	schema                json.RawMessage
 }
 
 func (p prompts) hash() string {
-	return hash16(PromptVersion, p.system, p.user, string(p.schema))
+	return hash16(p.version, p.system, p.user, string(p.schema))
 }
 
-// TemplateHash identifies the agentic templates and schemas (eval results record it).
-func TemplateHash() string {
-	return hash16(PromptVersion, systemPrompt, driftPrompt, taskPrompt, toolNote, string(LineSchema), string(DocSchema), string(DriftSchema))
+// template is one version of the per-line templates.
+type template struct {
+	version, task         string
+	lineSchema, docSchema json.RawMessage
+}
+
+func templateFor(s Settings) template {
+	if s.NoRubric {
+		return template{PromptVersionPlain, taskPrompt, lineSchemaPlain, docSchemaPlain}
+	}
+	return template{PromptVersion, taskPromptRubric, LineSchema, DocSchema}
+}
+
+// TemplateHash identifies the default agentic templates and schemas (eval results record it).
+func TemplateHash() string { return TemplateHashFor(Settings{}) }
+
+// TemplateHashFor identifies the templates and schemas the settings select (the rubric or
+// the plain docsp-agentic/3 text).
+func TemplateHashFor(s Settings) string {
+	t := templateFor(s)
+	return hash16(t.version, systemPrompt, driftPrompt, t.task, toolNote, string(t.lineSchema), string(t.docSchema), string(DriftSchema))
 }
 
 func hash16(parts ...string) string {
@@ -88,11 +147,11 @@ func hash16(parts ...string) string {
 
 // DriftPromptHash identifies the drift prompt (part of the drift cache key).
 func DriftPromptHash() string {
-	return hash16(PromptVersion, systemPrompt, driftPrompt, string(DriftSchema))
+	return hash16(PromptVersionPlain, systemPrompt, driftPrompt, string(DriftSchema))
 }
 
 func driftPrompts(repo string) prompts {
-	return prompts{system: systemPrompt + repo, user: driftPrompt, schema: DriftSchema}
+	return prompts{version: PromptVersionPlain, system: systemPrompt + repo, user: driftPrompt, schema: DriftSchema}
 }
 
 // repoContext is what a CLI started inside the checkout would have told the model about its
@@ -128,14 +187,14 @@ func caseBlock(s statement) string {
 	return b
 }
 
-func linePrompts(s statement, drift, repo string) prompts {
-	u := taskPrompt + toolNote + " You have at most 12 tool calls." + driftBlock(drift) + "\n\n" + caseBlock(s)
-	return prompts{system: systemPrompt + repo, user: u, schema: LineSchema}
+func linePrompts(t template, s statement, drift, repo string) prompts {
+	u := t.task + toolNote + " You have at most 12 tool calls." + driftBlock(drift) + "\n\n" + caseBlock(s)
+	return prompts{version: t.version, system: systemPrompt + repo, user: u, schema: t.lineSchema}
 }
 
-func docPrompts(ss []statement, drift, repo string) prompts {
+func docPrompts(t template, ss []statement, drift, repo string) prompts {
 	var b strings.Builder
-	b.WriteString(taskPrompt + toolNote)
+	b.WriteString(t.task + toolNote)
 	fmt.Fprintf(&b, " You have at most %d tool calls for all statements together.", min(40, 6+5*len(ss)))
 	b.WriteString(driftBlock(drift))
 	fmt.Fprintf(&b, "\n\nThere are %d statements under test from the same file. Answer every one (match by line number).\n\n", len(ss))
@@ -145,7 +204,7 @@ func docPrompts(ss []statement, drift, repo string) prompts {
 		}
 		fmt.Fprintf(&b, "--- statement %d\n%s", i+1, caseBlock(s))
 	}
-	return prompts{system: systemPrompt + repo, user: b.String(), schema: DocSchema}
+	return prompts{version: t.version, system: systemPrompt + repo, user: b.String(), schema: t.docSchema}
 }
 
 func driftBlock(drift string) string {

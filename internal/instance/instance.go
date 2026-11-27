@@ -353,6 +353,9 @@ type Agentic struct {
 	// Effort of agentic requests. Empty (default) = the model's own default, which is what
 	// the agentic design was evaluated with; ai.judge.effort applies to snippet mode only.
 	Effort string `yaml:"effort"`
+	// Rubric adds the judging rubric and the sources_conflict status to the prompt
+	// (docsp-agentic/4; unset = true). false keeps the evaluated docsp-agentic/3 text.
+	Rubric *bool `yaml:"rubric"`
 }
 
 // Budget is the hard per-run limit of one task (0 = the default).

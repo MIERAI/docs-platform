@@ -210,6 +210,33 @@ func TestDerivePriority(t *testing.T) {
 	}
 }
 
+// TestSourcesConflict: a sources_conflict fact needs validated quotes from two places; it
+// ranks below the problems (the document is not shown wrong) and maps to no verdict.
+func TestSourcesConflict(t *testing.T) {
+	dir, _ := fixture(t)
+	v := &Validator{Tools: tools(t, dir, true), Drift: map[string]bool{}, Doc: "README.md", Line: 3}
+	cfg := Evidence{Kind: KindQuote, Path: "config.yaml", Line: 1, Quote: "port: 9090"}
+	ci := Evidence{Kind: KindQuote, Path: ".github/workflows/ci.yml", Line: 4, Quote: "lint: {}"}
+	f := func(status string, ev ...Evidence) Fact { return Fact{Fact: status, Status: status, Evidence: ev} }
+	tests := []struct {
+		name  string
+		facts []Fact
+		want  string
+	}{
+		{"two places", []Fact{f(SourcesConflict, cfg, ci), f(Confirmed, cfg)}, SourcesConflict},
+		{"one place is no conflict", []Fact{f(SourcesConflict, cfg, cfg)}, Unknown},
+		{"a problem still decides", []Fact{f(SourcesConflict, cfg, ci), f(Contradicted, cfg)}, Contradicted},
+	}
+	for _, tt := range tests {
+		if d := Derive(context.Background(), v, tt.facts); d.Category != tt.want {
+			t.Errorf("%s: %s, want %s", tt.name, d.Category, tt.want)
+		}
+	}
+	if IsProblem(SourcesConflict) || Verdict(SourcesConflict) != judgev1.Unknown {
+		t.Error("sources_conflict is reported, not a problem verdict")
+	}
+}
+
 func TestParseAnswersLenient(t *testing.T) {
 	a, err := ParseLineAnswer(json.RawMessage(`{"facts":[{"fact":"x","status":" Contradicted ","evidence":{"quote":"port: 9090","path":"config.yaml","line":"1"}},
 		{"fact":"y","status":"confirmed","evidence":[{"kind":"drift_id","drift_id":"D2"},7]},"junk"],"reason":"r"}`))

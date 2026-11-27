@@ -117,7 +117,8 @@
             "contradicted",
             "dangling_reference",
             "incomplete_list",
-            "outdated_wording"
+            "outdated_wording",
+            "sources_conflict"
           ]
         },
         "severity": {

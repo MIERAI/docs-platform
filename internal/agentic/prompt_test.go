@@ -38,11 +38,10 @@ func (r *recorder) Judge(_ context.Context, q *judgev1.Request) (*judgev1.Respon
 	return judgev1.NewStructuredResponse(q, json.RawMessage(a), judgev1.ParseSchema, judgev1.Model{Provider: "rec", ID: "m"}, judgev1.Usage{}), nil
 }
 
-// TestPerLinePromptPinned pins what one per-line request carries: the evaluated
-// instructions (the prototype's text verbatim, plus the path_missing evidence kind), the
-// step limit, the validated drift list, the ±3-line context with the line under test marked,
-// the repository context, and the request limits. A change here changes what was evaluated.
-func TestPerLinePromptPinned(t *testing.T) {
+// lineRequest judges README.md:3 of the fixture with a recording provider and returns the
+// drift request and the per-line request.
+func lineRequest(t *testing.T, st Settings) (judgev1.Request, judgev1.Request, string) {
+	t.Helper()
 	dir, _ := fixture(t)
 	rec := &recorder{}
 	in, _ := instance.Parse([]byte("version: 1\nclassification: {repos: {demo: public}}\n"))
@@ -50,14 +49,26 @@ func TestPerLinePromptPinned(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r := New(Options{Guard: g, Repo: "demo", Dir: dir, Class: in.Classification})
+	r := New(Options{Guard: g, Repo: "demo", Dir: dir, Class: in.Classification, Settings: st})
 	if res := r.Judge(context.Background(), "README.md", []int{3}); res[0].Error != "" {
 		t.Fatal(res[0].Error)
 	}
 	if len(rec.reqs) != 2 {
 		t.Fatalf("%d requests", len(rec.reqs))
 	}
-	q := rec.reqs[1]
+	return rec.reqs[0], rec.reqs[1], dir
+}
+
+// TestPerLinePromptPinned pins what one per-line request carries: the evaluated
+// instructions (the prototype's text verbatim, plus the path_missing evidence kind), the
+// step limit, the validated drift list, the ±3-line context with the line under test marked,
+// the repository context, and the request limits. A change here changes what was evaluated.
+// The evaluated text is docsp-agentic/3, kept by ai.judge.agentic.rubric: false.
+func TestPerLinePromptPinned(t *testing.T) {
+	drift, q, dir := lineRequest(t, Settings{NoRubric: true})
+	if q.Prompt.Version != PromptVersionPlain || drift.Prompt.Version != PromptVersionPlain {
+		t.Errorf("versions %s %s", q.Prompt.Version, drift.Prompt.Version)
+	}
 	for _, s := range []string{
 		"You audit documentation against a git repository checked out at its current revision (your working directory; reach it through the tools).\n",
 		"Other documentation (including the same file) is not proof, since it may be stale too. Use the drift list below as leads: it was built from git history and its entries are verified.\n",
@@ -84,11 +95,61 @@ func TestPerLinePromptPinned(t *testing.T) {
 		t.Errorf("system prompt:\n%q\nwant\n%q", q.Prompt.System, wantSys)
 	}
 	if q.Task.Type != judgev1.TaskClaimFacts || q.Limits.MaxTurns != DefaultLineSteps || q.Limits.MaxRequestUSD == nil || *q.Limits.MaxRequestUSD != DefaultLineUSD ||
-		q.Tools == nil || q.Tools.Limits.MaxSteps != DefaultLineSteps || string(q.Prompt.ReplySchema) != string(LineSchema) {
+		q.Tools == nil || q.Tools.Limits.MaxSteps != DefaultLineSteps || string(q.Prompt.ReplySchema) != string(lineSchemaPlain) {
 		t.Errorf("limits/tools %+v %+v", q.Limits, q.Tools)
 	}
-	if d := rec.reqs[0]; d.Task.Type != judgev1.TaskRepoDrift || d.Limits.MaxTurns != DefaultDriftSteps || !strings.HasSuffix(d.Prompt.System, q.Prompt.System[len(systemPrompt):]) {
+	if d := drift; d.Task.Type != judgev1.TaskRepoDrift || d.Limits.MaxTurns != DefaultDriftSteps || !strings.HasSuffix(d.Prompt.System, q.Prompt.System[len(systemPrompt):]) {
 		t.Errorf("drift request %+v", d.Limits)
+	}
+}
+
+// TestRubricPrompt: the default prompt (docsp-agentic/4) is the evaluated one plus exactly
+// the sources_conflict status and the judging rubric; the drift request does not change.
+func TestRubricPrompt(t *testing.T) {
+	pd, plain, _ := lineRequest(t, Settings{NoRubric: true})
+	rd, rub, _ := lineRequest(t, Settings{})
+	if rub.Prompt.Version != PromptVersion || rub.Prompt.Hash == plain.Prompt.Hash {
+		t.Errorf("version %s, hash %s", rub.Prompt.Version, rub.Prompt.Hash)
+	}
+	// (each fixture is a fresh repository: the system prompt's commits differ, so compare the
+	// templates, not the hashes)
+	if rd.Prompt.User != pd.Prompt.User || string(rd.Prompt.ReplySchema) != string(pd.Prompt.ReplySchema) || rd.Prompt.Version != PromptVersionPlain {
+		t.Error("the drift request must not change with the rubric (its cache key)")
+	}
+	back := strings.Replace(strings.Replace(rub.Prompt.User, conflictStatus, "", 1), rubricBlock, "", 1)
+	if back != plain.Prompt.User {
+		t.Errorf("the rubric prompt is not the plain one plus the two additions:\n%s", rub.Prompt.User)
+	}
+	for _, s := range []string{
+		"a documented default, limit, port, version or other value that the repository now sets differently is contradicted",
+		"starts enforcing or implementing what the documentation already states does not make the statement stale",
+		"merely less precise",
+		"   - sources_conflict: the places in the repository that decide the fact disagree with each other",
+	} {
+		if !strings.Contains(strings.ToLower(rub.Prompt.User), strings.ToLower(s)) {
+			t.Errorf("rubric prompt lacks %q", s)
+		}
+	}
+	if !strings.Contains(string(rub.Prompt.ReplySchema), `"sources_conflict"`) || strings.Contains(string(plain.Prompt.ReplySchema), "sources_conflict") {
+		t.Error("reply schemas")
+	}
+	if len(strings.Fields(rubricBlock+conflictStatus)) > 140 {
+		t.Error("keep the rubric small: it was not evaluated with a paid run")
+	}
+}
+
+// TestTemplateHashes pins the evaluated template hash (bench/data/expected-offline.json
+// records it for the frozen-answer replays, which run with rubric: false).
+func TestTemplateHashes(t *testing.T) {
+	if got := TemplateHashFor(Settings{NoRubric: true}); got != "5f6ad97cd5674d02" {
+		t.Errorf("docsp-agentic/3 template hash %s: the evaluated prompt changed", got)
+	}
+	if TemplateHash() == TemplateHashFor(Settings{NoRubric: true}) || TemplateHash() != TemplateHashFor(Settings{}) {
+		t.Error("default template hash")
+	}
+	f := false
+	if !FromInstance(instance.Agentic{Rubric: &f}).NoRubric || FromInstance(instance.Agentic{}).NoRubric {
+		t.Error("ai.judge.agentic.rubric")
 	}
 }
 

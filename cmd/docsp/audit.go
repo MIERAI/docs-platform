@@ -50,8 +50,8 @@ func cmdAudit(ctx context.Context, args []string, stdout, stderr io.Writer) (int
 		return exitUsage, err
 	}
 	st := res.Stats
-	_, err = fmt.Fprintf(stderr, "docsp audit: judge %s, %d claims, %d questions, %d model requests (%d tokens, $%.4f), %d quotes rejected, %d refused (private), %.1fs\n",
-		res.Judge, st.CheckableClaims, st.Questions, st.ModelRequests, st.ModelTokens, st.ModelUSD, st.QuotesRejected, st.Refused, st.Seconds)
+	_, err = fmt.Fprintf(stderr, "docsp audit: judge %s, %d claims, %d questions, %d model requests (%d tokens, $%.4f), %d quotes rejected, %d refused (private), kept from the judge by audit.skip %v, %.1fs\n",
+		res.Judge, st.CheckableClaims, st.Questions, st.ModelRequests, st.ModelTokens, st.ModelUSD, st.QuotesRejected, st.Refused, st.Skipped, st.Seconds)
 	if err != nil {
 		return exitUsage, fmt.Errorf("write summary: %w", err)
 	}
