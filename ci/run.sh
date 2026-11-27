@@ -129,6 +129,8 @@ factory_pr_task() {
 		summary "docs-platform: no AI for this PR"
 		return 0
 	fi
+	# the project's go.mod may want a newer Go than the runner's (setup-go sets GOTOOLCHAIN=local)
+	export GOTOOLCHAIN=auto
 	# shellcheck disable=SC2086 # the factory command is a word list
 	if ! $DOCSP_FACTORY export --out "$RUNNER_TEMP/manifest.json"; then
 		summary "docs-platform: this head has no factory manifest (factory export failed): skipped"
