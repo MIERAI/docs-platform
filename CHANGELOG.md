@@ -14,17 +14,19 @@ Design: docs/design.md §12; plan: docs/backlog.md.
   unexported/private declarations and claims naming only private symbols. Skips are counted by
   reason (`docsp audit` summary; `skipped` in schedule/v1, where the filter also keeps existing
   ledger claims out of re-judgment).
-- **Prompt `docsp-agentic/4`** (default): the evaluated `docsp-agentic/3` text plus a four-rule
-  judging rubric and the status `sources_conflict`. Not evaluated with a paid run;
-  `ai.judge.agentic.rubric: false` keeps `docsp-agentic/3` byte for byte (template hash
-  `5f6ad97cd5674d02`, pinned by a test). The offline replay runs with `rubric: false`, since
-  the frozen answers were given to that prompt, so `bench/data/expected-offline.json` is
-  unchanged. New judgments carry the new prompt hash; claims in existing ledgers keep theirs
-  and stay readable. The drift prompt and its cache key are unchanged.
-- **`sources_conflict`**: when the places that decide a fact disagree with each other
-  (validated quotes from two places), the line is not judged against an ambiguous truth; it is
-  reported as `agentic_sources_conflict`, in its own section of the PR comment (with its own
-  question), as an immediate finding in report/v1, and not as a wrong document.
+- **Prompt `docsp-agentic/4`, opt-in** (`ai.judge.agentic.rubric: true`): the evaluated
+  `docsp-agentic/3` text plus a four-rule judging rubric and the status `sources_conflict`.
+  It was not evaluated with a paid run, so it is off by default: the default prompt stays
+  `docsp-agentic/3` byte for byte (template hash `5f6ad97cd5674d02`, pinned by a test), the
+  offline replay and `bench/data/expected-offline.json` are unchanged, and prompt hashes of
+  existing ledgers stay what they were. With the rubric on, new judgments carry the /4 prompt
+  hash; ledgers stay readable either way. The drift prompt and its cache key never change.
+- **`sources_conflict`** (with the rubric on): when the places that decide a fact disagree
+  with each other (validated quotes from two places), the line is not judged against an
+  ambiguous truth; it is reported as `agentic_sources_conflict`, in its own section of the PR
+  comment (with its own question), as an immediate finding in report/v1, and not as a wrong
+  document: it is not `agentic.IsProblem`, so the outcome stream neither reports it nor counts
+  ticks on it toward precision.
 - **PR check**: the `skip-label` input (default `docsp:skip`) skips the check; at most
   `max-problems` (10) problems per comment, the rest counted with a link to the job summary,
   which lists all of them; warning annotations on the problem lines; `conclusion` neutral by
@@ -40,8 +42,31 @@ Design: docs/design.md §12; plan: docs/backlog.md.
 - `make lint` and `make vuln` build golangci-lint v2.15.0 and govulncheck v1.9.0 from
   source with `go run` (pinned, no binary download); the code base is gofumpt-formatted
   and passes the configured linters (behaviour unchanged).
+- **Claim scopes: fewer needless re-judgements** (ledger/v1 1.1, stale/v1 1.1, additive;
+  docs/design.md §12.10). Each quote records the part of its file the claim depends on (Go:
+  the enclosing declaration, value spec or literal-table entry via go/ast; YAML: the key path
+  and subtree; otherwise the line ±3). A changed quoted file re-opens the claim only when the
+  change touches that scope; whitespace-only changes, moves and edits elsewhere carry the
+  verdict forward (`carried_forward` in stale/v1: `evidence_reformatted`, `evidence_moved`,
+  `evidence_outside_scope`) and `docsp recheck` re-anchors the quotes (new line, blob, scope;
+  `carried`, `carried_ref`). Conservative: quotes without a scope (existing ledgers), claims
+  that enumerate, files largely rewritten, and drift / absence / path-missing / pinned
+  evidence behave as before. Offline ledger replay (`bench ledger-replay` now reports both,
+  new keys `ledger_replay.scoped.*` in `bench/data/expected-offline.json`): re-judgements
+  TEST 257 → 230 (gitops-manifests 217 → 194, infrastructure-live 40 → 36), recall on the
+  ground truth unchanged (19/25 first, 23/25 any causing commit); DEV api-factory 305 → 263,
+  recall unchanged (16/27, 19/27). The existing `ledger_replay.*` numbers are unchanged.
+- `bench ledger-replay` no longer caches a failed diff as an empty change set (it crashed on
+  a history whose first commit is replayed for a ground-truth item).
 
 ### Added
+- **Precision of docs-platform's own reports** (`docsp outcome`, outcome/v1, no model): an
+  append-only stream of what happened to reported problems (reported, resolved and how,
+  verdict flips on unchanged inputs, PR ticks, random-audit labels); `outcome report` gives
+  the precision SLI from the random audit only (Wilson 95%, error budget once 10 are
+  labelled) and the flip rate, with PR ticks and edited lines shown as biased supporting
+  signals. The CI action's `main` task appends to it every run and keeps it with the ledger
+  and as a 90-day artifact.
 - **Contract layer** (`docsp contract`, contract/v1, docs/design.md §13): design-first specs
   vs the code that implements them, without a model. Adapters: `factory-design` /
   `factory-code` (a design-first generator's design language vs its escape hatches: SQL

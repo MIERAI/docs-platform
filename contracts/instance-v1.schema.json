@@ -623,7 +623,7 @@
             },
             "rubric": {
               "type": "boolean",
-              "description": "add the judging rubric and the sources_conflict status to the prompt (docsp-agentic/4, default true); false keeps the evaluated docsp-agentic/3 prompt byte for byte"
+              "description": "opt in to the judging rubric and the sources_conflict status (prompt docsp-agentic/4, not evaluated with a paid run); false (default) keeps the evaluated docsp-agentic/3 prompt byte for byte"
             }
           }
         }

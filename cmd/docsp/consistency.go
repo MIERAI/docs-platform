@@ -162,6 +162,7 @@ func cmdRecheck(ctx context.Context, args []string, stdout, stderr io.Writer) (i
 		b.Drift = d
 	}
 	res := consistency.Recheck(ctx, run, b, l, s.Picked)
+	res.Reanchored = consistency.Reanchor(ctx, l, root, name, "HEAD")
 	if err := l.Save(c.ledger); err != nil {
 		return exitUsage, err //nolint:wrapcheck // already descriptive
 	}
@@ -172,8 +173,8 @@ func cmdRecheck(ctx context.Context, args []string, stdout, stderr io.Writer) (i
 		}
 	}
 	return exitOK, c.emitReport(res, func(w io.Writer) {
-		_, _ = fmt.Fprintf(w, "docsp recheck: %d judged, %d retired (line edited or document gone), %d failed; %v; judge %s, $%.4f\n",
-			res.Judged, res.Retired, res.Failed, res.ByCat, g.Name(), g.Stats().CostUSD)
+		_, _ = fmt.Fprintf(w, "docsp recheck: %d judged, %d retired (line edited or document gone), %d failed, %d quotes re-anchored; %v; judge %s, $%.4f\n",
+			res.Judged, res.Retired, res.Failed, res.Reanchored, res.ByCat, g.Name(), g.Stats().CostUSD)
 	}, stdout, stderr)
 }
 

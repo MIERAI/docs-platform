@@ -173,6 +173,16 @@ Cost: gitops-manifests 329 commits, 0.66 claims staled per commit (p90 2, max 11
 commits (83%) stale nothing; infrastructure-live 50 commits, 0.80 per commit, 32 (64%) stale
 nothing.
 
+With claim scopes (ledger/v1 1.1, design §12.10: a changed quoted file re-opens a claim only
+when the change touches the quote's Go declaration, YAML key or line ±3; enumerating claims
+excluded): re-judgements 257 → 230 on TEST (gitops-manifests 217 → 194, infrastructure-live
+40 → 36) and 305 → 263 on DEV (api-factory), recall unchanged (TEST 19/25 and 23/25; DEV
+16/27 and 19/27). Without the enumeration exclusion it would be 186 and 170, but DEV loses
+two positives (lists that grew outside the quoted scope). TEST is pinned as
+`ledger_replay.scoped.*` in `make repro-offline`; DEV is not (its ledger comes from step 5 of
+`scripts/repro-offline.sh` with `-ledger`, then `bench ledger-replay -set
+bench/data/eval/agentic-dev.jsonl -repo api-factory=...`).
+
 **Why optimistic.** The evidence footprints come from answers given at the TEST revision,
 which cite exactly the files that show the line is stale, and causing commits are defined
 by the ground truth's evidence paths; the two overlap by construction. A ledger built when

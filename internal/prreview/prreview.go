@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/MIERAI/docs-platform/internal/agentic"
 	"github.com/MIERAI/docs-platform/internal/factorypr"
 	"github.com/MIERAI/docs-platform/internal/ledger"
 	"github.com/MIERAI/docs-platform/internal/prtext"
@@ -28,10 +29,13 @@ const SchemaVersion = "1.1"
 const Marker = "<!-- docsp:pr -->"
 
 // SourcesConflict is the category of a claim the repository disagrees with itself about.
-const SourcesConflict = "sources_conflict"
+const SourcesConflict = agentic.SourcesConflict
 
-// Reported categories: the document problems, and sources_conflict.
-var problem = map[string]bool{"contradicted": true, "outdated_wording": true, "incomplete_list": true, "dangling_reference": true, SourcesConflict: true}
+// reported: the document problems (agentic.IsProblem), and sources_conflict, which is shown
+// apart and is not a problem verdict (it does not count in the outcome stream's precision).
+func reported(category string) bool {
+	return agentic.IsProblem(category) || category == SourcesConflict
+}
 
 // Line is one line of a file at the head.
 type Line struct {
@@ -90,7 +94,7 @@ func Compare(ctx context.Context, before, after *ledger.Ledger, head string, lin
 		if o := before.Find(c.ID); o != nil {
 			was = o.Category
 		}
-		if !problem[c.Category] || problem[was] {
+		if !reported(c.Category) || reported(was) {
 			continue
 		}
 		p := Problem{ID: c.ID, Path: c.Path, Line: c.Line, Text: c.Text, Category: c.Category, Before: was, Facts: c.Facts}

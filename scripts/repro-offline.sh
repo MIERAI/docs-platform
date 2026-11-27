@@ -51,8 +51,6 @@ ai:
       command: ["$ROOT/bin/docsp-judge-replay", "-answers", "$ROOT/$1", "-probe"]
       local: true
       modes: [agentic]
-    # the frozen answers were given to the evaluated docsp-agentic/3 prompt (no rubric)
-    agentic: {rubric: false}
 classification:
   default: private
   repos: {$2}

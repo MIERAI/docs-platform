@@ -9,15 +9,14 @@ import (
 )
 
 // PromptVersion names the agentic prompt templates and reply schemas; it changes whenever
-// their meaning does (recorded in every request and in eval results). docsp-agentic/4 is
-// docsp-agentic/3 plus the judging rubric and the sources_conflict status (rubricBlock,
-// conflictStatus); it was not evaluated with a paid run.
-const PromptVersion = "docsp-agentic/4"
+// their meaning does (recorded in every request and in eval results). It is the evaluated
+// default; the drift prompt keeps it with or without the rubric.
+const PromptVersion = "docsp-agentic/3"
 
-// PromptVersionPlain is the evaluated prompt without the rubric (ai.judge.agentic.rubric:
-// false): its requests are byte for byte those of docsp-agentic/3. The drift prompt did not
-// change in /4 and keeps this version, so drift caches keyed by its hash stay valid.
-const PromptVersionPlain = "docsp-agentic/3"
+// PromptVersionRubric is the opt-in docsp-agentic/3 plus the judging rubric and the
+// sources_conflict status (rubricBlock, conflictStatus; ai.judge.agentic.rubric: true). It
+// was not evaluated with a paid run, so it is off by default.
+const PromptVersionRubric = "docsp-agentic/4"
 
 // systemPrompt is appended to a CLI's own agent prompt (claude-code) or is the whole system
 // prompt (ollama). The answer format is enforced by the reply schema, not by the prompt.
@@ -42,13 +41,13 @@ var (
 	docSchema = func(facts string) json.RawMessage {
 		return json.RawMessage(`{"type":"object","required":["lines"],"properties":{"lines":{"type":"array","items":{"type":"object","required":["line","facts","reason"],"properties":{"line":{"type":"integer"},"facts":` + facts + `,"reason":{"type":"string"}}}}}}`)
 	}
-	// LineSchema is the claim_facts reply schema (docsp-agentic/4: with sources_conflict).
-	LineSchema = lineSchema(factsSchema(statusesPlain + `,"sources_conflict"`))
-	// DocSchema is the doc_facts reply schema (docsp-agentic/4).
-	DocSchema = docSchema(factsSchema(statusesPlain + `,"sources_conflict"`))
-	// lineSchemaPlain and docSchemaPlain are the docsp-agentic/3 schemas.
-	lineSchemaPlain = lineSchema(factsSchema(statusesPlain))
-	docSchemaPlain  = docSchema(factsSchema(statusesPlain))
+	// LineSchema is the claim_facts reply schema.
+	LineSchema = lineSchema(factsSchema(statusesPlain))
+	// DocSchema is the doc_facts reply schema.
+	DocSchema = docSchema(factsSchema(statusesPlain))
+	// lineSchemaRubric and docSchemaRubric are the docsp-agentic/4 schemas (sources_conflict).
+	lineSchemaRubric = lineSchema(factsSchema(statusesPlain + `,"sources_conflict"`))
+	docSchemaRubric  = docSchema(factsSchema(statusesPlain + `,"sources_conflict"`))
 	// DriftSchema is the repo_drift reply schema.
 	DriftSchema = json.RawMessage(`{"type":"object","required":["drift"],"properties":{"drift":{"type":"array","items":{` +
 		`"type":"object","required":["kind","old","new","summary"],"properties":{` +
@@ -124,17 +123,17 @@ type template struct {
 }
 
 func templateFor(s Settings) template {
-	if s.NoRubric {
-		return template{PromptVersionPlain, taskPrompt, lineSchemaPlain, docSchemaPlain}
+	if s.Rubric {
+		return template{PromptVersionRubric, taskPromptRubric, lineSchemaRubric, docSchemaRubric}
 	}
-	return template{PromptVersion, taskPromptRubric, LineSchema, DocSchema}
+	return template{PromptVersion, taskPrompt, LineSchema, DocSchema}
 }
 
 // TemplateHash identifies the default agentic templates and schemas (eval results record it).
 func TemplateHash() string { return TemplateHashFor(Settings{}) }
 
-// TemplateHashFor identifies the templates and schemas the settings select (the rubric or
-// the plain docsp-agentic/3 text).
+// TemplateHashFor identifies the templates and schemas the settings select (the evaluated
+// docsp-agentic/3 text, or with ai.judge.agentic.rubric the docsp-agentic/4 one).
 func TemplateHashFor(s Settings) string {
 	t := templateFor(s)
 	return hash16(t.version, systemPrompt, driftPrompt, t.task, toolNote, string(t.lineSchema), string(t.docSchema), string(DriftSchema))
@@ -147,11 +146,11 @@ func hash16(parts ...string) string {
 
 // DriftPromptHash identifies the drift prompt (part of the drift cache key).
 func DriftPromptHash() string {
-	return hash16(PromptVersionPlain, systemPrompt, driftPrompt, string(DriftSchema))
+	return hash16(PromptVersion, systemPrompt, driftPrompt, string(DriftSchema))
 }
 
 func driftPrompts(repo string) prompts {
-	return prompts{version: PromptVersionPlain, system: systemPrompt + repo, user: driftPrompt, schema: DriftSchema}
+	return prompts{version: PromptVersion, system: systemPrompt + repo, user: driftPrompt, schema: DriftSchema}
 }
 
 // repoContext is what a CLI started inside the checkout would have told the model about its

@@ -173,6 +173,22 @@
               },
               "blob": {
                 "type": "string"
+              },
+              "scope": {
+                "$ref": "#/$defs/quote_scope"
+              },
+              "carried": {
+                "type": "string",
+                "description": "1.1: the quote was re-anchored without judging after a change outside its scope",
+                "enum": [
+                  "evidence_moved",
+                  "evidence_reformatted",
+                  "evidence_outside_scope"
+                ]
+              },
+              "carried_ref": {
+                "type": "string",
+                "description": "1.1: the revision blob and line refer to after re-anchoring"
               }
             }
           }
@@ -323,6 +339,38 @@
         },
         "blob": {
           "type": "string"
+        }
+      }
+    },
+    "quote_scope": {
+      "type": "object",
+      "description": "1.1: the part of the quoted file the claim depends on, at the quote's blob; a change outside it carries the verdict forward",
+      "required": [
+        "kind",
+        "start",
+        "end"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "go_decl",
+            "yaml_key",
+            "lines"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "description": "the Go declaration (func, type, value spec or literal element) or the YAML key path"
+        },
+        "start": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "end": {
+          "type": "integer",
+          "minimum": 1
         }
       }
     }

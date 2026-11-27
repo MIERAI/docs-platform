@@ -63,10 +63,10 @@ func lineRequest(t *testing.T, st Settings) (judgev1.Request, judgev1.Request, s
 // instructions (the prototype's text verbatim, plus the path_missing evidence kind), the
 // step limit, the validated drift list, the ±3-line context with the line under test marked,
 // the repository context, and the request limits. A change here changes what was evaluated.
-// The evaluated text is docsp-agentic/3, kept by ai.judge.agentic.rubric: false.
+// The evaluated text is docsp-agentic/3, the default (ai.judge.agentic.rubric off).
 func TestPerLinePromptPinned(t *testing.T) {
-	drift, q, dir := lineRequest(t, Settings{NoRubric: true})
-	if q.Prompt.Version != PromptVersionPlain || drift.Prompt.Version != PromptVersionPlain {
+	drift, q, dir := lineRequest(t, Settings{})
+	if q.Prompt.Version != PromptVersion || drift.Prompt.Version != PromptVersion {
 		t.Errorf("versions %s %s", q.Prompt.Version, drift.Prompt.Version)
 	}
 	for _, s := range []string{
@@ -95,7 +95,7 @@ func TestPerLinePromptPinned(t *testing.T) {
 		t.Errorf("system prompt:\n%q\nwant\n%q", q.Prompt.System, wantSys)
 	}
 	if q.Task.Type != judgev1.TaskClaimFacts || q.Limits.MaxTurns != DefaultLineSteps || q.Limits.MaxRequestUSD == nil || *q.Limits.MaxRequestUSD != DefaultLineUSD ||
-		q.Tools == nil || q.Tools.Limits.MaxSteps != DefaultLineSteps || string(q.Prompt.ReplySchema) != string(lineSchemaPlain) {
+		q.Tools == nil || q.Tools.Limits.MaxSteps != DefaultLineSteps || string(q.Prompt.ReplySchema) != string(LineSchema) {
 		t.Errorf("limits/tools %+v %+v", q.Limits, q.Tools)
 	}
 	if d := drift; d.Task.Type != judgev1.TaskRepoDrift || d.Limits.MaxTurns != DefaultDriftSteps || !strings.HasSuffix(d.Prompt.System, q.Prompt.System[len(systemPrompt):]) {
@@ -103,17 +103,17 @@ func TestPerLinePromptPinned(t *testing.T) {
 	}
 }
 
-// TestRubricPrompt: the default prompt (docsp-agentic/4) is the evaluated one plus exactly
+// TestRubricPrompt: the opt-in prompt (docsp-agentic/4) is the evaluated one plus exactly
 // the sources_conflict status and the judging rubric; the drift request does not change.
 func TestRubricPrompt(t *testing.T) {
-	pd, plain, _ := lineRequest(t, Settings{NoRubric: true})
-	rd, rub, _ := lineRequest(t, Settings{})
-	if rub.Prompt.Version != PromptVersion || rub.Prompt.Hash == plain.Prompt.Hash {
+	pd, plain, _ := lineRequest(t, Settings{})
+	rd, rub, _ := lineRequest(t, Settings{Rubric: true})
+	if rub.Prompt.Version != PromptVersionRubric || rub.Prompt.Hash == plain.Prompt.Hash {
 		t.Errorf("version %s, hash %s", rub.Prompt.Version, rub.Prompt.Hash)
 	}
 	// (each fixture is a fresh repository: the system prompt's commits differ, so compare the
 	// templates, not the hashes)
-	if rd.Prompt.User != pd.Prompt.User || string(rd.Prompt.ReplySchema) != string(pd.Prompt.ReplySchema) || rd.Prompt.Version != PromptVersionPlain {
+	if rd.Prompt.User != pd.Prompt.User || string(rd.Prompt.ReplySchema) != string(pd.Prompt.ReplySchema) || rd.Prompt.Version != PromptVersion {
 		t.Error("the drift request must not change with the rubric (its cache key)")
 	}
 	back := strings.Replace(strings.Replace(rub.Prompt.User, conflictStatus, "", 1), rubricBlock, "", 1)
@@ -138,18 +138,17 @@ func TestRubricPrompt(t *testing.T) {
 	}
 }
 
-// TestTemplateHashes pins the evaluated template hash (bench/data/expected-offline.json
-// records it for the frozen-answer replays, which run with rubric: false).
+// TestTemplateHashes pins the evaluated template hash of the default prompt
+// (bench/data/expected-offline.json records it for the frozen-answer replays).
 func TestTemplateHashes(t *testing.T) {
-	if got := TemplateHashFor(Settings{NoRubric: true}); got != "5f6ad97cd5674d02" {
-		t.Errorf("docsp-agentic/3 template hash %s: the evaluated prompt changed", got)
+	if got := TemplateHash(); got != "5f6ad97cd5674d02" || TemplateHashFor(Settings{}) != got {
+		t.Errorf("docsp-agentic/3 template hash %s: the evaluated default prompt changed", got)
 	}
-	if TemplateHash() == TemplateHashFor(Settings{NoRubric: true}) || TemplateHash() != TemplateHashFor(Settings{}) {
-		t.Error("default template hash")
+	if TemplateHashFor(Settings{Rubric: true}) == TemplateHash() {
+		t.Error("the rubric prompt has its own template hash")
 	}
-	f := false
-	if !FromInstance(instance.Agentic{Rubric: &f}).NoRubric || FromInstance(instance.Agentic{}).NoRubric {
-		t.Error("ai.judge.agentic.rubric")
+	if !FromInstance(instance.Agentic{Rubric: true}).Rubric || FromInstance(instance.Agentic{}).Rubric {
+		t.Error("ai.judge.agentic.rubric is opt-in")
 	}
 }
 

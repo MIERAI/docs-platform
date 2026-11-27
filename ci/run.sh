@@ -100,10 +100,47 @@ consistency:
 EOF
 }
 
+# outcomes: the precision of docs-platform's own reports (docsp outcome; no model). The stream
+# lives next to the ledger (saved with its cache) and is uploaded as an artifact, which
+# outlives a cache eviction and is fetched back when the cache comes without it. Never fails
+# the job.
+restore_outcomes() {
+	[[ -s "$L/outcomes.jsonl" ]] && return 0
+	local url
+	url="$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=docsp-outcomes&per_page=10" \
+		--jq '[.artifacts[] | select(.expired | not)][0].archive_download_url // empty' 2>/dev/null)" || return 0
+	[[ -n "$url" ]] || return 0
+	gh api "$url" >"$RUNNER_TEMP/outcomes.zip" 2>/dev/null &&
+		unzip -o -q "$RUNNER_TEMP/outcomes.zip" outcomes.jsonl -d "$L" || true
+}
+
+outcomes() { # $1 = the ledger at the start of the run
+	local s="$L/outcomes.jsonl" pr
+	if [[ -s "$L/ledger.json" ]]; then
+		"$D" outcome diff -before "$1" -after "$L/ledger.json" -repo-name "$NAME" -stream "$s" . || true
+	fi
+	# the boxes ticked on the pull request(s) this push merged
+	if [[ "${GITHUB_EVENT_NAME:-}" == push ]]; then
+		for pr in $(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" --jq '.[].number' 2>/dev/null || true); do
+			"$D" outcome ticks -github-repo "$GITHUB_REPOSITORY" -pr "$pr" -ref "$GITHUB_SHA" -repo-name "$NAME" \
+				-ledger "$L/ledger.json" -stream "$s" . || true
+		done
+	fi
+	[[ -s "$s" ]] && { "$D" outcome report -stream "$s" -format markdown >>"$GITHUB_STEP_SUMMARY" || true; }
+	return 0
+}
+
 main_task() {
 	mkdir -p "$L"
+	restore_outcomes || true
+	cp "$L/ledger.json" "$RUNNER_TEMP/ledger-before.json" 2>/dev/null || rm -f "$RUNNER_TEMP/ledger-before.json"
 	if [[ "$DOCSP_AI" != true ]]; then
 		summary "docs-platform: no AI this run: the ledger is kept as it is"
+		# ticks still count; the cache is saved only over a ledger, never instead of one
+		if [[ -s "$L/ledger.json" ]]; then
+			outcomes "$RUNNER_TEMP/ledger-before.json"
+			echo "ledger=changed" >>"$GITHUB_OUTPUT"
+		fi
 		return 0
 	fi
 	if [[ ! -s "$L/ledger.json" ]]; then
@@ -131,6 +168,7 @@ main_task() {
 		>"$RUNNER_TEMP/report.json" || true
 	jq -r '"docs-platform: \(.immediate | length) problems to report now, \(.batched | length) batched"' \
 		"$RUNNER_TEMP/report.json" 2>/dev/null | tee -a "$GITHUB_STEP_SUMMARY" || true
+	outcomes "$RUNNER_TEMP/ledger-before.json"
 }
 
 pr_task() {

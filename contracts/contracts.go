@@ -87,3 +87,9 @@ var Report []byte
 //
 //go:embed contract-v1.schema.json
 var Contract []byte
+
+// Outcome is docs-platform/outcome/v1: one event of the stream that measures the precision of
+// docs-platform's own problem reports.
+//
+//go:embed outcome-v1.schema.json
+var Outcome []byte

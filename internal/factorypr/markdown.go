@@ -82,7 +82,7 @@ func (r *Report) MarkdownWith(ticked map[string]bool) string {
 	}
 	k := 0
 	for _, x := range r.Rules {
-		if problem[x.Category] {
+		if agentic.IsProblem(x.Category) {
 			if k < limit {
 				r.writeProblem(&b, x, ticked, shown)
 			}
@@ -136,7 +136,7 @@ func (r *Report) Summary() string {
 func (r *Report) Annotations() []string {
 	var out []string
 	for _, x := range r.Rules {
-		if !problem[x.Category] {
+		if !agentic.IsProblem(x.Category) {
 			continue
 		}
 		msg := strings.TrimSpace(firstLine(x.Text))
@@ -197,7 +197,7 @@ func (r *Report) writeProblem(b *strings.Builder, x Rule, ticked map[string]bool
 func (r *Report) writeRest(b *strings.Builder) {
 	var rest []Rule
 	for _, x := range r.Rules {
-		if !problem[x.Category] {
+		if !agentic.IsProblem(x.Category) {
 			rest = append(rest, x)
 		}
 	}

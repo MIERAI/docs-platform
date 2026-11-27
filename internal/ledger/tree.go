@@ -97,6 +97,8 @@ type Changes struct {
 	ctx    context.Context
 	dir    string
 	before *Tree
+	// files caches blobs and contents read to classify evidence changes (carry.go)
+	files map[string]docAt
 }
 
 // Diff lists the paths changed from one commit to another (renames as delete + add).

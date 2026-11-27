@@ -49,16 +49,16 @@ type Settings struct {
 	DriftUSD  float64
 	Group     string
 	GroupSize int
-	// NoRubric selects the evaluated docsp-agentic/3 prompt without the judging rubric and
-	// the sources_conflict status (ai.judge.agentic.rubric: false).
-	NoRubric bool
+	// Rubric selects the opt-in docsp-agentic/4 prompt: the evaluated docsp-agentic/3 plus the
+	// judging rubric and the sources_conflict status (ai.judge.agentic.rubric: true).
+	Rubric bool
 }
 
 // FromInstance reads the settings of a judge task, filling defaults.
 func FromInstance(a instance.Agentic) Settings {
 	s := Settings{
 		LineSteps: a.MaxSteps, DriftSteps: a.DriftMaxSteps, LineUSD: a.MaxRequestUSD, DriftUSD: a.DriftMaxRequestUSD, Group: a.Group,
-		NoRubric: a.Rubric != nil && !*a.Rubric,
+		Rubric: a.Rubric,
 	}
 	return s.withDefaults()
 }
