@@ -143,6 +143,10 @@ back with validated evidence become `docs.semantic.agentic_contradicted`,
 `agentic_dangling_reference`, `agentic_incomplete_list` or `agentic_outdated_wording`
 (sub-layer `model`, confidence medium); lines it finds `unverifiable_in_repo` are counted,
 not reported.
+With the opt-in rubric (`ai.judge.agentic.rubric: true`, below), a line the code disagrees with
+itself about (two places set different defaults; validated quotes from both) becomes
+`docs.semantic.agentic_sources_conflict`: the document is not judged against either side, and
+it is not counted as a wrong document (nor in the precision of the outcome stream).
 
 **Rules stage (deterministic first).** Before anything is put to the judge, every prose line
 of the Markdown documents is offered to `internal/rulejudge`: when the line names exactly one
@@ -530,6 +534,11 @@ reverse:
   kinds: [cli_flag, env_var, metric]   # which public symbols must be documented
 audit:                            # docsp audit (layer ④c)
   stale_commits: 2                # later commits to a claim's code that make it stale
+  skip:                           # claims never put to the judge (each skip counted by reason)
+    historical: true              # "previously", "used to", "before v2", 以前, 曾经, 已废弃, 以前は, 廃止された
+    changelogs: ["changelog*", "history*", "docs/**/changelog*"]  # default: also CHANGES.md, NEWS.md, release notes, docs/**/releases/**; [] = none
+    tests: true                   # comments in test files; claims naming only test files
+    private_symbols: true         # comments on unexported/private declarations; claims naming only `_x`, `#x`, `T.method`, `pkg.func()`
 extractors:
   disable: [terraform]
   external:
@@ -627,7 +636,17 @@ ai:
       drift_max_request_usd: 2.5
       group: line                # or doc
       # effort: high             # unset = the model's default (as evaluated); ai.judge.effort is snippet-only
+      # rubric: true             # opt in to prompt docsp-agentic/4 (unevaluated); default false = the evaluated docsp-agentic/3
 ```
+
+The opt-in prompt `docsp-agentic/4` (`rubric: true`) adds to the evaluated `docsp-agentic/3` a
+four-rule judging rubric (a documented default that changed is always a contradiction; code that
+starts enforcing what the document already states is not staleness; wording that is merely less
+precise is not a contradiction; a statement about the past is not contradicted by the present)
+and the status `sources_conflict`. It was not evaluated with a paid run, so the default stays
+the evaluated text byte for byte (template hash `5f6ad97cd5674d02`, which the offline replay
+pins). Claims keep the prompt hash they were judged with; the drift prompt is the same in both,
+so drift caches stay valid.
 
 1. **Drift scan**, once per repository and HEAD: the model reads the history (`git_log`,
    `git_show`, `git_changes`) and lists the changes that make older documentation wrong. The
@@ -746,6 +765,17 @@ jobs:
   `run-usd` (main 3, PR 1). No token (a fork's pull request) or a private repository: no AI.
 - Inputs: `model` (claude-sonnet-5-5), `claude-code-version`, `monthly-usd`, `run-usd`,
   `bootstrap-usd` (8), `factory` (factory-pr), `github-token`.
+- Noise control (`pr`, `factory-pr`): a PR labelled `skip-label` (default `docsp:skip`) is not
+  checked; a comment shows at most `max-problems` (10) problems and counts the rest with a link
+  to the job summary, which lists them all; every problem line also gets a warning annotation;
+  `conclusion` is `neutral` by default (the step passes; an Actions job cannot be "neutral", so
+  neutral means warnings only) or `failure`; `language` is `zh` (default), `en` or `ja` - the
+  tick-box markers are the same in every language. A run that did not finish (budget cap, judge
+  failures, a failed step) says "incomplete: this does not mean everything is fine" in the
+  comment and the summary. The matching `docsp pr-comment` / `factory-pr` flags: `-language`,
+  `-max-problems`, `-summary-url`, `-summary-out`, `-annotations-out`; `pr-comment` also reads
+  `-schedule` (a budget shortfall), `-recheck` (failed or missing judgments) and `-incomplete`
+  (reasons the caller states).
 
 ## Findings, ledger, SLOs
 

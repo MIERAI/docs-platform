@@ -148,6 +148,7 @@ type Derivation struct {
 //     needs none);
 //  2. the first problem status, in priority order (contradicted > dangling_reference >
 //     incomplete_list > outdated_wording), held by a valid fact decides;
+//     A valid sources_conflict fact (quotes from two places) decides next.
 //  3. otherwise confirmed when every fact is a valid confirmed fact; unverifiable_in_repo when
 //     every fact is valid and confirmed or unverifiable; unknown in all other cases (no facts,
 //     invalid evidence, unknown statuses).
@@ -169,8 +170,11 @@ func Derive(ctx context.Context, v *Validator, facts []Fact) Derivation {
 			d.Kinds[k]++
 			fc.Evidence = append(fc.Evidence, c)
 		}
-		if f.Status == UnverifiableInRepo {
+		switch f.Status {
+		case UnverifiableInRepo:
 			fc.Valid = true
+		case SourcesConflict:
+			fc.Valid = conflictShown(fc.Evidence)
 		}
 		d.Facts = append(d.Facts, fc)
 	}
@@ -178,11 +182,22 @@ func Derive(ctx context.Context, v *Validator, facts []Fact) Derivation {
 	return d
 }
 
+// conflictShown: a sources_conflict fact needs validated quotes from at least two places.
+func conflictShown(es []EvidenceCheck) bool {
+	places := map[string]bool{}
+	for _, e := range es {
+		if e.OK && e.Evidence.Kind == KindQuote {
+			places[e.Evidence.Path+":"+strconv.Itoa(e.Evidence.Line)] = true
+		}
+	}
+	return len(places) >= 2
+}
+
 func category(fs []FactCheck) string {
 	if len(fs) == 0 {
 		return Unknown
 	}
-	for _, p := range Problems {
+	for _, p := range append(slices.Clone(Problems), SourcesConflict) {
 		for _, f := range fs {
 			if f.Status == p && f.Valid {
 				return p

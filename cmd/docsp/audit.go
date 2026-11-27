@@ -92,8 +92,8 @@ func auditAgentic(af *agenticFlags) (*check.AgenticAudit, error) {
 
 // auditSummary writes the audit's summary lines (the judge's work and the rules stage's).
 func auditSummary(w io.Writer, judgeName string, st *semantic.Stats) error {
-	_, err := fmt.Fprintf(w, "docsp audit: judge %s, %d claims, %d questions, %d model requests (%d tokens, $%.4f), %d quotes rejected, %d refused (private), %.1fs\n",
-		judgeName, st.CheckableClaims, st.Questions, st.ModelRequests, st.ModelTokens, st.ModelUSD, st.QuotesRejected, st.Refused, st.Seconds)
+	_, err := fmt.Fprintf(w, "docsp audit: judge %s, %d claims, %d questions, %d model requests (%d tokens, $%.4f), %d quotes rejected, %d refused (private), kept from the judge by audit.skip %v, %.1fs\n",
+		judgeName, st.CheckableClaims, st.Questions, st.ModelRequests, st.ModelTokens, st.ModelUSD, st.QuotesRejected, st.Refused, st.Skipped, st.Seconds)
 	if err == nil {
 		_, err = fmt.Fprintf(w, "docsp audit (rules): %d lines decided without a model (%d confirmed, %d contradicted), %d questions saved, %d left to the judge\n",
 			st.RulesDecided, st.RulesConfirmed, st.RulesContradicted, st.RulesSaved, st.Candidates)

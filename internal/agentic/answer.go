@@ -12,7 +12,8 @@
 //     incomplete_list, outdated_wording, dangling_reference, unverifiable_in_repo, confirmed)
 //     with evidence of four kinds (quote, absence, drift, path_missing). The harness re-checks
 //     every piece of evidence and derives the verdict from validated evidence only, in the
-//     priority contradicted > dangling_reference > incomplete_list > outdated_wording.
+//     priority contradicted > dangling_reference > incomplete_list > outdated_wording, then
+//     sources_conflict (two validated quotes from places that disagree with each other).
 //
 // Everything goes through judge/v1 (task types repo_drift, claim_facts, doc_facts) and the
 // Guard, so the model is swapped by instance configuration and data classification still
@@ -36,6 +37,10 @@ const (
 	OutdatedWording    = "outdated_wording"
 	UnverifiableInRepo = "unverifiable_in_repo"
 	Confirmed          = "confirmed"
+	// SourcesConflict: the places that decide a fact disagree with each other (two code
+	// sites set different defaults); the line is not judged against an ambiguous truth.
+	// It is reported, but it is not one of Problems: the document is not shown wrong.
+	SourcesConflict = "sources_conflict"
 	// Unknown: the line could not be decided (no facts, unvalidated evidence, no answer).
 	Unknown = "unknown"
 )
@@ -44,7 +49,7 @@ const (
 var Problems = []string{Contradicted, DanglingReference, IncompleteList, OutdatedWording}
 
 // Statuses are every status a fact may have.
-var Statuses = append([]string{Confirmed, UnverifiableInRepo}, Problems...)
+var Statuses = append([]string{Confirmed, UnverifiableInRepo, SourcesConflict}, Problems...)
 
 // Evidence kinds.
 const (

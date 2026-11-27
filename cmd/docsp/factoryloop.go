@@ -98,14 +98,19 @@ func cmdFactoryPR(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	fromReport := fs.String("from-report", "", "render (and with -post-pr post) this factory-pr/v1 report instead of reviewing: no model, no factory")
 	feedbackOnly := fs.Bool("feedback-only", false, "only read the boxes ticked in the posted comment (-post-pr, -github-repo): JSON on stdout / -out, no review")
 	cache := fs.String("drift-cache", agentic.DefaultCacheDir(), "drift lists cached by HEAD SHA (\"\" = none)")
+	var po prOutputs
+	po.register(fs)
 	if err := fs.Parse(args); err != nil {
 		return flagErr(err)
+	}
+	if _, err := po.lang(); err != nil {
+		return exitUsage, err
 	}
 	if *feedbackOnly {
 		return readFeedback(ctx, *ghRepo, *post, f.out, stdout)
 	}
 	if *fromReport != "" {
-		return rerender(ctx, *fromReport, &f, *commentOut, *ghRepo, *post, stdout, stderr)
+		return rerender(ctx, *fromReport, &f, &po, *commentOut, *ghRepo, *post, stdout, stderr)
 	}
 	if *base == "" || (*post > 0 && *ghRepo == "") {
 		return exitUsage, errors.New("-base is required; -post-pr needs -github-repo")
@@ -120,18 +125,18 @@ func cmdFactoryPR(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	}
 	if len(factorypr.Touched(m, changed)) == 0 { // nothing to judge: no model, no factory run
 		rep := &factorypr.Report{SchemaVersion: factorypr.SchemaVersion, Repo: name, Base: *base, Head: head, Rules: []factorypr.Rule{}, GitHub: *ghRepo}
-		return emitPR(ctx, rep, &f, *commentOut, *ghRepo, *post, stdout, stderr)
+		return emitPR(ctx, rep, &f, &po, *commentOut, *ghRepo, *post, stdout, stderr)
 	}
 	rep, err := reviewPR(ctx, &f, m, in, root, name, *base, *cache, !*noTry)
 	if err != nil {
 		return exitUsage, err
 	}
 	rep.GitHub = *ghRepo
-	return emitPR(ctx, rep, &f, *commentOut, *ghRepo, *post, stdout, stderr)
+	return emitPR(ctx, rep, &f, &po, *commentOut, *ghRepo, *post, stdout, stderr)
 }
 
 // rerender renders (and posts) a saved factory-pr/v1 report: no model, no factory.
-func rerender(ctx context.Context, file string, f *factoryFlags, commentOut, ghRepo string, post int, stdout, stderr io.Writer) (int, error) {
+func rerender(ctx context.Context, file string, f *factoryFlags, po *prOutputs, commentOut, ghRepo string, post int, stdout, stderr io.Writer) (int, error) {
 	var rep factorypr.Report
 	b, err := os.ReadFile(file)
 	if err == nil {
@@ -143,7 +148,7 @@ func rerender(ctx context.Context, file string, f *factoryFlags, commentOut, ghR
 	if ghRepo != "" {
 		rep.GitHub = ghRepo
 	}
-	return emitPR(ctx, &rep, f, commentOut, ghRepo, post, stdout, stderr)
+	return emitPR(ctx, &rep, f, po, commentOut, ghRepo, post, stdout, stderr)
 }
 
 // reviewPR sets up the judge, the drafter and the factory and reviews the change.
@@ -181,7 +186,12 @@ func reviewPR(ctx context.Context, f *factoryFlags, m *factorymanifest.Manifest,
 }
 
 // emitPR writes the review: the comment file, the PR comment, then stdout / -out.
-func emitPR(ctx context.Context, rep *factorypr.Report, f *factoryFlags, commentOut, ghRepo string, post int, stdout, stderr io.Writer) (int, error) {
+func emitPR(ctx context.Context, rep *factorypr.Report, f *factoryFlags, po *prOutputs, commentOut, ghRepo string, post int, stdout, stderr io.Writer) (int, error) {
+	rep.Lang, _ = po.lang()
+	rep.MaxProblems, rep.SummaryURL = po.maxProblems, po.summaryURL
+	if err := po.write(rep.Summary(), rep.Annotations()); err != nil {
+		return exitUsage, err
+	}
 	var id, body string
 	if post > 0 { // what people ticked: read back, kept in the new version
 		var err error
@@ -199,7 +209,7 @@ func emitPR(ctx context.Context, rep *factorypr.Report, f *factoryFlags, comment
 	if post > 0 && id != "" && rep.Unchanged(body) {
 		_, _ = fmt.Fprintln(stderr, "docsp factory-pr: the posted comment already says this: not updated")
 	} else if post > 0 {
-		if err := postComment(ctx, ghRepo, post, id, md, factorypr.NoRulesComment()); err != nil {
+		if err := postComment(ctx, ghRepo, post, id, md, rep.NoRulesComment()); err != nil {
 			return exitUsage, err
 		}
 	}

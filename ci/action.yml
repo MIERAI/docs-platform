@@ -33,6 +33,18 @@ inputs:
   factory:
     description: "factory-pr: the factory command, run in the checkout"
     default: go run ./factory/cmd/factory
+  language:
+    description: "pr, factory-pr: language of the PR comment - zh, en or ja (the tick boxes are read back the same in all)"
+    default: zh
+  skip-label:
+    description: "pr, factory-pr: a pull request with this label is not checked (add `labeled` to the workflow's pull_request types to re-run on it)"
+    default: "docsp:skip"
+  max-problems:
+    description: "pr, factory-pr: problems one comment shows; the rest are counted with a link to the job summary"
+    default: "10"
+  conclusion:
+    description: "pr, factory-pr: neutral (problems are warning annotations, the step passes) or failure (the step fails when the PR introduces problems)"
+    default: neutral
 runs:
   using: composite
   steps:
@@ -54,6 +66,8 @@ runs:
         DOCSP_PRIVATE: ${{ github.event.repository.private }}
         DOCSP_MONTHLY: ${{ inputs.monthly-usd }}
         DOCSP_RUN_USD: ${{ inputs.run-usd }}
+        DOCSP_SKIP_LABEL: ${{ inputs.skip-label }}
+        DOCSP_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
       run: bash "${{ github.action_path }}/run.sh" budget
     - name: restore the ledger
       if: inputs.task != 'factory-pr'
@@ -84,6 +98,11 @@ runs:
         DOCSP_PR: ${{ github.event.pull_request.number }}
         DOCSP_BASE: ${{ github.event.pull_request.base.sha }}
         DOCSP_FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
+        DOCSP_SKIP_LABEL: ${{ inputs.skip-label }}
+        DOCSP_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        DOCSP_LANGUAGE: ${{ inputs.language }}
+        DOCSP_MAX_PROBLEMS: ${{ inputs.max-problems }}
+        DOCSP_CONCLUSION: ${{ inputs.conclusion }}
       run: bash "${{ github.action_path }}/run.sh" "$DOCSP_TASK"
     - name: save the ledger
       if: always() && inputs.task == 'main' && steps.run.outputs.ledger == 'changed'
