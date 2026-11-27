@@ -95,9 +95,13 @@ func cmdFactoryPR(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	commentOut := fs.String("comment-out", "", "write the PR comment (Markdown) here")
 	post := fs.Int("post-pr", 0, "post the comment to this pull request with gh (updated in place; needs -github-repo)")
 	ghRepo := fs.String("github-repo", "", "owner/name of the pull request's repository (for -post-pr)")
+	feedbackOnly := fs.Bool("feedback-only", false, "only read the boxes ticked in the posted comment (-post-pr, -github-repo): JSON on stdout / -out, no review")
 	cache := fs.String("drift-cache", agentic.DefaultCacheDir(), "drift lists cached by HEAD SHA (\"\" = none)")
 	if err := fs.Parse(args); err != nil {
 		return flagErr(err)
+	}
+	if *feedbackOnly {
+		return readFeedback(ctx, *ghRepo, *post, f.out, stdout)
 	}
 	if *base == "" || (*post > 0 && *ghRepo == "") {
 		return exitUsage, errors.New("-base is required; -post-pr needs -github-repo")
@@ -111,13 +115,14 @@ func cmdFactoryPR(ctx context.Context, args []string, stdout, stderr io.Writer) 
 		return exitUsage, err //nolint:wrapcheck // already descriptive
 	}
 	if len(factorypr.Touched(m, changed)) == 0 { // nothing to judge: no model, no factory run
-		rep := &factorypr.Report{SchemaVersion: factorypr.SchemaVersion, Repo: name, Base: *base, Head: head, Rules: []factorypr.Rule{}}
+		rep := &factorypr.Report{SchemaVersion: factorypr.SchemaVersion, Repo: name, Base: *base, Head: head, Rules: []factorypr.Rule{}, GitHub: *ghRepo}
 		return emitPR(ctx, rep, &f, *commentOut, *ghRepo, *post, stdout, stderr)
 	}
 	rep, err := reviewPR(ctx, &f, m, in, root, name, *base, *cache, !*noTry)
 	if err != nil {
 		return exitUsage, err
 	}
+	rep.GitHub = *ghRepo
 	return emitPR(ctx, rep, &f, *commentOut, *ghRepo, *post, stdout, stderr)
 }
 
@@ -157,14 +162,23 @@ func reviewPR(ctx context.Context, f *factoryFlags, m *factorymanifest.Manifest,
 
 // emitPR writes the review: the comment file, the PR comment, then stdout / -out.
 func emitPR(ctx context.Context, rep *factorypr.Report, f *factoryFlags, commentOut, ghRepo string, post int, stdout, stderr io.Writer) (int, error) {
-	md := rep.Markdown()
+	var id string
+	if post > 0 { // what people ticked: read back, kept in the new version
+		var body string
+		var err error
+		if id, body, err = findComment(ctx, ghRepo, post); err != nil {
+			return exitUsage, err
+		}
+		rep.Feedback = factorypr.Ticked(body)
+	}
+	md := rep.MarkdownWith(factorypr.TickedKeys(rep.Feedback))
 	if commentOut != "" {
 		if err := os.WriteFile(commentOut, []byte(md), 0o600); err != nil {
 			return exitUsage, fmt.Errorf("comment: %w", err)
 		}
 	}
 	if post > 0 {
-		if err := postComment(ctx, ghRepo, post, md); err != nil {
+		if err := postComment(ctx, ghRepo, post, id, md); err != nil {
 			return exitUsage, err
 		}
 	}
@@ -192,18 +206,56 @@ func closeGuards(g, d *judge.Guard) {
 	}
 }
 
-// postComment creates or updates (by factorypr.Marker) the review's comment on a pull
-// request with the gh CLI. An empty body updates an existing comment to say nothing is
-// touched any more and creates none.
-func postComment(ctx context.Context, repo string, pr int, body string) error {
+// findComment is the review's comment on a pull request (by factorypr.Marker): its id and
+// body ("" when there is none yet).
+func findComment(ctx context.Context, repo string, pr int) (string, string, error) {
 	out, err := exec.CommandContext(ctx, "gh", "api", "--paginate", //nolint:gosec // fixed program, argv vector
-		fmt.Sprintf("repos/%s/issues/%d/comments", repo, pr), "--jq", `.[] | select(.body | contains("`+factorypr.Marker+`")) | .id`).Output()
+		fmt.Sprintf("repos/%s/issues/%d/comments", repo, pr), "--jq", `.[] | select(.body | contains("`+factorypr.Marker+`")) | {id, body}`).Output()
 	if err != nil {
-		return fmt.Errorf("post-pr: list comments: %w", err)
+		return "", "", fmt.Errorf("post-pr: list comments: %w", err)
 	}
-	ids := strings.Fields(string(out))
+	var last struct {
+		ID   int64  `json:"id"`
+		Body string `json:"body"`
+	}
+	dec := json.NewDecoder(strings.NewReader(string(out)))
+	for dec.More() {
+		if err := dec.Decode(&last); err != nil {
+			return "", "", fmt.Errorf("post-pr: comments: %w", err)
+		}
+	}
+	if last.ID == 0 {
+		return "", "", nil
+	}
+	return strconv.FormatInt(last.ID, 10), last.Body, nil
+}
+
+// readFeedback prints the boxes ticked in the posted comment (no review, no model).
+func readFeedback(ctx context.Context, repo string, pr int, out string, stdout io.Writer) (int, error) {
+	if pr <= 0 || repo == "" {
+		return exitUsage, errors.New("-feedback-only needs -post-pr and -github-repo")
+	}
+	id, body, err := findComment(ctx, repo, pr)
+	if err != nil {
+		return exitUsage, err
+	}
+	b, _ := json.MarshalIndent(map[string]any{"pr": pr, "comment": id, "feedback": factorypr.Ticked(body)}, "", "  ")
+	b = append(b, '\n')
+	if out != "" {
+		if err := os.WriteFile(out, b, 0o600); err != nil {
+			return exitUsage, fmt.Errorf("feedback: %w", err)
+		}
+	}
+	_, err = stdout.Write(b)
+	return exitOK, err //nolint:wrapcheck // stdout write
+}
+
+// postComment creates (id "") or updates the review's comment on a pull request with the gh
+// CLI. An empty body updates an existing comment to say nothing is touched any more and
+// creates none.
+func postComment(ctx context.Context, repo string, pr int, id, body string) error {
 	if body == "" {
-		if len(ids) == 0 {
+		if id == "" {
 			return nil
 		}
 		body = factorypr.Marker + "\n这个 PR 目前没有动到有手写代码的业务规则。\n"
@@ -218,11 +270,12 @@ func postComment(ctx context.Context, repo string, pr int, body string) error {
 	}
 	_ = tmp.Close()
 	args := []string{"api", "--method", "POST", fmt.Sprintf("repos/%s/issues/%d/comments", repo, pr), "--input", tmp.Name()}
-	if len(ids) > 0 {
-		args = []string{"api", "--method", "PATCH", fmt.Sprintf("repos/%s/issues/comments/%s", repo, ids[len(ids)-1]), "--input", tmp.Name()}
+	if id != "" {
+		args = []string{"api", "--method", "PATCH", fmt.Sprintf("repos/%s/issues/comments/%s", repo, id), "--input", tmp.Name()}
 	}
 	if b, err := exec.CommandContext(ctx, "gh", args...).CombinedOutput(); err != nil { //nolint:gosec // fixed program, argv vector
-		return fmt.Errorf("post-pr: %w: %s", err, strings.TrimSpace(string(b))[:min(200, len(strings.TrimSpace(string(b))))])
+		msg := strings.TrimSpace(string(b))
+		return fmt.Errorf("post-pr: %w: %s", err, msg[:min(200, len(msg))])
 	}
 	return nil
 }

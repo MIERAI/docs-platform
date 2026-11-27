@@ -49,7 +49,7 @@ func (model) Judge(_ context.Context, q *judgev1.Request) (*judgev1.Response, er
 	case q.Task.Type == judgev1.TaskClaimFacts:
 		a = `{"facts":[{"fact":"按 status 数","status":"confirmed","evidence":[{"kind":"quote","path":"logic.go","line":5,"quote":"func count(n int) int { return n }"}]}],"reason":""}`
 	case q.Task.Type == judgev1.TaskDraftRule:
-		a = `{"edits":[{"old":"    结果: 超过 300 秒算违约","new":"    结果: 超过 600 秒算违约"},{"old":"    - 说明: 300.5 秒算违约\n      结果: { sla: 1 }","new":"    - 说明: 300.5 秒不算违约\n      结果: { sla: 0 }"}],"rationale":"the code uses 600"}`
+		a = `{"edits":[{"old":"    结果: 超过 300 秒算违约","new":"    结果: 超过 600 秒算违约"},{"old":"    - 说明: 300.5 秒算违约\n      结果: { sla: 1 }","new":"    - 说明: 300.5 秒不算违约\n      结果: { sla: 0 }"}],"rationale":"the code uses 600","summary":"设计书写 300 秒,代码是 600 秒","question":"改成 600 秒是有意的吗?","counterexample":"400 秒: 设计书说违约,代码说不违约"}`
 	}
 	return judgev1.NewStructuredResponse(q, json.RawMessage(a), judgev1.ParseSchema, judgev1.Model{Provider: "fake", ID: "m"}, judgev1.Usage{}), nil
 }
@@ -67,7 +67,7 @@ func (f *factory) Try(_ context.Context, files []factorytry.File, _ []string) (*
 	return &factorytry.Result{
 		Schema: factorytry.ResultSchema, Status: factorytry.StatusOK, Stage: "accept",
 		APIs: []factorytry.API{{ID: "a.calc", Cases: []factorytry.Case{
-			{Name: "300.5 秒", Source: factorytry.SourceExample, Passed: ok},
+			{Name: "300.5 秒", Source: factorytry.SourceExample, Passed: ok, Detail: "response.sla: want 1, got <nil> (body {})"},
 			{Name: "hand", Source: factorytry.SourceHandTest}, // the code's own test, stale after the change: not the draft's business
 		}}},
 	}, nil
@@ -145,11 +145,41 @@ func TestReviewDraftsAVerifiedDesignEdit(t *testing.T) {
 	if rep.Acceptance["a.calc"] == "" {
 		t.Error("the head as it is fails the design's example: acceptance must say so")
 	}
+	if sla.Evidence != EvidenceExecuted || len(rep.Failing["a.calc"]) != 1 || len(sla.Code) != 1 || sla.Code[0].Text != "const sla = 600.0" {
+		t.Errorf("evidence %q, failing %v, code %v: want the executed example and the cited code line", sla.Evidence, rep.Failing, sla.Code)
+	}
+	if !strings.Contains(rep.Diffs["logic.go"], "+const sla = 600.0") {
+		t.Errorf("diff %q", rep.Diffs["logic.go"])
+	}
+	if p := sla.Draft.Patch; !strings.HasPrefix(p, "--- a/design.yaml\n+++ b/design.yaml\n@@") || !strings.Contains(p, "+    结果: 超过 600 秒算违约") {
+		t.Errorf("patch %q", p)
+	}
+	rep.GitHub = "o/af"
 	md := rep.Markdown()
-	for _, s := range []string{Marker, "❌ 代码和规则矛盾", "✅ 工厂验证通过", "- " + "    结果: 超过 300 秒算违约", "+ " + "    结果: 超过 600 秒算违约", "依据: `logic.go:3`"} {
+	for _, s := range []string{
+		Marker, "❌ 代码和规则矛盾", "✅ 工厂验证通过", "**一句话**:设计书写 300 秒,代码是 600 秒", "**只需要回答**:改成 600 秒是有意的吗?",
+		"`response.sla` 设计书预期 **1**,代码实际是 **没有这个值(0 / 空)**", "https://github.com/o/af/blob/" + rep.Head + "/logic.go#L3", "+    结果: 超过 600 秒算违约",
+		"- [ ] 代码改错了",
+	} {
 		if !strings.Contains(md, s) {
 			t.Errorf("comment lacks %q:\n%s", s, md)
 		}
+	}
+	if strings.Contains(md, OptionNotAProblem) {
+		t.Error("an executed counterexample offers no 'not a problem'")
+	}
+	// A ticked box is read back and kept; a tick on another verdict is not.
+	body := strings.Replace(md, "- [ ] 代码改错了", "- [x] 代码改错了", 1)
+	fb := Ticked(body)
+	if len(fb) != 1 || fb[0] != (Feedback{Rule: "design.yaml:3", Option: OptionCodeWrong, Category: agentic.Contradicted, Evidence: EvidenceExecuted}) {
+		t.Fatalf("ticked %+v", fb)
+	}
+	if !strings.Contains(rep.MarkdownWith(TickedKeys(fb)), "- [x] 代码改错了") {
+		t.Error("the tick is lost on update")
+	}
+	rep.Rules[0].Category = agentic.OutdatedWording
+	if strings.Contains(rep.MarkdownWith(TickedKeys(fb)), "- [x]") {
+		t.Error("a tick on a verdict that changed is carried over")
 	}
 	if (&Report{}).Markdown() != "" {
 		t.Error("no touched rule: no comment")

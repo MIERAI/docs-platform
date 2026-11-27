@@ -410,8 +410,17 @@ agentic judge, told where the code is). For a rule the code now contradicts, the
 proposes the smallest design edit (the rule's wording and any example encoding the old
 behaviour); it is marked verified only when the factory accepts the design with it at the
 head. The comment says what was found and leaves the decision - stale design or wrong code -
-to a person; `-comment-out FILE` writes it, `-post-pr N -github-repo owner/name` posts it with
-`gh` (one comment, updated in place), `-no-try` skips the factory.
+to a person, and gives that person what deciding takes: one sentence on what differs, the
+one yes/no question that decides it, the design and the code side by side (permalinks at the
+head), a counterexample - the design's examples the factory actually ran and saw fail
+(🔬 executed), or else the drafter's worked input (📖 read) - the change that caused it and
+the draft as a patch for `git apply`. Each problem ends in checkboxes (design is stale / code
+is wrong, and for 📖 only: not a problem / unrelated); a 🔬 problem cannot be ticked away as a
+false positive. Ticks are read back on the next run (`-feedback-only` reads them without a
+review) and kept when the verdict is unchanged: they measure the check's false-positive rate,
+next to a neutral weekly sample, and are not used to rate people. `-comment-out FILE` writes
+the comment, `-post-pr N -github-repo owner/name` posts it with `gh` (one comment, updated in
+place), `-no-try` skips the factory.
 
 **`docsp factory-coverage`** measures the **rule executable coverage**: for each rule with
 hand-written code the model proposes a mutant (the smallest code edit that breaks that rule

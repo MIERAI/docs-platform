@@ -12,6 +12,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -43,6 +44,24 @@ type Rule struct {
 	Quotes   []ledger.Quote `json:"quotes,omitempty"`
 	Error    string         `json:"error,omitempty"`
 	Draft    *Draft         `json:"draft,omitempty"`
+	// Code is the code lines the verdict cites, as they read at the head.
+	Code []Line `json:"code,omitempty"`
+	// Evidence of a problem: executed (the design's examples of the API fail at the head)
+	// or read (only the judge's reading of the code).
+	Evidence string `json:"evidence,omitempty"`
+}
+
+// Evidence levels of a problem.
+const (
+	EvidenceExecuted = "executed"
+	EvidenceRead     = "read"
+)
+
+// Line is one line of a file at the head.
+type Line struct {
+	Path string `json:"path"`
+	Line int    `json:"line"`
+	Text string `json:"text"`
 }
 
 // Draft is a proposed design edit.
@@ -51,6 +70,13 @@ type Draft struct {
 	Rationale string           `json:"rationale"`
 	Verified  bool             `json:"verified"`
 	Problem   string           `json:"problem,omitempty"`
+	// For the person who decides, in the design's language: what differs, the one yes/no
+	// question that decides it, and a concrete input on which the two disagree.
+	Summary        string `json:"summary,omitempty"`
+	Question       string `json:"question,omitempty"`
+	Counterexample string `json:"counterexample,omitempty"`
+	// Patch is the draft as a unified diff (`git apply` in the change's checkout).
+	Patch string `json:"patch,omitempty"`
 }
 
 // Report is docs-platform/factory-pr/v1.
@@ -62,7 +88,16 @@ type Report struct {
 	Rules         []Rule `json:"rules"`
 	// Acceptance is the factory's verdict on the head as it is, per touched API ("" = passes).
 	Acceptance map[string]string `json:"acceptance,omitempty"`
-	USD        float64           `json:"usd"`
+	// Failing is the design's cases (examples, logic examples, auto, differential) that fail
+	// at the head as it is, per touched API: executed counterexamples.
+	Failing map[string][]factorytry.Case `json:"failing,omitempty"`
+	// Diffs is the change to each hand-written file behind a problem (truncated).
+	Diffs map[string]string `json:"diffs,omitempty"`
+	// GitHub is owner/name of the repository: the comment links to lines at the head.
+	GitHub string `json:"github,omitempty"`
+	// Feedback is what people ticked in the posted comment before this run.
+	Feedback []Feedback `json:"feedback,omitempty"`
+	USD      float64    `json:"usd"`
 }
 
 // Problem categories: the rule no longer says what the code does.
@@ -143,13 +178,85 @@ func Review(ctx context.Context, o Options) (*Report, error) {
 			rep.Rules = append(rep.Rules, judged(ctx, o, rules[k], touched[k], &lr))
 		}
 	}
-	if o.Try != nil && len(apis) > 0 {
-		rep.Acceptance = map[string]string{}
-		for a := range apis {
-			rep.Acceptance[a] = acceptance(ctx, o.Try, nil, a)
+	runHead(ctx, o, rep, apis)
+	markEvidence(ctx, o, rep)
+	return rep, nil
+}
+
+// runHead has the factory accept the head as it is, per touched API.
+func runHead(ctx context.Context, o Options, rep *Report, apis map[string]bool) {
+	if o.Try == nil || len(apis) == 0 {
+		return
+	}
+	rep.Acceptance, rep.Failing = map[string]string{}, map[string][]factorytry.Case{}
+	for a := range apis {
+		res, err := o.Try.Try(ctx, nil, []string{a})
+		rep.Acceptance[a], _ = verdict(res, err)
+		if _, f := verdict(res, err, designSources...); len(f) > 0 {
+			rep.Failing[a] = f
 		}
 	}
-	return rep, nil
+}
+
+// markEvidence grades each problem (executed when the design's examples of its API fail at
+// the head) and keeps the change to the hand-written files behind it.
+func markEvidence(ctx context.Context, o Options, rep *Report) {
+	rep.Diffs = map[string]string{}
+	for i := range rep.Rules {
+		r := &rep.Rules[i]
+		if !problem[r.Category] {
+			continue
+		}
+		r.Evidence = EvidenceRead
+		if len(rep.Failing[r.API]) > 0 {
+			r.Evidence = EvidenceExecuted
+		}
+		for _, f := range r.Touched {
+			if _, ok := rep.Diffs[f]; !ok && f != r.Path {
+				rep.Diffs[f] = fileDiff(ctx, o.Dir, o.Base, rep.Head, f)
+			}
+		}
+	}
+}
+
+// maxDiffLines bounds a file's diff in the comment.
+const maxDiffLines = 40
+
+// fileDiff is the change to one file between two revisions (truncated; "" on error).
+func fileDiff(ctx context.Context, dir, base, head, path string) string {
+	out, err := exec.CommandContext(ctx, "git", "-C", dir, "diff", "--no-color", "-U2", base, head, "--", path).Output() //nolint:gosec // fixed program, argv vector
+	if err != nil {
+		return ""
+	}
+	lines := strings.Split(strings.TrimRight(string(out), "\n"), "\n")
+	for len(lines) > 0 && !strings.HasPrefix(lines[0], "@@") { // headers: the file is named beside it
+		lines = lines[1:]
+	}
+	if len(lines) > maxDiffLines {
+		lines = append(lines[:maxDiffLines], fmt.Sprintf("… (%d more lines)", len(lines)-maxDiffLines))
+	}
+	return strings.Join(lines, "\n")
+}
+
+// unifiedDiff is a design edit as a patch that `git apply` takes in the checkout.
+func unifiedDiff(ctx context.Context, path, old, edited string) string {
+	dir, err := os.MkdirTemp("", "docsp-patch-")
+	if err != nil {
+		return ""
+	}
+	defer func() { _ = os.RemoveAll(dir) }()
+	if os.WriteFile(filepath.Join(dir, "a"), []byte(old), 0o600) != nil || os.WriteFile(filepath.Join(dir, "b"), []byte(edited), 0o600) != nil { //nolint:gosec // our own temporary directory
+		return ""
+	}
+	out, _ := exec.CommandContext(ctx, "git", "-C", dir, "diff", "--no-index", "--no-color", "-U2", "a", "b").Output() //nolint:gosec // fixed program, argv vector
+	lines := strings.Split(strings.TrimRight(string(out), "\n"), "\n")
+	for len(lines) > 0 && !strings.HasPrefix(lines[0], "@@") {
+		lines = lines[1:]
+	}
+	if len(lines) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("--- a/%s\n+++ b/%s\n%s\n", path, path, strings.Join(lines, "\n"))
 }
 
 // touchedByDoc indexes the touched rules ("path:line") and groups their lines by document.
@@ -173,6 +280,11 @@ func judged(ctx context.Context, o Options, er factorymanifest.EscapedRule, touc
 	if c, ok := o.Builder.Claim(ctx, lr); ok {
 		r.Category, r.Facts, r.Quotes = c.Category, c.Facts, c.Evidence.Quotes
 	}
+	for _, q := range r.Quotes[:min(3, len(r.Quotes))] {
+		if t, ok := o.Builder.LineText(ctx, q.Path, q.Line); ok {
+			r.Code = append(r.Code, Line{Path: q.Path, Line: q.Line, Text: t})
+		}
+	}
 	if problem[r.Category] && o.Draft != nil {
 		r.Draft = draft(ctx, o, er, &r)
 	}
@@ -187,25 +299,33 @@ var designSources = []string{factorytry.SourceExample, factorytry.SourceLogicExa
 // only failures of those sources count.
 func acceptance(ctx context.Context, t factorytry.Runner, files []factorytry.File, api string, sources ...string) string {
 	res, err := t.Try(ctx, files, []string{api})
-	switch {
-	case err != nil:
-		return err.Error()
-	case res.Status != factorytry.StatusOK:
-		return fmt.Sprintf("%s at %s: %s", res.Status, res.Stage, firstLine(res.Message))
-	case res.Problem() != "":
-		return "acceptance did not run: " + firstLine(res.Problem())
-	}
-	if f := res.Failed(sources...); len(f) > 0 {
-		names := make([]string, 0, len(f))
-		for _, c := range f[:min(3, len(f))] {
-			names = append(names, fmt.Sprintf("%s (%s)", c.Name, c.Source))
-		}
-		return fmt.Sprintf("%d cases fail: %s", len(f), strings.Join(names, "; "))
-	}
-	return ""
+	p, _ := verdict(res, err, sources...)
+	return p
 }
 
-const draftSchema = `{"type":"object","properties":{"edits":{"type":"array","maxItems":12,"items":{"type":"object","properties":{"old":{"type":"string"},"new":{"type":"string"}},"required":["old","new"],"additionalProperties":false}},"rationale":{"type":"string"}},"required":["edits","rationale"],"additionalProperties":false}`
+// verdict says what is wrong with a factory run ("" = everything passes) and which cases of
+// the sources (all when none) fail.
+func verdict(res *factorytry.Result, err error, sources ...string) (string, []factorytry.Case) {
+	switch {
+	case err != nil:
+		return err.Error(), nil
+	case res.Status != factorytry.StatusOK:
+		return fmt.Sprintf("%s at %s: %s", res.Status, res.Stage, firstLine(res.Message)), nil
+	case res.Problem() != "":
+		return "acceptance did not run: " + firstLine(res.Problem()), nil
+	}
+	f := res.Failed(sources...)
+	if len(f) == 0 {
+		return "", nil
+	}
+	names := make([]string, 0, len(f))
+	for _, c := range f[:min(3, len(f))] {
+		names = append(names, fmt.Sprintf("%s (%s)", c.Name, c.Source))
+	}
+	return fmt.Sprintf("%d cases fail: %s", len(f), strings.Join(names, "; ")), f
+}
+
+const draftSchema = `{"type":"object","properties":{"edits":{"type":"array","maxItems":12,"items":{"type":"object","properties":{"old":{"type":"string"},"new":{"type":"string"}},"required":["old","new"],"additionalProperties":false}},"rationale":{"type":"string"},"summary":{"type":"string"},"question":{"type":"string"},"counterexample":{"type":"string"}},"required":["edits","rationale","summary","question","counterexample"],"additionalProperties":false}`
 
 const draftTask = `RULE (%s line %d):
 <<<
@@ -214,7 +334,11 @@ const draftTask = `RULE (%s line %d):
 At the head of a change, the hand-written code no longer does what this rule says. Facts checked against the code:
 %s
 Propose the smallest edits to %s that make the design state what the code does now: the rule's wording, and the expected results of any example that encodes the old behaviour. Keep every other word, the language, keys and indentation exactly. Do not change inputs or data rows unless an example cannot be fixed otherwise. Whether the design is stale or the code is wrong is decided by a person; you only draft the design side.
-Each edit replaces "old" - text copied exactly from %s (whole lines, occurring exactly once; never the line numbers) - with "new". At most 12 edits: one edit may cover several adjacent lines (an example's description and its result together). Quote each old text from the file without the "  42| " line-number prefix.%s`
+Each edit replaces "old" - text copied exactly from %s (whole lines, occurring exactly once; never the line numbers) - with "new". At most 12 edits: one edit may cover several adjacent lines (an example's description and its result together). Quote each old text from the file without the "  42| " line-number prefix.
+Also write, for the person who decides, in the language of %s (short, concrete, no jargon):
+- summary: one sentence - what the design says and what the code does now (e.g. "设计书写超过 300 秒算违约,代码现在是超过 600 秒").
+- question: the one yes/no question whose answer decides it (e.g. "SLA 阈值改成 600 秒是有意的吗?").
+- counterexample: one concrete input on which they disagree, and what each gives (e.g. "处理时间 400 秒: 设计书说违约,代码说不违约").%s`
 
 func draft(ctx context.Context, o Options, er factorymanifest.EscapedRule, r *Rule) *Draft {
 	doc, err := os.ReadFile(filepath.Join(o.Dir, filepath.FromSlash(er.Path)))
@@ -256,14 +380,18 @@ func draftOnce(ctx context.Context, o Options, er factorymanifest.EscapedRule, d
 			Old string `json:"old"`
 			New string `json:"new"`
 		} `json:"edits"`
-		Rationale string `json:"rationale"`
+		Rationale      string `json:"rationale"`
+		Summary        string `json:"summary"`
+		Question       string `json:"question"`
+		Counterexample string `json:"counterexample"`
 	}
 	if err := factoryai.Ask(ctx, o.Draft, judgev1.TaskDraftRule, o.Repo, er.Path, er.Line, text,
-		fmt.Sprintf(draftTask, er.Path, er.Line, text, facts, er.Path, er.Path, retry), srcs, draftSchema, &a); err != nil {
+		fmt.Sprintf(draftTask, er.Path, er.Line, text, facts, er.Path, er.Path, er.Path, retry), srcs, draftSchema, &a); err != nil {
 		d.Problem = err.Error()
 		return true, ""
 	}
-	d.Rationale, d.Edits = a.Rationale, nil
+	d.Rationale, d.Edits, d.Patch = a.Rationale, nil, ""
+	d.Summary, d.Question, d.Counterexample = a.Summary, a.Question, a.Counterexample
 	if len(a.Edits) == 0 {
 		d.Problem = "no edit proposed: " + a.Rationale
 		return true, ""
@@ -278,6 +406,7 @@ func draftOnce(ctx context.Context, o Options, er factorymanifest.EscapedRule, d
 		}
 		d.Edits = append(d.Edits, ed)
 	}
+	d.Patch = unifiedDiff(ctx, er.Path, doc, edited)
 	if o.Try == nil {
 		d.Problem = "not verified: no factory configured"
 		return true, ""
