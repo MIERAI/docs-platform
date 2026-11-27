@@ -63,7 +63,7 @@ func run(t *testing.T, d *Docker, s Spec) Result {
 func TestSandboxIsolation(t *testing.T) {
 	d := docker(t)
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("hello\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("hello\n"), 0o644); err != nil { //nolint:gosec // the sandbox's non-root user must read it (Linux enforces it; Docker Desktop doesn't)
 		t.Fatal(err)
 	}
 	if err := os.Chmod(dir, 0o755); err != nil {
