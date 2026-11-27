@@ -111,7 +111,7 @@ func TestStageBeforeTheModel(t *testing.T) {
 		if !ok {
 			t.Fatalf("line %d: no claim", lr.Line)
 		}
-		if ruled && (c.Model != rulejudge.Model || c.PromptHash != rulejudge.PromptHash() || len(c.Evidence.Quotes) == 0 || c.Evidence.Quotes[0].Blob == "") {
+		if ruled && (c.Model != rulejudge.Model || c.PromptHash != rulejudge.PromptHash() || len(c.Evidence.Quotes) == 0 || c.Evidence.Quotes[0].Blob == "" || c.Evidence.Quotes[0].Scope == nil) {
 			t.Errorf("line %d: ledger claim %+v", lr.Line, c)
 		}
 		if !ruled && c.Model != "counting" {

@@ -74,8 +74,14 @@ func repoBase(root string) string {
 }
 
 func writeStale(w io.Writer, r *ledger.Report) {
-	_, _ = fmt.Fprintf(w, "docsp stale: %s @%.12s: %d fresh, %d stale (judge again), %d recheck (no evidence)\n",
-		r.Repo, r.Ref, r.Counts[ledger.Fresh], r.Counts[ledger.Stale], r.Counts[ledger.Recheck])
+	carried := 0
+	for _, c := range r.Claims {
+		if len(c.Carried) > 0 {
+			carried++
+		}
+	}
+	_, _ = fmt.Fprintf(w, "docsp stale: %s @%.12s: %d fresh (%d carried forward: evidence changed outside the claim's scope), %d stale (judge again), %d recheck (no evidence)\n",
+		r.Repo, r.Ref, r.Counts[ledger.Fresh], carried, r.Counts[ledger.Stale], r.Counts[ledger.Recheck])
 	for _, c := range r.Claims {
 		if c.Status != ledger.Stale {
 			continue

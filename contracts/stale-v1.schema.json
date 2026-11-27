@@ -131,6 +131,69 @@
                 "type": "string"
               }
             }
+          },
+          "carried_forward": {
+            "type": "array",
+            "description": "1.1: quotes of a fresh claim whose files changed outside the claim's scope: the verdict is carried forward and the quote re-anchored",
+            "items": {
+              "type": "object",
+              "required": [
+                "kind",
+                "path",
+                "line",
+                "new_line",
+                "blob"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "evidence_moved",
+                    "evidence_reformatted",
+                    "evidence_outside_scope"
+                  ]
+                },
+                "path": {
+                  "type": "string"
+                },
+                "line": {
+                  "type": "integer"
+                },
+                "new_line": {
+                  "type": "integer"
+                },
+                "blob": {
+                  "type": "string"
+                },
+                "scope": {
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "start",
+                    "end"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "kind": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "start": {
+                      "type": "integer"
+                    },
+                    "end": {
+                      "type": "integer"
+                    }
+                  }
+                },
+                "ref": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       }

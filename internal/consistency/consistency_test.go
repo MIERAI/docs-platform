@@ -235,11 +235,11 @@ func TestSampleIsReproducible(t *testing.T) {
 }
 
 func TestWilson(t *testing.T) {
-	lo, hi := wilson(8, 10)
+	lo, hi := Wilson(8, 10)
 	if lo < 0.44 || lo > 0.5 || hi < 0.94 || hi > 0.97 {
 		t.Fatalf("%v %v", lo, hi)
 	}
-	if lo, hi := wilson(0, 5); lo != 0 || hi > 0.5 {
+	if lo, hi := Wilson(0, 5); lo != 0 || hi > 0.5 {
 		t.Fatalf("%v %v", lo, hi)
 	}
 }

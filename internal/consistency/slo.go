@@ -179,7 +179,7 @@ func accuracy(r *SLOReport, res *evalmodel.Result, p instance.Consistency) {
 		return
 	}
 	v := float64(n-wrong) / float64(n)
-	lo, hi := wilson(n-wrong, n)
+	lo, hi := Wilson(n-wrong, n)
 	r.Accuracy.Value, r.Accuracy.Low, r.Accuracy.High, r.Accuracy.Met = &v, &lo, &hi, v >= p.SLO.Accuracy
 	allowed := 1 - p.SLO.Accuracy
 	b := &Budget{Allowed: allowed, Used: 1 - v}
@@ -242,8 +242,9 @@ func docOf(id string) string {
 	return id
 }
 
-// wilson is the 95% Wilson score interval of k successes in n.
-func wilson(k, n int) (float64, float64) {
+// Wilson is the 95% Wilson score interval of k successes in n (shared with the outcome
+// stream's precision SLI, so both SLO reports bound their samples the same way).
+func Wilson(k, n int) (float64, float64) {
 	const z = 1.96
 	p, nf := float64(k)/float64(n), float64(n)
 	d := 1 + z*z/nf

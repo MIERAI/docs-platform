@@ -20,6 +20,7 @@ docs-platform parts are coupled only through versioned, language-neutral JSON Sc
 | instance/v1 | `contracts/instance-v1.schema.json` | the operator's instance configuration → `docsp` |
 | eval/v1 | `contracts/eval-v1.schema.json` | `docsp eval-model` → stored results, comparison over time |
 | contract/v1 | `contracts/contract-v1.schema.json` | `docsp contract` → reviewers, a findings importer, dashboards (design/code surfaces, mismatch items, direction from history) |
+| outcome/v1 | `contracts/outcome-v1.schema.json` | `docsp outcome diff/ticks/label` → `docsp outcome report` (precision of docs-platform's own problem reports) |
 
 ## findings/v1
 
@@ -230,6 +231,19 @@ detail}], new_line, verified_ref}]`; reason kinds `doc_removed`, `doc_line_chang
 footprint rules `weak_scope_changed`, `sibling_added`, `member_set_changed`; `pinned_changed`
 when a pinned file changed (a removed one is `evidence_removed`).
 
+ledger/v1 1.1 and stale/v1 1.1 (additive; 1.0 documents are read unchanged): each quote may
+carry `scope {kind: go_decl|yaml_key|lines, name, start, end}` - the part of the quoted file
+the claim depends on at the quote's blob (the enclosing Go declaration, value spec or literal
+table entry; the YAML key path with its subtree; otherwise the line ±3) - and, once
+re-anchored without judging, `carried` (`evidence_moved`, `evidence_reformatted`,
+`evidence_outside_scope`) and `carried_ref`. A quote with a scope is stale only when the change
+of its file touches the scope (its text, bounds or name), the file is largely rewritten (under
+half of its old lines survive) or it cannot be located; a quote without one is stale on any
+change, as in 1.0, and so is every quote of an enumerating claim (a list: its completeness
+depends on the rest of the file). stale/v1 adds `carried_forward[{kind, path, line, new_line, blob, scope,
+ref}]` on fresh claims; `docsp recheck` writes them back to the ledger (verdict and
+`verified_ref` unchanged). Drift, absence, path-missing and pinned evidence are unchanged.
+
 ## pr-review/v1 (`docsp pr-comment`)
 
 `schema_version`, `repo`, `head`, `github`, `rechecked` (claims judged at the head), `problems
@@ -278,6 +292,26 @@ slo/v1: `accuracy`, `freshness`, `phantom_rate` as `{value, target, n, bad, met,
 note}`; `error_budget {allowed, used, remaining, burned}`; `by_doc[]`; `actions[{path,
 action: full_reaudit, max_age_days, why}]`; `cost {sample_usd, sample_billing,
 scheduled_usd_estimate, scheduled_claims}`.
+
+## outcome/v1 (`docsp outcome`)
+
+An append-only JSON Lines stream, one event per line (private data, mode 0600): `{schema_version,
+at, repo, claim_id, path, line, text, category, kind, how, label, source, ref, pr, option,
+note}`. `kind`: `reported` (`how`: `new`, `code_changed`, `flip`), `resolved` (`code_changed`,
+`flip`, `doc_removed`, `doc_edited`, `dropped`; `category` is the problem that was resolved),
+`rejudged` (`stable`: judged again on unchanged inputs, the flip rate's denominator), `human`
+(a PR tick: `pr`, `option`), `audit` (a random-audit label, `note`). `label`: `tp`, `fp`,
+`skip`; `source`: `audit` (the only source of the precision SLI), `pr_tick`, `proxy` (a
+reported line edited afterwards; both self-selected). A flip is a change between problem and
+no problem while the line and every evidence blob are unchanged; evidence that blobs cannot
+confirm (absence searches, bare file names, other repositories) counts as changed. A tick is
+recorded once per pull request, line, option and category; an audit label once per claim and
+label; a later label of the same subject replaces an earlier one in the report.
+
+The report (`docsp outcome report -format json`): `target`, `max_flip_rate`, `events`, `total` and `repos[]` of
+`{repo, reported, open, resolved {how: n}, flips, rejudged_unchanged, labels {source: {tp, fp,
+skip}}, precision, flip_rate, error_budget}` - `precision` and `flip_rate` in slo/v1's SLI
+shape, `error_budget` as slo/v1's (only with 10 or more audit labels).
 
 ## report/v1
 

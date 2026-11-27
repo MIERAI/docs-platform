@@ -26,6 +26,9 @@ type Builder struct {
 	Rules Rules
 	Now   func() time.Time
 	docs  map[string][]string
+	// evDir is the evidence checkout (the quotes' scopes are read there); evSrc caches its files.
+	evDir string
+	evSrc map[string]string
 }
 
 // NewBuilder snapshots dir at ref.
@@ -34,7 +37,7 @@ func NewBuilder(ctx context.Context, dir, repoName, ref string) (*Builder, error
 	if err != nil {
 		return nil, err
 	}
-	return &Builder{Dir: dir, Repo: repoName, Tree: t, DocTree: t, Now: time.Now, docs: map[string][]string{}}, nil
+	return &Builder{Dir: dir, Repo: repoName, Tree: t, DocTree: t, Now: time.Now, docs: map[string][]string{}, evDir: dir}, nil
 }
 
 // NewTargetBuilder records claims of documents in docDir (repository docRepo at docRef)
@@ -49,7 +52,7 @@ func NewTargetBuilder(ctx context.Context, docDir, docRepo, docRef, evDir string
 	if err != nil {
 		return nil, err
 	}
-	return &Builder{Dir: docDir, Repo: docRepo, Tree: et, DocTree: dt, Target: &target, Now: time.Now, docs: map[string][]string{}}, nil
+	return &Builder{Dir: docDir, Repo: docRepo, Tree: et, DocTree: dt, Target: &target, Now: time.Now, docs: map[string][]string{}, evDir: evDir}, nil
 }
 
 // LineText is line n of a document at the builder's revision.
@@ -95,7 +98,7 @@ func (b *Builder) Claim(ctx context.Context, lr *agentic.LineResult) (Claim, boo
 		c.Facts = append(c.Facts, Fact{Fact: f.Fact, Status: f.Status, Valid: f.Valid})
 		for _, e := range f.Evidence {
 			if e.OK {
-				b.add(&c, lr.Path, e.Evidence)
+				b.add(ctx, &c, lr.Path, e.Evidence)
 			}
 		}
 	}
@@ -131,11 +134,11 @@ func PinnedPaths(c *Claim) []string {
 	return out
 }
 
-func (b *Builder) add(c *Claim, doc string, e agentic.Evidence) {
+func (b *Builder) add(ctx context.Context, c *Claim, doc string, e agentic.Evidence) {
 	switch e.Kind {
 	case agentic.KindQuote:
 		if p, err := judge.CleanPath(e.Path); err == nil {
-			c.Evidence.Quotes = append(c.Evidence.Quotes, Quote{Repo: b.evRepo(), Path: p, Line: e.Line, Blob: b.Tree.Blobs[p]})
+			c.Evidence.Quotes = append(c.Evidence.Quotes, Quote{Repo: b.evRepo(), Path: p, Line: e.Line, Blob: b.Tree.Blobs[p], Scope: b.scope(ctx, p, e.Line)})
 		}
 	case agentic.KindAbsence:
 		scope := e.SearchScope
@@ -202,4 +205,21 @@ func pathMissing(doc, p string) PathMissing {
 		pm.Name = c
 	}
 	return pm
+}
+
+// scope is the scope of a quoted line at the builder's evidence revision (nil when the file
+// cannot be read: the quote then behaves as in ledgers without scopes).
+func (b *Builder) scope(ctx context.Context, p string, n int) *QuoteScope {
+	if b.evDir == "" || b.Tree == nil {
+		return nil
+	}
+	src, ok := b.evSrc[p]
+	if !ok {
+		src, _ = FileAt(ctx, b.evDir, b.Tree.Ref, p)
+		if b.evSrc == nil {
+			b.evSrc = map[string]string{}
+		}
+		b.evSrc[p] = src
+	}
+	return ComputeScope(p, src, n)
 }

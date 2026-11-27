@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/MIERAI/docs-platform/contracts/outcome-v1.schema.json",
+  "title": "docs-platform/outcome/v1",
+  "description": "One event of the outcome stream (JSON Lines, append-only): what happened to a claim docs-platform reported as a problem - reported, resolved and how, judged again on unchanged inputs, or labelled by a person (PR tick box, random audit). The precision SLI of the platform's own reports is computed from the audit labels only.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "at",
+    "repo",
+    "path",
+    "line",
+    "kind"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^1\\.[0-9]+$"
+    },
+    "at": {
+      "type": "string"
+    },
+    "repo": {
+      "type": "string"
+    },
+    "claim_id": {
+      "type": "string"
+    },
+    "path": {
+      "type": "string"
+    },
+    "line": {
+      "type": "integer"
+    },
+    "text": {
+      "type": "string"
+    },
+    "category": {
+      "type": "string"
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "reported",
+        "resolved",
+        "rejudged",
+        "human",
+        "audit"
+      ]
+    },
+    "how": {
+      "type": "string",
+      "enum": [
+        "new",
+        "flip",
+        "code_changed",
+        "stable",
+        "doc_removed",
+        "doc_edited",
+        "dropped"
+      ]
+    },
+    "label": {
+      "type": "string",
+      "enum": [
+        "tp",
+        "fp",
+        "skip"
+      ]
+    },
+    "source": {
+      "type": "string",
+      "enum": [
+        "audit",
+        "pr_tick",
+        "proxy"
+      ]
+    },
+    "ref": {
+      "type": "string"
+    },
+    "pr": {
+      "type": "integer"
+    },
+    "option": {
+      "type": "string"
+    },
+    "note": {
+      "type": "string"
+    }
+  }
+}

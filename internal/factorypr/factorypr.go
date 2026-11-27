@@ -101,14 +101,11 @@ type Report struct {
 	USD      float64    `json:"usd"`
 }
 
-// Problem categories: the rule no longer says what the code does.
-var problem = map[string]bool{agentic.Contradicted: true, agentic.OutdatedWording: true, agentic.IncompleteList: true, agentic.DanglingReference: true}
-
 // Problems counts the rules the code contradicts.
 func (r *Report) Problems() int {
 	n := 0
 	for _, x := range r.Rules {
-		if problem[x.Category] {
+		if agentic.IsProblem(x.Category) {
 			n++
 		}
 	}
@@ -207,7 +204,7 @@ func markEvidence(ctx context.Context, o Options, rep *Report) {
 	rep.Diffs = map[string]string{}
 	for i := range rep.Rules {
 		r := &rep.Rules[i]
-		if !problem[r.Category] {
+		if !agentic.IsProblem(r.Category) {
 			continue
 		}
 		r.Evidence = EvidenceRead
@@ -306,7 +303,7 @@ func judged(ctx context.Context, o Options, er factorymanifest.EscapedRule, touc
 			r.Code = append(r.Code, Line{Path: q.Path, Line: q.Line, Text: t})
 		}
 	}
-	if problem[r.Category] && o.Draft != nil {
+	if agentic.IsProblem(r.Category) && o.Draft != nil {
 		r.Draft = draft(ctx, o, er, &r)
 	}
 	return r
