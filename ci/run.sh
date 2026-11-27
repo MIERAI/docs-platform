@@ -104,7 +104,7 @@ pr_task() {
 		return 0
 	fi
 	if [[ ! -s "$L/ledger.json" ]]; then
-		summary "docs-platform: the default branch has no ledger yet (built by the first push run): nothing to compare"
+		ledgerless_pr
 		return 0
 	fi
 	instance "$DOCSP_RUN_CAP"
@@ -121,6 +121,28 @@ pr_task() {
 			-repo-name "$NAME" -format text . | tail -1 | tee -a "$GITHUB_STEP_SUMMARY"
 	fi
 	"$D" pr-comment -before "$L/ledger.json" -after "$RUNNER_TEMP/after.json" -repo-name "$NAME" \
+		-github-repo "$GITHUB_REPOSITORY" -post-pr "$DOCSP_PR" . | tee -a "$GITHUB_STEP_SUMMARY"
+}
+
+# Zero-config PR mode: no ledger yet (no push run, or its cache expired). The sections the PR
+# edits or relates to (headings + identifier overlap with the diff, deterministic) are judged
+# at the head within the run's cap, and compared with an empty ledger: every problem found in
+# them is reported. A push run (task main) builds the ledger, the upgrade path.
+ledgerless_pr() {
+	instance "$DOCSP_RUN_CAP"
+	if ! "$D" related -base "$DOCSP_BASE" -out "$RUNNER_TEMP/related.json" -format text . >"$RUNNER_TEMP/related.txt"; then
+		summary "docs-platform: no diff against the PR's base (a shallow checkout? actions/checkout needs fetch-depth: 0): skipped"
+		return 0
+	fi
+	tee -a "$GITHUB_STEP_SUMMARY" <"$RUNNER_TEMP/related.txt"
+	local n
+	n="$(jq '.sections | length' "$RUNNER_TEMP/related.json")"
+	summary "docs-platform: no ledger yet: judging the $n doc sections this PR is about (ledger-less mode, up to \$$DOCSP_RUN_CAP)"
+	if [[ "$n" -gt 0 ]]; then
+		"$D" audit -mode agentic -group doc -no-drift -sections "$RUNNER_TEMP/related.json" -max-questions 40 \
+			-ledger "$RUNNER_TEMP/after.json" -instance-config "$INST" -repo-name "$NAME" -format none . || true
+	fi
+	"$D" pr-comment -before "$RUNNER_TEMP/no-ledger.json" -after "$RUNNER_TEMP/after.json" -repo-name "$NAME" \
 		-github-repo "$GITHUB_REPOSITORY" -post-pr "$DOCSP_PR" . | tee -a "$GITHUB_STEP_SUMMARY"
 }
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -9,6 +10,7 @@ import (
 	"github.com/MIERAI/docs-platform/internal/agentic"
 	"github.com/MIERAI/docs-platform/internal/check"
 	"github.com/MIERAI/docs-platform/internal/ledger"
+	"github.com/MIERAI/docs-platform/internal/related"
 )
 
 // cmdAudit is layer ④(c): the semantic audit. Its findings are proposals for a human
@@ -28,20 +30,22 @@ func cmdAudit(ctx context.Context, args []string, stdout, stderr io.Writer) (int
 	fs.StringVar(&instanceFile, "instance-config", "", "instance configuration (docs-platform/instance/v1): judge provider, model, budget, data classification")
 	fs.BoolVar(&noModel, "no-model", false, "deterministic checks only, whatever the instance configuration says")
 	fs.IntVar(&maxQ, "max-questions", 0, "claims put to the judge (default 150)")
+	sections := fs.String("sections", "", "related/v1 JSON from `docsp related`: audit only the claims inside these sections")
 	var af agenticFlags
 	af.register(fs, false)
 	if err := fs.Parse(args); err != nil {
 		return flagErr(err)
 	}
 	ag, err := auditAgentic(&af)
-	if err != nil {
+	only, ferr := sectionFilter(*sections)
+	if err = errors.Join(err, ferr); err != nil {
 		return exitUsage, err
 	}
 	res, err := check.Audit(ctx, check.AuditOptions{
 		Options: check.Options{
 			Root: rootArg(fs), ConfigFile: f.config, RepoName: f.repoName, Instance: f.instance, Version: version,
 		},
-		InstanceFile: instanceFile, NoModel: noModel, MaxQuestions: maxQ, Agentic: ag,
+		InstanceFile: instanceFile, NoModel: noModel, MaxQuestions: maxQ, Agentic: ag, Only: only,
 	})
 	if err != nil {
 		return exitUsage, err //nolint:wrapcheck // already descriptive
@@ -63,6 +67,18 @@ func cmdAudit(ctx context.Context, args []string, stdout, stderr io.Writer) (int
 		}
 	}
 	return exitOK, nil
+}
+
+// sectionFilter reads a related/v1 file into the audit's line filter (nil = no file).
+func sectionFilter(file string) (func(string, int) bool, error) {
+	if file == "" {
+		return nil, nil
+	}
+	rel, err := related.Load(file)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // already descriptive
+	}
+	return rel.Contains, nil
 }
 
 // auditAgentic turns the mode flags into the audit's agentic options (nil = snippet mode).

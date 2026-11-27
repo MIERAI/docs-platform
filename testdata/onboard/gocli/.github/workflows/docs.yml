@@ -1,0 +1,13 @@
+name: docs
+on: pull_request
+permissions: {contents: read, pull-requests: write, actions: read}
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with: {fetch-depth: 0, persist-credentials: false}
+      - uses: MIERAI/docs-platform/ci@main
+        with:
+          task: pr
+          claude-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}

@@ -46,6 +46,9 @@ type Options struct {
 	// OnJudged receives every agentic line result (for the claim ledger); calls are
 	// serialised.
 	OnJudged func([]agentic.LineResult)
+	// Only, when set, keeps the claims on lines it accepts (the zero-config PR mode judges
+	// only the sections a change is about, docsp audit -sections).
+	Only func(path string, line int) bool
 }
 
 // Stats describe one audit run.
@@ -138,8 +141,7 @@ func Run(ctx context.Context, r *repo.Repo, inv *scan.Inventory, o Options) (*Re
 func (c *checker) collect(r *repo.Repo, inv *scan.Inventory) []claim.Claim {
 	var out []claim.Claim
 	for _, d := range inv.DocFiles {
-		ext := strings.ToLower(path.Ext(d))
-		if ext != ".md" && ext != ".markdown" {
+		if !Prose(d) {
 			continue
 		}
 		b, err := r.Read(d)
@@ -161,13 +163,26 @@ func (c *checker) collect(r *repo.Repo, inv *scan.Inventory) []claim.Claim {
 	}
 	var kept []claim.Claim
 	for _, cl := range out {
-		if !c.opt.Suppressed[fmt.Sprintf("%s:%d", cl.Path, cl.Line)] {
+		if !c.opt.Suppressed[fmt.Sprintf("%s:%d", cl.Path, cl.Line)] && (c.opt.Only == nil || c.opt.Only(cl.Path, cl.Line)) {
 			kept = append(kept, cl)
 		}
 	}
 	c.stats.CheckableClaims = len(kept)
 	c.stats.Claims = len(out)
 	return kept
+}
+
+// proseNames are AI-instruction files without a Markdown extension, read as Markdown.
+var proseNames = map[string]bool{".cursorrules": true, ".windsurfrules": true, ".clinerules": true}
+
+// Prose reports whether a documentation file is read as Markdown: .md, .markdown, Cursor's
+// .mdc rules and the extension-less AI-instruction files (.cursorrules and the like).
+func Prose(p string) bool {
+	switch strings.ToLower(path.Ext(p)) {
+	case ".md", ".markdown", ".mdc":
+		return true
+	}
+	return proseNames[path.Base(p)]
 }
 
 // check runs every deterministic rule on one claim; what stays undecided may become a question.

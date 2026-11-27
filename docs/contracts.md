@@ -318,3 +318,15 @@ evidence[{evidence, ok, reason}]}]` and `reason`; scores `categories`, `unverifi
 `parse_failures`, `parse_fallbacks`. Eval items may have task type `claim_facts` (agentic
 only: claim + revision, no snippets) and source `verified_control` (a line a reviewer
 verified true at the set's revision).
+
+## related/v1 and doctor/v1 (zero-config onboarding)
+
+`docsp related` (related/v1, 1.0): `base`, `head`, `docs` (documentation files considered),
+`considered` (their sections), `dropped` (related sections left out by `-max-sections`) and
+`sections[{path, heading, from, to, reason, score, terms}]` - `reason` is `changed`,
+`reference` or `overlap`, `score` is the overlap's term weights or the number of changed
+things a reference section mentions, `terms` what matched; lines are 1-based and
+inclusive. `docsp audit -sections` reads it back and keeps only the claims inside a section.
+
+`docsp doctor -format json` (doctor/v1, 1.0): `checks[{name, level, message}]`, `level` one of
+`ok`, `info`, `warn`, `fail`; messages name environment variables, never their values.

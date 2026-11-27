@@ -1,0 +1,15 @@
+on: [push]
+permissions:
+  contents: read
+  pull-requests: read
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: MIERAI/docs-platform/ci@main
+        with:
+          task: review
+          monthly-usd: "5"
+          run-usd: 9
+          bootstrap-usd: lots

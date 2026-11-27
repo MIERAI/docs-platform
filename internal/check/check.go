@@ -240,6 +240,8 @@ type AuditOptions struct {
 	MaxQuestions int
 	// Agentic, when set, runs the judge in agentic mode.
 	Agentic *AgenticAudit
+	// Only, when set, limits the audit to the claims on the lines it accepts.
+	Only func(path string, line int) bool
 }
 
 // AgenticAudit selects the agentic judge for an audit.
@@ -292,7 +294,7 @@ func Audit(ctx context.Context, o AuditOptions) (*AuditResult, error) {
 	inv := scan.Run(r, exts, scan.Options{Docs: cfg.Docs})
 	so := semantic.Options{
 		StaleCommits: cfg.Audit.StaleCommits, Judge: g, MaxQuestions: o.MaxQuestions, Repo: repoName(o.Options),
-		Suppressed: suppressedLines(inv),
+		Suppressed: suppressedLines(inv), Only: o.Only,
 	}
 	var judged []agentic.LineResult
 	if o.Agentic != nil && g != nil {
