@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/MIERAI/docs-platform/internal/agentic"
+	"github.com/MIERAI/docs-platform/internal/factoryai"
 	"github.com/MIERAI/docs-platform/internal/factorymanifest"
 	"github.com/MIERAI/docs-platform/internal/factorytry"
 	"github.com/MIERAI/docs-platform/internal/instance"
@@ -183,5 +184,33 @@ func TestReviewDraftsAVerifiedDesignEdit(t *testing.T) {
 	}
 	if (&Report{}).Markdown() != "" {
 		t.Error("no touched rule: no comment")
+	}
+}
+
+// Failing examples prove the API's design and code disagree, not which rule is stale: a rule
+// whose verified draft rewrites another rule is only read, and can be ticked away.
+func TestExecutedOnlyForTheRuleTheDraftRewrites(t *testing.T) {
+	sla := "  - 情况: SLA\n    结果: 超过 300 秒算违约"
+	health := "  - 情况: 健康度\n    结果: 有违约 → DEGRADED"
+	d := &Draft{Verified: true, Edits: []factoryai.Edit{{Path: "design.yaml", Old: "    结果: 超过 300 秒算违约", New: "    结果: 超过 600 秒算违约"}}, Patch: "--- a/design.yaml\n+++ b/design.yaml\n@@ -1 +1 @@\n-x\n+y\n"}
+	if !draftRewrites(d, sla) || draftRewrites(d, health) {
+		t.Fatal("the draft rewrites the SLA rule only")
+	}
+	if draftRewrites(&Draft{Edits: d.Edits}, sla) {
+		t.Error("an unverified draft proves nothing")
+	}
+	rep := &Report{Head: "h", Failing: map[string][]factorytry.Case{"a": {{Name: "mu", Detail: "response.health: want DEGRADED, got OK"}}}, Rules: []Rule{
+		{API: "a", Path: "design.yaml", Line: 3, Text: "  - 情况: SLA", Block: sla, Category: agentic.Contradicted, Evidence: EvidenceExecuted, Draft: d},
+		{API: "a", Path: "design.yaml", Line: 5, Text: "  - 情况: 健康度", Block: health, Category: agentic.Contradicted, Evidence: EvidenceRead, Draft: d},
+	}}
+	md := rep.Markdown()
+	if strings.Count(md, "--- a/design.yaml") != 1 || !strings.Contains(md, "和上面 `design.yaml:3` 的改稿相同") {
+		t.Errorf("the same draft is shown twice:\n%s", md)
+	}
+	if !strings.Contains(md, "design.yaml:5 not_a_problem") || strings.Contains(md, "design.yaml:3 not_a_problem") {
+		t.Errorf("only the read rule can be ticked away:\n%s", md)
+	}
+	if !strings.Contains(md, "结果: 有违约 → DEGRADED") {
+		t.Error("the design side shows the whole rule")
 	}
 }

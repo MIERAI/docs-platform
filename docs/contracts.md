@@ -242,7 +242,7 @@ problem}}]` - the rules with hand-written code a change touches (their code or t
 document), judged at the head; a draft is `verified` only when the factory accepts the design
 with it; a problem's `evidence` is `executed` when the design's examples of its API fail at the
 head, `read` when only the judge says so - and `acceptance{api: problem}` (the head as it is;
-"" = passes), `failing{api: [case]}` (the design's cases failing at the head), `diffs{path:
+"" = passes), `failing{api: [case]}` (the design's cases failing at the head; a problem is `executed` only when its verified draft rewrites that very rule), `block` per rule, `diffs{path:
 hunk}`, `github` (owner/name, for links), `feedback[{rule, option: design_stale|code_wrong|
 not_a_problem|unrelated, category, evidence}]` (the boxes ticked in the posted comment before
 the run; `-feedback-only` prints just these as `{pr, comment, feedback}`), `usd`.

@@ -64,9 +64,10 @@ func (r *Report) MarkdownWith(ticked map[string]bool) string {
 		}
 		fmt.Fprintf(&b, "| %s %s | %s | %s |\n", r.lineLink(x.Path, x.Line), cell(firstLine(x.Text)), label, evidenceLabel[x.Evidence])
 	}
+	shown := map[string]string{} // patch -> the rule it was shown under
 	for _, x := range r.Rules {
 		if problem[x.Category] {
-			r.writeProblem(&b, x, ticked)
+			r.writeProblem(&b, x, ticked, shown)
 		}
 	}
 	r.writeAcceptance(&b)
@@ -76,8 +77,8 @@ func (r *Report) MarkdownWith(ticked map[string]bool) string {
 	return b.String()
 }
 
-func (r *Report) writeProblem(b *strings.Builder, x Rule, ticked map[string]bool) {
-	fmt.Fprintf(b, "\n---\n\n#### %s %s — %s\n\n", categoryLabel[x.Category], r.lineLink(x.Path, x.Line), cell(firstLine(x.Text)))
+func (r *Report) writeProblem(b *strings.Builder, x Rule, ticked map[string]bool, shown map[string]string) {
+	fmt.Fprintf(b, "\n---\n\n#### %s %s — %s\n\n", categoryLabel[x.Category], r.lineLink(x.Path, x.Line), cell(strings.TrimPrefix(firstLine(x.Text), "- ")))
 	d := x.Draft
 	switch {
 	case d != nil && d.Summary != "":
@@ -93,13 +94,26 @@ func (r *Report) writeProblem(b *strings.Builder, x Rule, ticked map[string]bool
 	if d != nil && d.Question != "" {
 		fmt.Fprintf(b, "**只需要回答**:%s\n\n", d.Question)
 	}
-	fmt.Fprintf(b, "**设计书** %s\n\n```%s\n%s\n```\n\n", r.lineLink(x.Path, x.Line), fence(x.Path), strings.TrimRight(x.Text, "\n"))
+	block := x.Block
+	if block == "" {
+		block = x.Text
+	}
+	fmt.Fprintf(b, "**设计书** %s\n\n```%s\n%s\n```\n\n", r.lineLink(x.Path, x.Line), fence(x.Path), strings.TrimRight(block, "\n"))
 	for _, c := range x.Code {
 		fmt.Fprintf(b, "**代码** %s\n\n```%s\n%s\n```\n\n", r.lineLink(c.Path, c.Line), fence(c.Path), strings.TrimRight(c.Text, "\n"))
 	}
 	r.writeCounterexample(b, x)
 	r.writeCause(b, x)
-	writeDraft(b, d)
+	rule := fmt.Sprintf("%s:%d", x.Path, x.Line)
+	switch {
+	case d != nil && d.Patch != "" && shown[d.Patch] != "":
+		fmt.Fprintf(b, "**设计书改稿**:和上面 `%s` 的改稿相同。\n\n", shown[d.Patch])
+	default:
+		writeDraft(b, d)
+		if d != nil && d.Patch != "" {
+			shown[d.Patch] = rule
+		}
+	}
 	writeChoices(b, x, ticked)
 }
 
@@ -107,7 +121,11 @@ func (r *Report) writeProblem(b *strings.Builder, x Rule, ticked map[string]bool
 // worked input only when nothing was run.
 func (r *Report) writeCounterexample(b *strings.Builder, x Rule) {
 	if f := r.Failing[x.API]; len(f) > 0 {
-		b.WriteString("**反例**(🔬 工厂在这个 PR 上实际跑的设计书例子):\n\n")
+		if x.Evidence == EvidenceExecuted {
+			b.WriteString("**反例**(🔬 工厂在这个 PR 上实际跑的设计书例子):\n\n")
+		} else {
+			b.WriteString("**这个 API 失败的设计书例子**(🔬 实际跑过;但改稿没有改这条规则,所以不能证明是这条规则的问题):\n\n")
+		}
 		for _, c := range f[:min(4, len(f))] {
 			fmt.Fprintf(b, "- `%s`:%s\n", c.Name, caseDetail(c))
 		}

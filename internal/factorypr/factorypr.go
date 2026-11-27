@@ -38,7 +38,8 @@ type Rule struct {
 	Path     string         `json:"path"`
 	Line     int            `json:"line"`
 	Text     string         `json:"text"`
-	Touched  []string       `json:"touched"` // the changed files that make it relevant
+	Block    string         `json:"block,omitempty"` // the whole rule (condition and result) at the head
+	Touched  []string       `json:"touched"`         // the changed files that make it relevant
 	Category string         `json:"category"`
 	Facts    []ledger.Fact  `json:"facts,omitempty"`
 	Quotes   []ledger.Quote `json:"quotes,omitempty"`
@@ -198,8 +199,10 @@ func runHead(ctx context.Context, o Options, rep *Report, apis map[string]bool) 
 	}
 }
 
-// markEvidence grades each problem (executed when the design's examples of its API fail at
-// the head) and keeps the change to the hand-written files behind it.
+// markEvidence grades each problem and keeps the change to the hand-written files behind it.
+// A problem is executed only when the design's examples of its API fail at the head and the
+// factory-verified draft that makes them pass rewrites this very rule: failing examples prove
+// the API's design and code disagree, not which of its rules is the stale one.
 func markEvidence(ctx context.Context, o Options, rep *Report) {
 	rep.Diffs = map[string]string{}
 	for i := range rep.Rules {
@@ -208,7 +211,7 @@ func markEvidence(ctx context.Context, o Options, rep *Report) {
 			continue
 		}
 		r.Evidence = EvidenceRead
-		if len(rep.Failing[r.API]) > 0 {
+		if len(rep.Failing[r.API]) > 0 && draftRewrites(r.Draft, r.Block) {
 			r.Evidence = EvidenceExecuted
 		}
 		for _, f := range r.Touched {
@@ -217,6 +220,21 @@ func markEvidence(ctx context.Context, o Options, rep *Report) {
 			}
 		}
 	}
+}
+
+// draftRewrites says whether a verified draft edits a line of the rule's block.
+func draftRewrites(d *Draft, block string) bool {
+	if d == nil || !d.Verified || block == "" {
+		return false
+	}
+	for _, e := range d.Edits {
+		for _, l := range strings.Split(e.Old, "\n") {
+			if t := strings.TrimSpace(l); t != "" && strings.Contains(block, t) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // maxDiffLines bounds a file's diff in the comment.
@@ -277,6 +295,9 @@ func touchedByDoc(m *factorymanifest.Manifest, touched map[string][]string) (map
 func judged(ctx context.Context, o Options, er factorymanifest.EscapedRule, touched []string, lr *agentic.LineResult) Rule {
 	r := Rule{API: er.API, Path: lr.Path, Line: lr.Line, Touched: touched, Category: lr.Category, Error: lr.Error}
 	r.Text, _ = o.Builder.LineText(ctx, lr.Path, lr.Line)
+	if doc, err := os.ReadFile(filepath.Join(o.Dir, filepath.FromSlash(lr.Path))); err == nil {
+		r.Block = factoryai.RuleBlock(string(doc), lr.Line)
+	}
 	if c, ok := o.Builder.Claim(ctx, lr); ok {
 		r.Category, r.Facts, r.Quotes = c.Category, c.Facts, c.Evidence.Quotes
 	}
