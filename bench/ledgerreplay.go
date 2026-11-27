@@ -37,11 +37,16 @@ type lrRepo struct {
 	Items   []lrItem   `json:"items"`
 }
 
+// lrCommit: Stale and Reasons without quote scopes (ledgers before 1.1), StaleScoped and
+// Carried (carried-forward quotes by kind) with them.
 type lrCommit struct {
-	SHA     string         `json:"sha"`
-	Alive   int            `json:"alive_claims"`
-	Stale   int            `json:"stale_claims"`
-	Reasons map[string]int `json:"reasons,omitempty"`
+	SHA           string         `json:"sha"`
+	Alive         int            `json:"alive_claims"`
+	Stale         int            `json:"stale_claims"`
+	Reasons       map[string]int `json:"reasons,omitempty"`
+	StaleScoped   int            `json:"stale_claims_scoped"`
+	ReasonsScoped map[string]int `json:"reasons_scoped,omitempty"`
+	Carried       map[string]int `json:"carried_quotes_scoped,omitempty"`
 }
 
 type lrItem struct {
@@ -56,6 +61,10 @@ type lrItem struct {
 	Flagging  int      `json:"commits_flagging_after_doc_commit"`
 	FirstFlag string   `json:"first_flagging_commit,omitempty"`
 	Reasons   []string `json:"reasons_at_first_flag,omitempty"`
+	// with quote scopes
+	FirstScoped    bool `json:"flagged_at_first_causing_commit_scoped"`
+	AnyScoped      bool `json:"flagged_at_any_causing_commit_scoped"`
+	FlaggingScoped int  `json:"commits_flagging_after_doc_commit_scoped"`
 }
 
 func runLedgerReplay(ctx context.Context, args []string) error {
@@ -132,24 +141,28 @@ func replayLedgerRepo(ctx context.Context, l *ledger.Ledger, name, dir string, g
 			return ch, nil
 		}
 		ch, err := ledger.Diff(ctx, dir, c+"^", c)
-		changes[c] = ch
-		return ch, err //nolint:wrapcheck // already descriptive
+		if err != nil {
+			return nil, err //nolint:wrapcheck // already descriptive
+		}
+		changes[c] = ch // only successes: a cached failure would come back as a nil change set
+		return ch, nil
 	}
-	if rr.Commits, err = commitCosts(ctx, dir, claims, commits[1:], diff); err != nil {
+	an := &anchor{ctx: ctx, dir: dir, src: map[string]string{}}
+	if rr.Commits, err = commitCosts(ctx, dir, claims, commits[1:], diff, an); err != nil {
 		return rr, err
 	}
 	for _, it := range set.Items {
 		if it.Source != evalmodel.SourceGTPositive || it.Repo != name {
 			continue
 		}
-		rr.Items = append(rr.Items, scoreLedgerItem(ctx, dir, it, claims, gt, diff))
+		rr.Items = append(rr.Items, scoreLedgerItem(ctx, dir, it, claims, gt, diff, an))
 	}
 	return rr, nil
 }
 
 // commitCosts counts, per commit, the claims whose line existed before it and that it would
 // invalidate.
-func commitCosts(ctx context.Context, dir string, claims []*ledger.Claim, commits []string, diff func(string) (*ledger.Changes, error)) ([]lrCommit, error) {
+func commitCosts(ctx context.Context, dir string, claims []*ledger.Claim, commits []string, diff func(string) (*ledger.Changes, error), an *anchor) ([]lrCommit, error) {
 	alive := map[string]bool{}
 	first := true
 	var out []lrCommit
@@ -166,40 +179,144 @@ func commitCosts(ctx context.Context, dir string, claims []*ledger.Claim, commit
 			}
 		}
 		first = false
-		out = append(out, staleAt(c, claims, alive, ch, docAt))
+		out = append(out, staleAt(c, claims, alive, ch, docAt, an))
 	}
 	return out, nil
 }
 
-// staleAt counts the alive claims one commit invalidates, with their reasons.
-func staleAt(c string, claims []*ledger.Claim, alive map[string]bool, ch *ledger.Changes, docAt func(string) (string, bool)) lrCommit {
-	lc := lrCommit{SHA: c[:12], Reasons: map[string]int{}}
+// staleAt counts the alive claims one commit invalidates, with their reasons: without quote
+// scopes (every change of a quoted file re-opens the claim) and with them (re-anchored at the
+// commit's parent; a change outside the scope carries the verdict forward).
+func staleAt(c string, claims []*ledger.Claim, alive map[string]bool, ch *ledger.Changes, docAt func(string) (string, bool), an *anchor) lrCommit {
+	lc := lrCommit{SHA: c[:12], Reasons: map[string]int{}, ReasonsScoped: map[string]int{}, Carried: map[string]int{}}
 	for _, cl := range claims {
 		if !alive[cl.ID] {
 			continue
 		}
 		lc.Alive++
-		if s := ledger.Invalidate(cl, ch, docAt); s.Status == ledger.Stale {
+		if s := ledger.Invalidate(unscoped(cl), ch, docAt); s.Status == ledger.Stale {
 			lc.Stale++
 			for _, r := range s.Reasons {
 				lc.Reasons[r.Kind]++
 			}
+		}
+		s := ledger.Invalidate(an.at(cl, ch), ch, docAt)
+		if s.Status == ledger.Stale {
+			lc.StaleScoped++
+			for _, r := range s.Reasons {
+				lc.ReasonsScoped[r.Kind]++
+			}
+		}
+		for _, k := range s.Carried {
+			lc.Carried[k.Kind]++
 		}
 	}
 	return lc
 }
 
 func hasLine(text, want string) bool {
-	w := strings.Join(strings.Fields(want), " ")
-	for _, l := range strings.Split(text, "\n") {
-		if strings.Join(strings.Fields(l), " ") == w {
-			return true
-		}
-	}
-	return false
+	return nearestLine(text, want, 0) > 0
 }
 
-func scoreLedgerItem(ctx context.Context, dir string, it evalmodel.Item, claims []*ledger.Claim, gt []GTItem, diff func(string) (*ledger.Changes, error)) lrItem {
+// nearestLine is the number of the line equal (whitespace-normalised) to want nearest hint; 0
+// when there is none.
+func nearestLine(text, want string, hint int) int {
+	w := strings.Join(strings.Fields(want), " ")
+	best := 0
+	for i, l := range strings.Split(text, "\n") {
+		if strings.Join(strings.Fields(l), " ") != w {
+			continue
+		}
+		if n := i + 1; best == 0 || abs(n-hint) < abs(best-hint) {
+			best = n
+		}
+	}
+	return best
+}
+
+// unscoped is the claim as a ledger written before quote scopes holds it.
+func unscoped(cl *ledger.Claim) *ledger.Claim {
+	c := *cl
+	c.Evidence.Quotes = append([]ledger.Quote(nil), cl.Evidence.Quotes...)
+	for i := range c.Evidence.Quotes {
+		c.Evidence.Quotes[i].Scope = nil
+	}
+	return &c
+}
+
+// anchor re-anchors claims for a replayed commit. The ledger's claims were judged at the
+// set's revision, later than the commit; a claim recorded before the commit would have quoted
+// the same text at the commit's parent. So each quote whose file the commit modifies is looked
+// up there (its line's text, nearest its line) and gets that blob and the scope computed
+// there; a quote whose text the parent does not have keeps no scope (any change re-opens it,
+// as without scopes).
+type anchor struct {
+	ctx context.Context
+	dir string
+	src map[string]string
+}
+
+func (a *anchor) at(cl *ledger.Claim, ch *ledger.Changes) *ledger.Claim {
+	c := unscoped(cl)
+	for i := range c.Evidence.Quotes {
+		q := &c.Evidence.Quotes[i]
+		if ch.Paths[q.Path] != 'M' {
+			continue
+		}
+		lines := strings.Split(a.read(q.Blob, ""), "\n")
+		if q.Line < 1 || q.Line > len(lines) {
+			continue
+		}
+		src := a.read(ch.From, q.Path)
+		blob, ok := ledger.BlobAt(a.ctx, a.dir, ch.From, q.Path)
+		n := nearestLine(src, lines[q.Line-1], q.Line)
+		if !ok || n == 0 {
+			continue
+		}
+		q.Line, q.Blob, q.Scope = n, blob, ledger.ComputeScope(q.Path, src, n)
+	}
+	return c
+}
+
+// read is a blob's content (p empty) or p's content at a revision ("" when unreadable).
+func (a *anchor) read(rev, p string) string {
+	k := rev + "\x00" + p
+	if s, ok := a.src[k]; ok {
+		return s
+	}
+	var s string
+	if p == "" {
+		s, _ = repo.Git(a.ctx, a.dir, "show", rev)
+	} else {
+		s, _ = ledger.FileAt(a.ctx, a.dir, rev, p)
+	}
+	a.src[k] = s
+	return s
+}
+
+// flags tallies the commits that flag one claim by its evidence.
+type flags struct {
+	first, any bool
+	n          int
+	firstFlag  string
+	reasons    []string
+}
+
+func (f *flags) add(c string, rs []string, causing map[string]bool, firstCausing string) {
+	if len(rs) == 0 {
+		return
+	}
+	f.n++
+	if f.firstFlag == "" {
+		f.firstFlag, f.reasons = c[:12], rs
+	}
+	if causing[c] {
+		f.any = true
+		f.first = f.first || c == firstCausing
+	}
+}
+
+func scoreLedgerItem(ctx context.Context, dir string, it evalmodel.Item, claims []*ledger.Claim, gt []GTItem, diff func(string) (*ledger.Changes, error), an *anchor) lrItem {
 	li := lrItem{ID: it.ID, Path: it.Claim.Path, Line: it.Claim.Line, Status: "scored"}
 	var cl *ledger.Claim
 	for _, c := range claims {
@@ -221,25 +338,19 @@ func scoreLedgerItem(ctx context.Context, dir string, it evalmodel.Item, claims 
 	for _, c := range tr.causing {
 		causing[c] = true
 	}
+	noDoc := func(string) (string, bool) { return "", false }
+	var plain, scoped flags
 	out, _ := repo.Git(ctx, dir, "log", "--first-parent", "--reverse", "--format=%H", tr.docCommit+"..HEAD")
 	for _, c := range strings.Fields(out) {
 		ch, err := diff(c)
 		if err != nil {
 			continue
 		}
-		rs := evidenceReasons(ledger.Invalidate(cl, ch, func(string) (string, bool) { return "", false }))
-		if len(rs) == 0 {
-			continue
-		}
-		li.Flagging++
-		if li.FirstFlag == "" {
-			li.FirstFlag, li.Reasons = c[:12], rs
-		}
-		if causing[c] {
-			li.Any = true
-			li.First = li.First || c == tr.causing[0]
-		}
+		plain.add(c, evidenceReasons(ledger.Invalidate(unscoped(cl), ch, noDoc)), causing, tr.causing[0])
+		scoped.add(c, evidenceReasons(ledger.Invalidate(an.at(cl, ch), ch, noDoc)), causing, tr.causing[0])
 	}
+	li.First, li.Any, li.Flagging, li.FirstFlag, li.Reasons = plain.first, plain.any, plain.n, plain.firstFlag, plain.reasons
+	li.FirstScoped, li.AnyScoped, li.FlaggingScoped = scoped.first, scoped.any, scoped.n
 	return li
 }
 
@@ -268,46 +379,70 @@ func gtItem(gt []GTItem, it evalmodel.Item) GTItem {
 func (r ledgerReplay) markdown() string {
 	var b strings.Builder
 	b.WriteString("# Ledger replay: evidence-based invalidation on real history\n\n")
-	b.WriteString("| repo | claims | commits | mean stale/commit | median | p90 | max | commits staling nothing | mean % of alive claims |\n|---|---|---|---|---|---|---|---|---|\n")
+	b.WriteString("Quote scopes off: any change of a quoted file re-opens the claim (ledgers before 1.1). On: only a change touching the claim's scope (Go declaration, YAML key, line ±3).\n\n")
+	b.WriteString("| repo | scopes | claims | commits | stale total | mean stale/commit | median | p90 | max | commits staling nothing | mean % of alive claims |\n|---|---|---|---|---|---|---|---|---|---|---|\n")
 	for _, rr := range r.Repos {
-		var st []int
-		zero, pct := 0, 0.0
-		for _, c := range rr.Commits {
-			st = append(st, c.Stale)
-			if c.Stale == 0 {
-				zero++
-			}
-			if c.Alive > 0 {
-				pct += float64(c.Stale) / float64(c.Alive)
-			}
-		}
-		sort.Ints(st)
-		n := max(1, len(st))
-		fmt.Fprintf(&b, "| %s | %d | %d | %.2f | %d | %d | %d | %d%% | %.1f%% |\n", rr.Repo, rr.Claims, len(st), mean(st), pick(st, 0.5), pick(st, 0.9), pick(st, 1), 100*zero/n, 100*pct/float64(n))
+		costRow(&b, rr, false)
+		costRow(&b, rr, true)
 	}
-	b.WriteString("\n| repo | positives | scored | flagged at first causing commit | at any causing commit | flagged by some later commit | median commits flagging |\n|---|---|---|---|---|---|---|\n")
+	b.WriteString("\n| repo | scopes | positives | scored | flagged at first causing commit | at any causing commit | flagged by some later commit | median commits flagging |\n|---|---|---|---|---|---|---|---|\n")
 	for _, rr := range r.Repos {
-		itemRow(&b, rr)
+		itemRow(&b, rr, false)
+		itemRow(&b, rr, true)
 	}
 	return b.String()
 }
 
+func onOff(scoped bool) string {
+	if scoped {
+		return "on"
+	}
+	return "off"
+}
+
+// costRow writes one repository's re-judgement cost row.
+func costRow(b *strings.Builder, rr lrRepo, scoped bool) {
+	var st []int
+	zero, pct, total := 0, 0.0, 0
+	for _, c := range rr.Commits {
+		s := c.Stale
+		if scoped {
+			s = c.StaleScoped
+		}
+		st = append(st, s)
+		total += s
+		if s == 0 {
+			zero++
+		}
+		if c.Alive > 0 {
+			pct += float64(s) / float64(c.Alive)
+		}
+	}
+	sort.Ints(st)
+	n := max(1, len(st))
+	fmt.Fprintf(b, "| %s | %s | %d | %d | %d | %.2f | %d | %d | %d | %d%% | %.1f%% |\n", rr.Repo, onOff(scoped), rr.Claims, len(st), total, mean(st), pick(st, 0.5), pick(st, 0.9), pick(st, 1), 100*zero/n, 100*pct/float64(n))
+}
+
 // itemRow writes one repository's recall row.
-func itemRow(b *strings.Builder, rr lrRepo) {
+func itemRow(b *strings.Builder, rr lrRepo, scoped bool) {
 	scored, first, anyc, some := 0, 0, 0, 0
 	var fl []int
 	for _, it := range rr.Items {
 		if it.Status != "scored" {
 			continue
 		}
+		f, a, n := it.First, it.Any, it.Flagging
+		if scoped {
+			f, a, n = it.FirstScoped, it.AnyScoped, it.FlaggingScoped
+		}
 		scored++
-		fl = append(fl, it.Flagging)
-		first += b2i(it.First)
-		anyc += b2i(it.Any)
-		some += b2i(it.Flagging > 0)
+		fl = append(fl, n)
+		first += b2i(f)
+		anyc += b2i(a)
+		some += b2i(n > 0)
 	}
 	sort.Ints(fl)
-	fmt.Fprintf(b, "| %s | %d | %d | %s | %s | %s | %d |\n", rr.Repo, len(rr.Items), scored, frac(first, scored), frac(anyc, scored), frac(some, scored), pick(fl, 0.5))
+	fmt.Fprintf(b, "| %s | %s | %d | %d | %s | %s | %s | %d |\n", rr.Repo, onOff(scoped), len(rr.Items), scored, frac(first, scored), frac(anyc, scored), frac(some, scored), pick(fl, 0.5))
 }
 
 func mean(xs []int) float64 {
