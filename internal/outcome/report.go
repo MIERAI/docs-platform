@@ -13,6 +13,11 @@ import (
 // DefaultTarget is the precision objective when none is given: four reports in five are real.
 const DefaultTarget = 0.8
 
+// DefaultMaxFlipRate is the flip-rate objective when none is given. It is tighter than the
+// precision allowance: a flip happens on unchanged inputs, so it is pure judge noise, and a
+// verdict that changes without cause erodes trust faster than a reasoned false positive.
+const DefaultMaxFlipRate = 0.1
+
 // MinLabels is the audit sample size below which the error budget is not judged.
 const MinLabels = 10
 
@@ -44,6 +49,7 @@ type Stats struct {
 type Summary struct {
 	SchemaVersion string  `json:"schema_version"`
 	Target        float64 `json:"target"`
+	MaxFlipRate   float64 `json:"max_flip_rate"`
 	Events        int     `json:"events"`
 	Total         Stats   `json:"total"`
 	Repos         []Stats `json:"repos"`
@@ -54,30 +60,33 @@ type Summary struct {
 // sample of open reports, so it is an unbiased estimate (Wilson 95% bounds); PR ticks and the
 // doc-edited proxy are counted next to it, never in it - people tick the reports they act on.
 // The flip rate is the share of judgements again on unchanged inputs that changed their
-// verdict: a flip proves one of two verdicts wrong, so it is held to the same allowance
-// (1 - target).
-func Report(events []Event, target float64) *Summary {
+// verdict: a flip proves one of two verdicts wrong, so it is held to at most maxFlip
+// (maxFlip <= 0 or > 1: DefaultMaxFlipRate).
+func Report(events []Event, target, maxFlip float64) *Summary {
 	if target <= 0 || target > 1 {
 		target = DefaultTarget
 	}
-	r := &Summary{SchemaVersion: SchemaVersion, Target: target, Events: len(events), Repos: []Stats{}}
+	if maxFlip <= 0 || maxFlip > 1 {
+		maxFlip = DefaultMaxFlipRate
+	}
+	r := &Summary{SchemaVersion: SchemaVersion, Target: target, MaxFlipRate: maxFlip, Events: len(events), Repos: []Stats{}}
 	byRepo := map[string][]Event{}
 	for _, e := range events {
 		byRepo[e.Repo] = append(byRepo[e.Repo], e)
 	}
-	r.Total = stats("", events, target)
+	r.Total = stats("", events, target, maxFlip)
 	names := make([]string, 0, len(byRepo))
 	for n := range byRepo {
 		names = append(names, n)
 	}
 	sort.Strings(names)
 	for _, n := range names {
-		r.Repos = append(r.Repos, stats(n, byRepo[n], target))
+		r.Repos = append(r.Repos, stats(n, byRepo[n], target, maxFlip))
 	}
 	return r
 }
 
-func stats(repo string, events []Event, target float64) Stats {
+func stats(repo string, events []Event, target, maxFlip float64) Stats {
 	s := Stats{Repo: repo, Resolved: map[string]int{}, Labels: map[string]Labels{}}
 	open := map[string]bool{}
 	latest := map[string]map[string]string{} // source -> subject -> label
@@ -119,7 +128,7 @@ func stats(repo string, events []Event, target float64) Stats {
 		s.Labels[src] = c
 	}
 	s.precision(target)
-	s.flipRate(target)
+	s.flipRate(maxFlip)
 	return s
 }
 
@@ -160,15 +169,15 @@ func (s *Stats) precision(target float64) {
 	s.Budget = b
 }
 
-func (s *Stats) flipRate(target float64) {
-	s.FlipRate = consistency.SLI{Target: 1 - target, N: s.Rejudged, Bad: s.Flips}
+func (s *Stats) flipRate(maxFlip float64) {
+	s.FlipRate = consistency.SLI{Target: maxFlip, N: s.Rejudged, Bad: s.Flips}
 	if s.Rejudged == 0 {
 		s.FlipRate.Note = "no claim judged again on unchanged inputs yet"
 		return
 	}
 	v := float64(s.Flips) / float64(s.Rejudged)
 	lo, hi := consistency.Wilson(s.Flips, s.Rejudged)
-	s.FlipRate.Value, s.FlipRate.Low, s.FlipRate.High, s.FlipRate.Met = &v, &lo, &hi, v <= 1-target
+	s.FlipRate.Value, s.FlipRate.Low, s.FlipRate.High, s.FlipRate.Met = &v, &lo, &hi, v <= maxFlip
 }
 
 // Text writes the report for a terminal.
@@ -198,7 +207,7 @@ func (r *Summary) Markdown(w io.Writer) {
 	}
 	_, _ = fmt.Fprintf(w, "\nPrecision target %.0f%%, measured only on a random audit sample (Wilson 95%%); "+
 		"PR ticks and edited lines are self-selected and shown as supporting signals only. "+
-		"A flip is a verdict that changed on unchanged inputs.\n", 100*r.Target)
+		"A flip is a verdict that changed on unchanged inputs; flip-rate objective at most %.0f%%.\n", 100*r.Target, 100*r.MaxFlipRate)
 }
 
 func sli(s consistency.SLI) string {

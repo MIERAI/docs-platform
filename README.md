@@ -284,8 +284,8 @@ Lines stream (outcome/v1, mode 0600):
   bounds); the error budget (`1 - target`) is judged once 10 claims are labelled and burned
   when the estimate is below the target. PR ticks and edited lines are shown beside it as
   supporting signals and marked biased: people tick the reports they act on. The **flip rate**
-  (flips over judgements again on unchanged inputs) needs no person at all and is held to the
-  same allowance.
+  (flips over judgements again on unchanged inputs) needs no person at all and is held to at
+  most 10% (`-max-flip-rate`): a flip is pure judge noise, so it gets a tighter objective.
 
 The CI action (`task: main`) runs `diff` after every recheck, `ticks` for the pull request a
 push merged, and adds the report to the job summary; the stream is kept with the ledger's
