@@ -33,7 +33,7 @@ budget() {
 		ai=false; summary "docs-platform: the monthly AI budget (\$$DOCSP_MONTHLY) is spent (\$$spent in $MONTH): no AI until next month"
 	fi
 	summary "docs-platform: $MONTH spent \$$spent of \$$DOCSP_MONTHLY; this run may spend up to \$$cap (AI: $ai)"
-	{ echo "ai=$ai"; echo "run_cap=$cap"; } >>"$GITHUB_OUTPUT"
+	{ echo "ai=$ai"; echo "run_cap=$cap"; echo "left=$left"; } >>"$GITHUB_OUTPUT"
 }
 
 instance() { # $1 = the run's cap in USD
@@ -73,11 +73,13 @@ main_task() {
 	fi
 	if [[ ! -s "$L/ledger.json" ]]; then
 		local cap
-		cap="$(awk -v c="$DOCSP_RUN_CAP" -v b="$DOCSP_BOOTSTRAP_USD" 'BEGIN {printf "%.4f", (b < c ? b : c) + 0}')"
+		# the first run's own cap (bootstrap-usd), within what is left of the month
+		cap="$(awk -v l="$DOCSP_LEFT" -v b="$DOCSP_BOOTSTRAP_USD" 'BEGIN {printf "%.4f", (b < l ? b : l) + 0}')"
 		instance "$cap"
 		summary "docs-platform: no ledger yet: building it (agentic audit, up to \$$cap)"
 		"$D" audit -mode agentic -ledger "$L/ledger.json" -instance-config "$INST" -repo-name "$NAME" -format none . || true
 		[[ -s "$L/ledger.json" ]] || { summary "docs-platform: the first audit wrote no ledger"; return 0; }
+		echo "ledger=changed" >>"$GITHUB_OUTPUT"
 	else
 		instance "$DOCSP_RUN_CAP"
 		"$D" stale -ledger "$L/ledger.json" -repo-name "$NAME" -format text . | tail -1 | tee -a "$GITHUB_STEP_SUMMARY"
@@ -87,6 +89,8 @@ main_task() {
 			"$D" recheck -schedule "$RUNNER_TEMP/schedule.json" -ledger "$L/ledger.json" -instance-config "$INST" \
 				-state "$L/state.json" -repo-name "$NAME" -format text . | tail -1 | tee -a "$GITHUB_STEP_SUMMARY"
 		fi
+		# saved every run: the weekly run also keeps the cache from expiring
+		echo "ledger=changed" >>"$GITHUB_OUTPUT"
 	fi
 	"$D" report -ledger "$L/ledger.json" -instance-config "$INST" -state "$L/state.json" -repo-name "$NAME" -format json . \
 		>"$RUNNER_TEMP/report.json" || true

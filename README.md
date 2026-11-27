@@ -673,8 +673,9 @@ jobs:
 
 - `task: main` (push, schedule): keeps the claim ledger in the **Actions cache**, never in the
   repository (it is private data). The first run builds it (`audit -mode agentic`, up to
-  `bootstrap-usd`); later runs do `stale` → `schedule` → `recheck`. The weekly run also keeps the
-  cache from expiring.
+  `bootstrap-usd`, within what is left of the month); later runs do `stale` → `schedule` →
+  `recheck`. Every such run saves the ledger again, so the weekly run also keeps the cache from
+  expiring.
 - `task: pr`: copies the default branch's ledger, rechecks at the PR's head only the claims the
   change made stale (priority 0), and `docsp pr-comment -before <ledger> -after <rechecked copy>
   -post-pr N -github-repo owner/name` posts the problems the change
