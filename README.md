@@ -908,7 +908,10 @@ jobs:
 - **Budget**: every judge appends its spend to `DOCSP_SPEND_LOG`; the run records it as an
   artifact `docsp-usd-<YYYY-MM>-<usd>-<task>-<run>-<attempt>`, and the next run adds this month's
   up. Past `monthly-usd` (default 20) no paid model runs until next month; one run is capped by
-  `run-usd` (main 3, PR 1). No token (a fork's pull request) or a private repository: no AI.
+  `run-usd` (main 3, PR 1). Spend is recorded when a run ends, so the other runs of the
+  workflow still in progress are reserved at their task's cap first: PRs pushed at once can't
+  each see the whole remainder and overrun the month together. No token (a fork's pull
+  request) or a private repository: no AI.
 - Inputs: `model` (claude-sonnet-5-5), `claude-code-version`, `monthly-usd`, `run-usd`,
   `bootstrap-usd` (8), `factory` (factory-pr), `github-token`.
 - Noise control (`pr`, `factory-pr`): a PR labelled `skip-label` (default `docsp:skip`) is not
