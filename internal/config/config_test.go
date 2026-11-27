@@ -45,6 +45,28 @@ func TestParse(t *testing.T) {
 	}
 }
 
+func TestAuditSkip(t *testing.T) {
+	c, err := Parse([]byte("version: 1\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := c.Audit.Skip.Filter()
+	if !f.Historical || !f.Tests || !f.Private || len(f.Changelogs) == 0 {
+		t.Errorf("defaults %+v", f)
+	}
+	c, err = Parse([]byte("version: 1\naudit:\n  skip: {historical: false, private_symbols: false, tests: true, changelogs: []}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f = c.Audit.Skip.Filter()
+	if f.Historical || f.Private || !f.Tests || len(f.Changelogs) != 0 {
+		t.Errorf("configured %+v", f)
+	}
+	if _, err := Parse([]byte("version: 1\naudit:\n  skip: {changelogs: ['[']}\n")); err == nil {
+		t.Error("bad glob accepted")
+	}
+}
+
 func TestLoad(t *testing.T) {
 	dir := t.TempDir()
 	cfg, err := Load(dir, "")

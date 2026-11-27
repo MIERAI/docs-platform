@@ -134,6 +134,18 @@ func TestPlanOnRepository(t *testing.T) {
 			t.Fatalf("state ignored: %+v", pk)
 		}
 	}
+	// the repository's audit.skip filter keeps claims out of the plan, counted by reason
+	skip := func(_, text string) string {
+		if text == "Port 9090." {
+			return "historical"
+		}
+		return ""
+	}
+	s, _ = Plan(context.Background(), Input{Ledger: l, Repo: "r", Dir: dir, Ref: "HEAD", Policy: p, Now: now, Skip: skip})
+	b, _ = json.Marshal(s)
+	if errs := schema(t, contracts.Schedule).ValidateJSON(b); len(errs) > 0 || s.Skipped["historical"] != 1 || s.Counts.Stale != 2 {
+		t.Fatalf("skip: %v %+v %+v", errs, s.Skipped, s.Counts)
+	}
 }
 
 func schema(t *testing.T, b []byte) *jsonschema.Schema {

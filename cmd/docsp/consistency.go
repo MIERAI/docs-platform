@@ -13,10 +13,12 @@ import (
 
 	"github.com/MIERAI/docs-platform/internal/agentic"
 	"github.com/MIERAI/docs-platform/internal/check"
+	"github.com/MIERAI/docs-platform/internal/config"
 	"github.com/MIERAI/docs-platform/internal/consistency"
 	"github.com/MIERAI/docs-platform/internal/evalmodel"
 	"github.com/MIERAI/docs-platform/internal/instance"
 	"github.com/MIERAI/docs-platform/internal/ledger"
+	"github.com/MIERAI/docs-platform/internal/rulejudge"
 )
 
 // consFlags are the flags the continuous-consistency commands share.
@@ -97,7 +99,14 @@ func cmdSchedule(ctx context.Context, args []string, stdout, stderr io.Writer) (
 	if err != nil {
 		return exitUsage, err
 	}
-	s, err := consistency.Plan(ctx, consistency.Input{Ledger: l, Repo: name, Dir: root, Ref: c.ref, Policy: in.Consistency, State: st, Now: time.Now()})
+	cfg, err := config.Load(root, "")
+	if err != nil {
+		return exitUsage, err //nolint:wrapcheck // already descriptive
+	}
+	s, err := consistency.Plan(ctx, consistency.Input{
+		Ledger: l, Repo: name, Dir: root, Ref: c.ref, Policy: in.Consistency, State: st, Now: time.Now(),
+		Skip: cfg.Audit.Skip.Filter().Text,
+	})
 	if err != nil {
 		return exitUsage, err //nolint:wrapcheck // already descriptive
 	}
@@ -145,6 +154,9 @@ func cmdRecheck(ctx context.Context, args []string, stdout, stderr io.Writer) (i
 	}
 	defer func() { _ = g.Close() }()
 	run := agentic.New(agentic.Options{Guard: g, Repo: name, Dir: root, Class: in.Classification, CacheDir: *cache, Settings: agentic.FromInstance(in.AI.Judge.Agentic)})
+	if rules, err := rulejudge.LoadDir(root, nil); err == nil {
+		run.SetRules(rules.Decider()) // deterministic first: lines a typed Go fact settles never reach the model
+	}
 	b, err := ledger.NewBuilder(ctx, root, name, "HEAD")
 	if err != nil {
 		return exitUsage, err //nolint:wrapcheck // already descriptive

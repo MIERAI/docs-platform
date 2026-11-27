@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/MIERAI/docs-platform/internal/agentic"
 	"github.com/MIERAI/docs-platform/internal/factorypr"
 	"github.com/MIERAI/docs-platform/internal/ledger"
 )
@@ -19,13 +20,15 @@ var tickLabel = map[string]string{
 
 // FromFeedback turns the boxes ticked in a pull request's review comment into human events.
 // A box names its claim by path:line at the PR's head (Feedback.Rule); Match links it to a
-// ledger claim when one is at hand. Boxes of unknown options are ignored.
+// ledger claim when one is at hand. Boxes of unknown options are ignored, and so are boxes
+// on a sources_conflict line: that is the code disagreeing with itself, not a report that
+// the document is wrong, so it says nothing about the precision of docs-platform's reports.
 func FromFeedback(repo string, pr int, ref string, fb []factorypr.Feedback, at time.Time) []Event {
 	ts := at.UTC().Format(time.RFC3339)
 	var out []Event
 	for _, f := range fb {
 		label, ok := tickLabel[f.Option]
-		if !ok {
+		if !ok || f.Category == agentic.SourcesConflict {
 			continue
 		}
 		p, line := splitRule(f.Rule)

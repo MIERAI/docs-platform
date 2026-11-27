@@ -66,6 +66,7 @@
             "dangling_reference",
             "incomplete_list",
             "outdated_wording",
+            "sources_conflict",
             "unverifiable_in_repo",
             "confirmed",
             "unknown"

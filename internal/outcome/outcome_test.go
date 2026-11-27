@@ -137,10 +137,11 @@ func TestFromFeedbackAndUnseen(t *testing.T) {
 		{Rule: "docs/a.md:10", Option: factorypr.OptionCodeWrong, Category: "outdated_wording"},
 		{Rule: "docs/b.md:4", Option: factorypr.OptionNotAProblem, Category: "incomplete_list"},
 		{Rule: "docs/c.md:1", Option: "something_else", Category: "contradicted"},
+		{Rule: "docs/d.md:2", Option: factorypr.OptionNotAProblem, Category: "sources_conflict"},
 	}
 	ev := FromFeedback("r", 7, "sha", fb, now)
 	if len(ev) != 3 {
-		t.Fatalf("want 3 events (unknown option ignored), got %+v", ev)
+		t.Fatalf("want 3 events (unknown option and a sources_conflict box ignored), got %+v", ev)
 	}
 	want := []struct {
 		path  string

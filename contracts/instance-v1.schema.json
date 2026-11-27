@@ -620,6 +620,10 @@
                 "max"
               ],
               "description": "effort of agentic requests; unset (default) = the model's own default, which the agentic design was evaluated with. ai.judge.effort applies to snippet mode only."
+            },
+            "rubric": {
+              "type": "boolean",
+              "description": "opt in to the judging rubric and the sources_conflict status (prompt docsp-agentic/4, not evaluated with a paid run); false (default) keeps the evaluated docsp-agentic/3 prompt byte for byte"
             }
           }
         }

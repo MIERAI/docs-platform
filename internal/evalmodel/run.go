@@ -111,7 +111,7 @@ func Run(ctx context.Context, o Options) *Result {
 	items := selectItems(o)
 	res.Items = make([]ItemResult, len(items))
 	if o.Agentic != nil && o.Task == TaskJudge {
-		res.Mode, res.Group, res.PromptTemplateHash = "agentic", o.Agentic.Settings.Group, agentic.TemplateHash()
+		res.Mode, res.Group, res.PromptTemplateHash = "agentic", o.Agentic.Settings.Group, agentic.TemplateHashFor(o.Agentic.Settings)
 		if res.Group == "" {
 			res.Group = agentic.GroupLine
 		}

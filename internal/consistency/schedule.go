@@ -45,6 +45,9 @@ type Input struct {
 	Policy instance.Consistency
 	State  *State
 	Now    time.Time
+	// Skip keeps claims out of the plan (the repository's audit.skip filter applied to the
+	// ledger's claims): it returns the reason, "" = plan the claim. nil = skip nothing.
+	Skip func(path, text string) string
 }
 
 // Pick is one claim chosen for re-judgment.
@@ -86,6 +89,8 @@ type Schedule struct {
 	Picked    []Pick   `json:"picked"`
 	// Shortfall lists required claims the budget left out (freshness will drop).
 	Shortfall []Pick `json:"shortfall,omitempty"`
+	// Skipped counts the ledger's claims the audit.skip filter kept out of the plan, by reason.
+	Skipped map[string]int `json:"skipped,omitempty"`
 }
 
 // candidate is a claim with everything the plan needs.
@@ -110,10 +115,22 @@ func Plan(ctx context.Context, in Input) (*Schedule, error) {
 	}
 	cl := newClassifier(ctx, in.Dir, rep.Ref, p, in.Now)
 	var cands []candidate
+	skipped := map[string]int{}
 	for _, s := range rep.Claims {
-		cands = append(cands, assess(ctx, in, p, cl, byID[s.ID], s))
+		c := byID[s.ID]
+		if in.Skip != nil {
+			if r := in.Skip(c.Path, c.Text); r != "" {
+				skipped[r]++
+				continue
+			}
+		}
+		cands = append(cands, assess(ctx, in, p, cl, c, s))
 	}
-	return choose(rep.Repo, rep.Ref, in.Now, p, cands), nil
+	sch := choose(rep.Repo, rep.Ref, in.Now, p, cands)
+	if len(skipped) > 0 {
+		sch.Skipped = skipped
+	}
+	return sch, nil
 }
 
 // assess classifies one claim and decides whether (and why) it is due.

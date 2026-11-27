@@ -169,6 +169,32 @@
           "type": "integer",
           "minimum": 1,
           "description": "later commits to a claim's code that make it stale (default 2)"
+        },
+        "skip": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Claims not put to the judge (each skip is counted by reason). Every field defaults to on.",
+          "properties": {
+            "historical": {
+              "type": "boolean",
+              "description": "sentences about the past: previously, used to, was deprecated, before vX, 以前, 曾经, 已废弃, 以前は, 廃止された (default true)"
+            },
+            "changelogs": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "globs of changelog-type documents; without '/' a file name in any directory, case-insensitive (default: CHANGELOG*, CHANGES.md, HISTORY*, NEWS.md, release notes, docs/**/changelog*, docs/**/releases/**; [] = none)"
+            },
+            "tests": {
+              "type": "boolean",
+              "description": "comments in test files and claims that name only test files (default true)"
+            },
+            "private_symbols": {
+              "type": "boolean",
+              "description": "comments on unexported / private declarations and claims that name only such symbols (default true)"
+            }
+          }
         }
       }
     }

@@ -6,6 +6,38 @@ Direction (approved): keep docs consistent with code over time, not once - remov
 "phantom inventory" with retail inventory control (record accuracy, cycle counting, ABC).
 Design: docs/design.md §12; plan: docs/backlog.md.
 
+### Noise control (roadmap step 3)
+- **Claim filters** before judging (`.docsp.yaml` `audit.skip`, all on by default): historical
+  sentences (previously, used to, was deprecated, before vX, 以前, 曾经, 已废弃, 以前は,
+  廃止された), changelog-type documents (CHANGELOG*, HISTORY*, release notes,
+  docs/**/changelog*), comments in test files and claims naming only test files, comments on
+  unexported/private declarations and claims naming only private symbols. Skips are counted by
+  reason (`docsp audit` summary; `skipped` in schedule/v1, where the filter also keeps existing
+  ledger claims out of re-judgment).
+- **Prompt `docsp-agentic/4`, opt-in** (`ai.judge.agentic.rubric: true`): the evaluated
+  `docsp-agentic/3` text plus a four-rule judging rubric and the status `sources_conflict`.
+  It was not evaluated with a paid run, so it is off by default: the default prompt stays
+  `docsp-agentic/3` byte for byte (template hash `5f6ad97cd5674d02`, pinned by a test), the
+  offline replay and `bench/data/expected-offline.json` are unchanged, and prompt hashes of
+  existing ledgers stay what they were. With the rubric on, new judgments carry the /4 prompt
+  hash; ledgers stay readable either way. The drift prompt and its cache key never change.
+- **`sources_conflict`** (with the rubric on): when the places that decide a fact disagree
+  with each other (validated quotes from two places), the line is not judged against an
+  ambiguous truth; it is reported as `agentic_sources_conflict`, in its own section of the PR
+  comment (with its own question), as an immediate finding in report/v1, and not as a wrong
+  document: it is not `agentic.IsProblem`, so the outcome stream neither reports it nor counts
+  ticks on it toward precision.
+- **PR check**: the `skip-label` input (default `docsp:skip`) skips the check; at most
+  `max-problems` (10) problems per comment, the rest counted with a link to the job summary,
+  which lists all of them; warning annotations on the problem lines; `conclusion` neutral by
+  default (`failure` fails the step when the PR introduces problems); a run that did not finish
+  (budget shortfall, judge failures, partial recheck, a failed step) says "incomplete: this
+  does not mean everything is fine" in the comment and the summary instead of staying silent.
+- **Comment language**: the `language` input and `-language` flag (zh default, en, ja) for the
+  pr-review and factory-pr comments; the tick-box and signature markers are identical in every
+  language, so read-back works across a language switch (a complete zh comment keeps its old
+  signature).
+
 ### Changed
 - `make lint` and `make vuln` build golangci-lint v2.15.0 and govulncheck v1.9.0 from
   source with `go run` (pinned, no binary download); the code base is gofumpt-formatted
@@ -36,6 +68,13 @@ Design: docs/design.md §12; plan: docs/backlog.md.
   judge), and its changed runnable examples pass in a docker sandbox (no network, read-only
   root, no capabilities, non-root, limits, timeout; skipped, never run on the host, without
   docker). Drafts log entries record `doc_blob`; `draft apply` refuses a moved document.
+- **Rules stage before the model** (`internal/rulejudge`, "deterministic first"): typed Go
+  facts read with go/ast (flag defaults, exported constants, environment defaults, config
+  constructor defaults, HTTP routes) decide documentation lines that name exactly one of them
+  - `go_fact_mismatch` findings with a token-replacement draft, ledger claims with model
+  `rules/go-ast` - before any judge question; unclear lines go to the model unchanged.
+  `docsp recheck` and `docsp draft` use it too; `go test -v -run TestMeasureRulesShare
+  ./internal/rulejudge` measures the share it decides offline.
 - **Precision of docs-platform's own reports** (`docsp outcome`, outcome/v1, no model): an
   append-only stream of what happened to reported problems (reported, resolved and how,
   verdict flips on unchanged inputs, PR ticks, random-audit labels); `outcome report` gives

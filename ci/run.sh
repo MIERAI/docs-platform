@@ -12,8 +12,43 @@ MONTH="$(date -u +%Y-%m)"
 
 summary() { echo "$*" >>"$GITHUB_STEP_SUMMARY"; echo "$*"; }
 
+INCOMPLETE="incomplete: this does not mean everything is fine"
+
+# label_skip: the pull request carries the skip label (DOCSP_LABELS is the JSON array of its
+# label names; label names come from the event, never from a shell word).
+label_skip() {
+	[[ -n "${DOCSP_SKIP_LABEL:-}" && -n "${DOCSP_LABELS:-}" ]] || return 1
+	jq -e --arg l "$DOCSP_SKIP_LABEL" 'index($l) != null' <<<"$DOCSP_LABELS" >/dev/null 2>&1
+}
+
+# pr_outputs: the flags of what a PR check writes besides its comment.
+pr_outputs() {
+	PR_OUT=(-language "${DOCSP_LANGUAGE:-zh}" -max-problems "${DOCSP_MAX_PROBLEMS:-10}"
+		-summary-url "${GITHUB_SERVER_URL:-https://github.com}/$GITHUB_REPOSITORY/actions/runs/${GITHUB_RUN_ID:-0}"
+		-summary-out "$RUNNER_TEMP/docsp-summary.md" -annotations-out "$RUNNER_TEMP/docsp-annotations.txt")
+}
+
+# finish_pr: the full list into the job summary, a warning annotation on every problem line,
+# and the check's conclusion: neutral (the step passes) unless DOCSP_CONCLUSION is failure.
+finish_pr() { # $1 = problems found
+	if [[ -s "$RUNNER_TEMP/docsp-summary.md" ]]; then
+		cat "$RUNNER_TEMP/docsp-summary.md" >>"$GITHUB_STEP_SUMMARY"
+	fi
+	if [[ -s "$RUNNER_TEMP/docsp-annotations.txt" ]]; then
+		cat "$RUNNER_TEMP/docsp-annotations.txt"
+	fi
+	if [[ "${DOCSP_CONCLUSION:-neutral}" == failure && "$1" -gt 0 ]]; then
+		summary "docs-platform: $1 problems and conclusion: failure: the check fails"
+		return 1
+	fi
+	return 0
+}
+
 budget() {
 	local ai=true cap
+	if [[ "$DOCSP_TASK" != main ]] && label_skip; then
+		ai=false; summary "docs-platform: the pull request has the label $DOCSP_SKIP_LABEL: not checked"
+	fi
 	if [[ "${DOCSP_HAS_TOKEN:-false}" != true ]]; then
 		ai=false; summary "docs-platform: no Claude token (a fork's PR gets none): deterministic only"
 	fi
@@ -137,8 +172,12 @@ main_task() {
 }
 
 pr_task() {
+	if label_skip; then
+		summary "docs-platform: the pull request has the label $DOCSP_SKIP_LABEL: not checked"
+		return 0
+	fi
 	if [[ "$DOCSP_FORK" == true || "$DOCSP_AI" != true ]]; then
-		summary "docs-platform: no AI for this PR"
+		summary "docs-platform: no AI for this PR: not checked ($INCOMPLETE)"
 		return 0
 	fi
 	if [[ ! -s "$L/ledger.json" ]]; then
@@ -147,24 +186,48 @@ pr_task() {
 	fi
 	instance "$DOCSP_RUN_CAP"
 	cp "$L/ledger.json" "$RUNNER_TEMP/after.json"
-	"$D" schedule -ledger "$RUNNER_TEMP/after.json" -instance-config "$INST" -repo-name "$NAME" \
-		-format none -out "$RUNNER_TEMP/schedule.json" .
-	# only what this change made stale (priority 0): due and quota claims are the default branch's business
-	jq '.picked |= map(select(.priority == 0))' "$RUNNER_TEMP/schedule.json" >"$RUNNER_TEMP/schedule-pr.json"
-	local n
-	n="$(jq '.picked | length' "$RUNNER_TEMP/schedule-pr.json")"
+	local n=0 incomplete="" args=()
+	if "$D" schedule -ledger "$RUNNER_TEMP/after.json" -instance-config "$INST" -repo-name "$NAME" \
+		-format none -out "$RUNNER_TEMP/schedule.json" .; then
+		# only what this change made stale (priority 0): due and quota claims are the default branch's business
+		jq '.picked |= map(select(.priority == 0))' "$RUNNER_TEMP/schedule.json" >"$RUNNER_TEMP/schedule-pr.json"
+		n="$(jq '.picked | length' "$RUNNER_TEMP/schedule-pr.json")"
+		args+=(-schedule "$RUNNER_TEMP/schedule-pr.json")
+	else
+		incomplete=aborted
+	fi
 	summary "docs-platform: $n claims made stale by this PR"
 	if [[ "$n" -gt 0 ]]; then
-		"$D" recheck -schedule "$RUNNER_TEMP/schedule-pr.json" -ledger "$RUNNER_TEMP/after.json" -instance-config "$INST" \
-			-repo-name "$NAME" -format text . | tail -1 | tee -a "$GITHUB_STEP_SUMMARY"
+		if ! "$D" recheck -schedule "$RUNNER_TEMP/schedule-pr.json" -ledger "$RUNNER_TEMP/after.json" -instance-config "$INST" \
+			-repo-name "$NAME" -format text -out "$RUNNER_TEMP/recheck.json" . | tail -1 | tee -a "$GITHUB_STEP_SUMMARY"; then
+			incomplete=aborted
+		fi
+		if [[ -s "$RUNNER_TEMP/recheck.json" ]]; then
+			args+=(-recheck "$RUNNER_TEMP/recheck.json")
+		else
+			incomplete=aborted
+		fi
 	fi
-	"$D" pr-comment -before "$L/ledger.json" -after "$RUNNER_TEMP/after.json" -repo-name "$NAME" \
-		-github-repo "$GITHUB_REPOSITORY" -post-pr "$DOCSP_PR" . | tee -a "$GITHUB_STEP_SUMMARY"
+	if [[ -n "$incomplete" ]]; then
+		summary "docs-platform: $INCOMPLETE (a step of the check failed)"
+	fi
+	pr_outputs
+	if ! "$D" pr-comment -before "$L/ledger.json" -after "$RUNNER_TEMP/after.json" -repo-name "$NAME" \
+		-github-repo "$GITHUB_REPOSITORY" -post-pr "$DOCSP_PR" -incomplete "$incomplete" -out "$RUNNER_TEMP/pr-review.json" \
+		${args[@]+"${args[@]}"} "${PR_OUT[@]}" . | tee -a "$GITHUB_STEP_SUMMARY"; then
+		summary "docs-platform: $INCOMPLETE (the PR comment could not be made)"
+		return 1
+	fi
+	finish_pr "$(jq '.problems | length' "$RUNNER_TEMP/pr-review.json")"
 }
 
 factory_pr_task() {
+	if label_skip; then
+		summary "docs-platform: the pull request has the label $DOCSP_SKIP_LABEL: not checked"
+		return 0
+	fi
 	if [[ "$DOCSP_FORK" == true || "$DOCSP_AI" != true ]]; then
-		summary "docs-platform: no AI for this PR"
+		summary "docs-platform: no AI for this PR: not checked ($INCOMPLETE)"
 		return 0
 	fi
 	# the project's go.mod may want a newer Go than the runner's (setup-go sets GOTOOLCHAIN=local)
@@ -175,9 +238,14 @@ factory_pr_task() {
 		return 0
 	fi
 	instance "$DOCSP_RUN_CAP"
-	"$D" factory-pr -base "$DOCSP_BASE" -factory-manifest "$RUNNER_TEMP/manifest.json" -instance-config "$INST" \
+	pr_outputs
+	if ! "$D" factory-pr -base "$DOCSP_BASE" -factory-manifest "$RUNNER_TEMP/manifest.json" -instance-config "$INST" \
 		-factory "$DOCSP_FACTORY" -repo-name "$NAME" -github-repo "$GITHUB_REPOSITORY" -post-pr "$DOCSP_PR" \
-		-out "$RUNNER_TEMP/factory-pr.json" . | tee -a "$GITHUB_STEP_SUMMARY"
+		-out "$RUNNER_TEMP/factory-pr.json" "${PR_OUT[@]}" . | tee -a "$GITHUB_STEP_SUMMARY"; then
+		summary "docs-platform: $INCOMPLETE (the factory review failed)"
+		return 1
+	fi
+	finish_pr "$(jq '[.rules[] | select(.category == "contradicted" or .category == "outdated_wording" or .category == "incomplete_list" or .category == "dangling_reference")] | length' "$RUNNER_TEMP/factory-pr.json")"
 }
 
 spend() {

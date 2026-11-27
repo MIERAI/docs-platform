@@ -13,7 +13,7 @@ import (
 // Severities of a reported finding.
 const (
 	// Immediate: contradicted and dangling_reference - the document says something false or
-	// points at nothing.
+	// points at nothing; sources_conflict - the code disagrees with itself about it.
 	Immediate = "immediate"
 	// Batched: outdated_wording and incomplete_list - true-ish but aged; collected and
 	// reported together every batch_days.
@@ -23,7 +23,7 @@ const (
 // severity of a claim category ("" = not a finding).
 func severity(cat string) string {
 	switch cat {
-	case "contradicted", "dangling_reference":
+	case "contradicted", "dangling_reference", "sources_conflict":
 		return Immediate
 	case "outdated_wording", "incomplete_list":
 		return Batched

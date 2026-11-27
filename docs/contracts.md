@@ -221,6 +221,8 @@ on, kept across re-judging: the files a generator's manifest says the claim gove
 `docsp factory-rules`). Repository groups add `target {repo, ref}` (the
 declared revision the claim was judged against; `verified_ref` is then that target's
 commit) and `doc_ref` (the document repository's commit).
+A `model` such as `rules/go-ast` (the prefix "rules" and a slash) marks a verdict of the rules
+stage, not of a model; its `prompt_hash` identifies the rules' version.
 
 stale/v1 (`contracts/stale-v1.schema.json`): one repository at one revision - `counts` and
 `claims[{id, repo, path, line, category, status: fresh|stale|recheck, reasons[{kind, path,
@@ -250,6 +252,14 @@ ref}]` on fresh claims; `docsp recheck` writes them back to the ledger (verdict 
 the head that are problems now and were not in the default branch's ledger (`before`: their
 category there, "" = absent) - and `feedback[]` (as factory-pr/v1). Every judge also appends
 `<provider:model> <usd>` to the file `DOCSP_SPEND_LOG` names when it closes.
+1.1 (additive): `category` may be `sources_conflict` (the code disagrees with itself; not
+judged against either side) and `incomplete[]` lists why the run did not finish (`budget`,
+`judge_failures`, `partial`, `aborted`). factory-pr/v1 gains the same `incomplete[]`. The
+ledger/v1 and report/v1 category enums gain `sources_conflict`; schedule/v1 gains `skipped`
+(the ledger's claims the repository's `audit.skip` kept out of the plan, by reason); config/v1
+gains `audit.skip`; instance/v1 gains `ai.judge.agentic.rubric` (opt-in prompt
+`docsp-agentic/4`, default off; `sources_conflict` only occurs with it on). Ledgers written before stay
+readable: every addition is optional.
 
 ## factory-pr/v1 and rulecover/v1 (API factory projects)
 

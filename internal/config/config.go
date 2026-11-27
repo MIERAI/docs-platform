@@ -17,6 +17,7 @@ import (
 	"go.yaml.in/yaml/v3"
 
 	"github.com/MIERAI/docs-platform/internal/model"
+	"github.com/MIERAI/docs-platform/internal/semantic/claim"
 )
 
 // FileName is the configuration file looked up at the repository root.
@@ -49,6 +50,33 @@ type Audit struct {
 	// AI is rejected: providers, models and budgets belong to the instance configuration
 	// (docs-platform/instance/v1), never to a repository.
 	AI any `yaml:"ai"`
+	// Skip keeps noise away from the judge: claims it matches are not judged, and each skip
+	// is counted by reason.
+	Skip Skip `yaml:"skip"`
+}
+
+// Skip selects the claims not put to the judge. Every field defaults to on.
+type Skip struct {
+	// Historical: sentences about the past ("previously", "used to", "before v2", 以前, 曾经,
+	// 已废弃, 以前は, 廃止された).
+	Historical *bool `yaml:"historical"`
+	// Changelogs: changelog-type documents (globs; unset = claim.DefaultChangelogs, [] = none).
+	Changelogs []string `yaml:"changelogs"`
+	// Tests: comments in test files and claims that name only test files.
+	Tests *bool `yaml:"tests"`
+	// PrivateSymbols: comments on unexported / private declarations and claims that name only
+	// such symbols.
+	PrivateSymbols *bool `yaml:"private_symbols"`
+}
+
+// Filter is the claim filter the configuration selects.
+func (s Skip) Filter() claim.Filter {
+	on := func(b *bool) bool { return b == nil || *b }
+	f := claim.Filter{Historical: on(s.Historical), Changelogs: s.Changelogs, Tests: on(s.Tests), Private: on(s.PrivateSymbols)}
+	if s.Changelogs == nil {
+		f.Changelogs = claim.DefaultChangelogs
+	}
+	return f
 }
 
 // Extractors enables/disables plugins and declares external ones.
@@ -192,6 +220,7 @@ func (c *Config) validateGlobs() []error {
 	check("docs", c.Docs)
 	check("exclude", c.Exclude)
 	check("public_config", c.PublicConfig)
+	check("audit.skip.changelogs", c.Audit.Skip.Changelogs)
 	for i, r := range c.Impact.Rules {
 		if len(r.Code) == 0 || len(r.Docs) == 0 {
 			errs = append(errs, fmt.Errorf("impact.rules[%d]: code and docs are required", i))
