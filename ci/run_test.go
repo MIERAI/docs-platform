@@ -160,7 +160,7 @@ func TestBudgetReservesOtherRunsInProgress(t *testing.T) {
 		if err := os.MkdirAll(filepath.Join(tmp, "bin"), 0o750); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(filepath.Join(tmp, "bin", "gh"), []byte(fakeGh), 0o700); err != nil { //nolint:gosec // G306: an executable stub
+		if err := os.WriteFile(filepath.Join(tmp, "bin", "gh"), []byte(fakeGh), 0o700); err != nil {
 			t.Fatal(err)
 		}
 		cmd := exec.Command("bash", "run.sh", "budget")
