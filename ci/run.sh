@@ -44,6 +44,24 @@ finish_pr() { # $1 = problems found
 	return 0
 }
 
+# reserved_usd: what the other runs of this workflow still in progress may spend - each is
+# counted at its task's default cap (push/schedule: the main cap, else the PR cap). A run's
+# spend is recorded only when it ends, so without this concurrent runs (several PRs pushed
+# at once) each see the whole remainder and together overrun the month. Runs that start at
+# the same moment see each other, so the error is towards spending less, never more.
+reserved_usd() {
+	local wf="${GITHUB_WORKFLOW_REF:-}" main_cap=3 pr_cap=1
+	wf="${wf#*/.github/workflows/}"
+	wf="${wf%%@*}"
+	[[ -n "$wf" ]] || { echo 0; return 0; }
+	[[ -n "${DOCSP_RUN_USD:-}" ]] && main_cap="$DOCSP_RUN_USD" && pr_cap="$DOCSP_RUN_USD"
+	local st
+	for st in in_progress queued; do
+		gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$wf/runs?status=$st&per_page=100" \
+			--jq ".workflow_runs[] | select(.id != ${GITHUB_RUN_ID:-0}) | .event" 2>/dev/null || true
+	done | awk -v m="$main_cap" -v p="$pr_cap" 'NF {s += ($1 == "push" || $1 == "schedule" || $1 == "workflow_dispatch") ? m : p} END {printf "%.4f", s + 0}'
+}
+
 budget() {
 	local ai=true cap
 	if [[ "$DOCSP_TASK" != main ]] && label_skip; then
@@ -61,8 +79,12 @@ budget() {
 		awk -F- '{s += $5} END {printf "%.4f", s + 0}')"
 	case "$DOCSP_TASK" in main) cap=3 ;; *) cap=1 ;; esac
 	[[ -n "${DOCSP_RUN_USD:-}" ]] && cap="$DOCSP_RUN_USD"
-	local left
-	left="$(awk -v m="$DOCSP_MONTHLY" -v s="$spent" 'BEGIN {printf "%.4f", m - s}')"
+	local left reserved
+	reserved="$(reserved_usd)"
+	left="$(awk -v m="$DOCSP_MONTHLY" -v s="$spent" -v r="$reserved" 'BEGIN {printf "%.4f", m - s - r}')"
+	if awk -v r="$reserved" 'BEGIN {exit !(r > 0)}'; then
+		summary "docs-platform: \$$reserved reserved for other runs of this workflow in progress"
+	fi
 	cap="$(awk -v c="$cap" -v l="$left" 'BEGIN {printf "%.4f", (c < l ? c : l)}')"
 	if awk -v l="$left" 'BEGIN {exit !(l < 0.05)}'; then
 		ai=false; summary "docs-platform: the monthly AI budget (\$$DOCSP_MONTHLY) is spent (\$$spent in $MONTH): no AI until next month"

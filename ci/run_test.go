@@ -139,3 +139,56 @@ func TestIncompleteRunSaysSo(t *testing.T) {
 		t.Errorf("no AI: %+v", r)
 	}
 }
+
+// fakeGh answers the two queries of the budget step with their --jq already applied: this
+// month's spend artifacts ($14 spent) and the other runs of the workflow in progress.
+const fakeGh = `#!/usr/bin/env bash
+case "$*" in
+*actions/artifacts*) echo "docsp-usd-$(date -u +%Y-%m)-14.0000-pr-1-1" ;;
+*status=in_progress*) printf '%s\n' ${FAKE_RUNNING:-} ;;
+esac
+`
+
+func TestBudgetReservesOtherRunsInProgress(t *testing.T) {
+	for _, p := range []string{"bash", "jq"} {
+		if _, err := exec.LookPath(p); err != nil {
+			t.Skipf("%s not installed", p)
+		}
+	}
+	budget := func(running string) string {
+		tmp := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(tmp, "bin"), 0o750); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(tmp, "bin", "gh"), []byte(fakeGh), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		cmd := exec.Command("bash", "run.sh", "budget")
+		cmd.Env = []string{
+			"PATH=" + filepath.Join(tmp, "bin") + ":" + os.Getenv("PATH"), "HOME=" + tmp,
+			"RUNNER_TEMP=" + tmp, "GITHUB_STEP_SUMMARY=" + filepath.Join(tmp, "summary.md"), "GITHUB_OUTPUT=" + filepath.Join(tmp, "out"),
+			"GITHUB_REPOSITORY=o/r", "GITHUB_RUN_ID=42", "GITHUB_WORKFLOW_REF=o/r/.github/workflows/docs.yml@refs/heads/main",
+			"DOCSP_TASK=pr", "DOCSP_HAS_TOKEN=true", "DOCSP_MONTHLY=20", "FAKE_RUNNING=" + running,
+		}
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("%v: %s", err, out)
+		}
+		b, err := os.ReadFile(filepath.Join(tmp, "out"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(b)
+	}
+	// $6 left, nothing else running: this run may spend its $1 cap.
+	if got := budget(""); !strings.Contains(got, "ai=true") || !strings.Contains(got, "run_cap=1.0000") || !strings.Contains(got, "left=6.0000") {
+		t.Errorf("alone: %s", got)
+	}
+	// two PR runs ($1 each) and a push run ($3) in progress: $1 left, still within the cap.
+	if got := budget("pull_request pull_request push"); !strings.Contains(got, "left=1.0000") || !strings.Contains(got, "ai=true") {
+		t.Errorf("with others: %s", got)
+	}
+	// three push runs ($9) in progress: nothing left for this one.
+	if got := budget("push push push"); !strings.Contains(got, "ai=false") {
+		t.Errorf("budget taken by others: %s", got)
+	}
+}
