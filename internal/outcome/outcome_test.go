@@ -303,7 +303,7 @@ func TestReport(t *testing.T) {
 		Event{Repo: "a", ClaimID: "r3", Kind: KindRejudged, How: HowStable},
 		Event{Repo: "a", ClaimID: "r4", Kind: KindRejudged, How: HowStable},
 	)
-	r := Report(ev, 0)
+	r := Report(ev, 0, 0)
 	if r.Target != DefaultTarget || len(r.Repos) != 3 {
 		t.Fatalf("report: %+v", r)
 	}
@@ -330,7 +330,7 @@ func TestReport(t *testing.T) {
 	if a.Reported != 2 || a.Open != 1 || a.Resolved[HowFlip] != 1 || a.Flips != 2 || a.Rejudged != 4 {
 		t.Fatalf("a outcomes: %+v", a)
 	}
-	if v := *a.FlipRate.Value; v != 0.5 || a.FlipRate.Met || math.Abs(a.FlipRate.Target-0.2) > 1e-9 {
+	if v := *a.FlipRate.Value; v != 0.5 || a.FlipRate.Met || math.Abs(a.FlipRate.Target-DefaultMaxFlipRate) > 1e-9 {
 		t.Fatalf("flip rate: %+v", a.FlipRate)
 	}
 	if r.Total.Precision.N != 37 || r.Total.Precision.Bad != 11 {
@@ -353,8 +353,8 @@ func TestReport(t *testing.T) {
 }
 
 func TestReportEmpty(t *testing.T) {
-	r := Report(nil, 0.9)
-	if r.Total.Precision.Value != nil || r.Total.Budget != nil || r.Total.FlipRate.Value != nil || r.Target != 0.9 {
+	r := Report(nil, 0.9, 0.05)
+	if r.Total.Precision.Value != nil || r.Total.Budget != nil || r.Total.FlipRate.Value != nil || r.Target != 0.9 || r.MaxFlipRate != 0.05 {
 		t.Fatalf("empty: %+v", r.Total)
 	}
 }

@@ -293,7 +293,7 @@ confirm (absence searches, bare file names, other repositories) counts as change
 recorded once per pull request, line, option and category; an audit label once per claim and
 label; a later label of the same subject replaces an earlier one in the report.
 
-The report (`docsp outcome report -format json`): `target`, `events`, `total` and `repos[]` of
+The report (`docsp outcome report -format json`): `target`, `max_flip_rate`, `events`, `total` and `repos[]` of
 `{repo, reported, open, resolved {how: n}, flips, rejudged_unchanged, labels {source: {tp, fp,
 skip}}, precision, flip_rate, error_budget}` - `precision` and `flip_rate` in slo/v1's SLI
 shape, `error_budget` as slo/v1's (only with 10 or more audit labels).

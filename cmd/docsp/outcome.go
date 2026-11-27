@@ -237,6 +237,7 @@ func cmdOutcomeLabel(_ context.Context, args []string, stdout, stderr io.Writer)
 func cmdOutcomeReport(_ context.Context, args []string, stdout, stderr io.Writer) (int, error) {
 	fs, stream := newOutcomeFlags("report", stderr)
 	target := fs.Float64("target", outcome.DefaultTarget, "precision objective")
+	maxFlip := fs.Float64("max-flip-rate", outcome.DefaultMaxFlipRate, "flip-rate objective (at most)")
 	format := fs.String("format", "text", "text, json or markdown")
 	if err := fs.Parse(args); err != nil {
 		return flagErr(err)
@@ -248,7 +249,7 @@ func cmdOutcomeReport(_ context.Context, args []string, stdout, stderr io.Writer
 	if err != nil {
 		return exitUsage, err //nolint:wrapcheck // already descriptive
 	}
-	r := outcome.Report(ev, *target)
+	r := outcome.Report(ev, *target, *maxFlip)
 	switch *format {
 	case "text":
 		r.Text(stdout)
