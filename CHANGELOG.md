@@ -12,6 +12,13 @@ Design: docs/design.md §12; plan: docs/backlog.md.
   and passes the configured linters (behaviour unchanged).
 
 ### Added
+- **Precision of docs-platform's own reports** (`docsp outcome`, outcome/v1, no model): an
+  append-only stream of what happened to reported problems (reported, resolved and how,
+  verdict flips on unchanged inputs, PR ticks, random-audit labels); `outcome report` gives
+  the precision SLI from the random audit only (Wilson 95%, error budget once 10 are
+  labelled) and the flip rate, with PR ticks and edited lines shown as biased supporting
+  signals. The CI action's `main` task appends to it every run and keeps it with the ledger
+  and as a 90-day artifact.
 - **Contract layer** (`docsp contract`, contract/v1, docs/design.md §13): design-first specs
   vs the code that implements them, without a model. Adapters: `factory-design` /
   `factory-code` (a design-first generator's design language vs its escape hatches: SQL

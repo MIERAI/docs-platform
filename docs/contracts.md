@@ -20,6 +20,7 @@ docs-platform parts are coupled only through versioned, language-neutral JSON Sc
 | instance/v1 | `contracts/instance-v1.schema.json` | the operator's instance configuration → `docsp` |
 | eval/v1 | `contracts/eval-v1.schema.json` | `docsp eval-model` → stored results, comparison over time |
 | contract/v1 | `contracts/contract-v1.schema.json` | `docsp contract` → reviewers, a findings importer, dashboards (design/code surfaces, mismatch items, direction from history) |
+| outcome/v1 | `contracts/outcome-v1.schema.json` | `docsp outcome diff/ticks/label` → `docsp outcome report` (precision of docs-platform's own problem reports) |
 
 ## findings/v1
 
@@ -276,6 +277,26 @@ slo/v1: `accuracy`, `freshness`, `phantom_rate` as `{value, target, n, bad, met,
 note}`; `error_budget {allowed, used, remaining, burned}`; `by_doc[]`; `actions[{path,
 action: full_reaudit, max_age_days, why}]`; `cost {sample_usd, sample_billing,
 scheduled_usd_estimate, scheduled_claims}`.
+
+## outcome/v1 (`docsp outcome`)
+
+An append-only JSON Lines stream, one event per line (private data, mode 0600): `{schema_version,
+at, repo, claim_id, path, line, text, category, kind, how, label, source, ref, pr, option,
+note}`. `kind`: `reported` (`how`: `new`, `code_changed`, `flip`), `resolved` (`code_changed`,
+`flip`, `doc_removed`, `doc_edited`, `dropped`; `category` is the problem that was resolved),
+`rejudged` (`stable`: judged again on unchanged inputs, the flip rate's denominator), `human`
+(a PR tick: `pr`, `option`), `audit` (a random-audit label, `note`). `label`: `tp`, `fp`,
+`skip`; `source`: `audit` (the only source of the precision SLI), `pr_tick`, `proxy` (a
+reported line edited afterwards; both self-selected). A flip is a change between problem and
+no problem while the line and every evidence blob are unchanged; evidence that blobs cannot
+confirm (absence searches, bare file names, other repositories) counts as changed. A tick is
+recorded once per pull request, line, option and category; an audit label once per claim and
+label; a later label of the same subject replaces an earlier one in the report.
+
+The report (`docsp outcome report -format json`): `target`, `events`, `total` and `repos[]` of
+`{repo, reported, open, resolved {how: n}, flips, rejudged_unchanged, labels {source: {tp, fp,
+skip}}, precision, flip_rate, error_budget}` - `precision` and `flip_rate` in slo/v1's SLI
+shape, `error_budget` as slo/v1's (only with 10 or more audit labels).
 
 ## report/v1
 

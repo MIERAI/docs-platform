@@ -13,6 +13,8 @@
 //	                                    design-first spec vs code (contract/v1; no model)
 //	docsp stale -ledger FILE [-ref REV] [repo]
 //	                                    claims whose evidence changed (no model)
+//	docsp outcome diff|ticks|sample|label|report [flags]
+//	                                    precision of its own problem reports (outcome/v1; no model)
 //	docsp judge-tools-mcp -spec FILE    (internal) serve the read-only judge-tools over MCP stdio
 //	docsp version
 package main
@@ -61,6 +63,7 @@ var commands = map[string]command{
 	"report":           cmdReport,
 	"draft":            cmdDraft,
 	"drafts":           cmdDrafts,
+	"outcome":          cmdOutcome,
 	"import-findings": func(_ context.Context, a []string, out, errw io.Writer) (int, error) {
 		return cmdImportFindings(a, out, errw)
 	},
@@ -112,6 +115,7 @@ commands:
   report     validated problems for people: contradicted/dangling at once, the rest in batches; never fails
   draft      minimal-diff fix proposals for the ledger's problems (checked, logged, never applied)
   drafts     what became of the drafts: acceptance, revert rate, diff size; docs to generate or link instead
+  outcome    precision of docs-platform's own problem reports: diff, ticks, sample, label, report (no model)
   group      repository groups: plan (doc sets, declared targets, shared drift scans), stale, judge
   contract   design-first specs vs the code: interface diff + which side moved (git history; no model)
   factory-rules

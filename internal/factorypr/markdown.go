@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/MIERAI/docs-platform/internal/agentic"
 	"github.com/MIERAI/docs-platform/internal/factorytry"
 )
 
@@ -50,7 +51,7 @@ func (r *Report) MarkdownWith(ticked map[string]bool) string {
 	fmt.Fprintf(&b, "%s\n%s%s -->\n**docs-platform**:这个 PR 让 **%d 条设计书规则**和代码不一致了。\n", Marker, sigPrefix, r.Signature(), n)
 	shown := map[string]string{} // patch -> the rule it was shown under
 	for _, x := range r.Rules {
-		if problem[x.Category] {
+		if agentic.IsProblem(x.Category) {
 			r.writeProblem(&b, x, ticked, shown)
 		}
 	}
@@ -107,7 +108,7 @@ func (r *Report) writeProblem(b *strings.Builder, x Rule, ticked map[string]bool
 func (r *Report) writeRest(b *strings.Builder) {
 	var rest []Rule
 	for _, x := range r.Rules {
-		if !problem[x.Category] {
+		if !agentic.IsProblem(x.Category) {
 			rest = append(rest, x)
 		}
 	}

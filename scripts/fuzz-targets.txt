@@ -34,3 +34,5 @@
 ./internal/contract FuzzParseKotlin
 ./internal/contract FuzzLogicOps
 ./internal/contract FuzzFactoryDesign
+./internal/outcome FuzzRead
+./internal/outcome FuzzLabelsFromCSV

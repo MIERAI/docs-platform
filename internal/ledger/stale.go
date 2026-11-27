@@ -151,6 +151,10 @@ func findLine(text, want string, hint int) int {
 	return best
 }
 
+// FindLine is findLine for other packages: whether (and where) a claim's line is still in a
+// document - the same test that retires a claim, so an outcome agrees with the recheck.
+func FindLine(text, want string, hint int) int { return findLine(text, want, hint) }
+
 func abs(x int) int {
 	if x < 0 {
 		return -x
