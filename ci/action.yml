@@ -20,7 +20,7 @@ inputs:
     default: claude-sonnet-5-5
   monthly-usd:
     description: AI budget of the repository per calendar month (all tasks together)
-    default: "20"
+    default: "25"
   run-usd:
     description: cap of one run (default per task - main 3, pr 1, factory-pr 1)
     default: ""
