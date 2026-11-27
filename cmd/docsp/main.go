@@ -16,7 +16,9 @@
 //	docsp init [-dry-run] [repo]       propose a .docsp.yaml (every guess with its reason)
 //	docsp doctor [flags] [repo]         offline self-check of the first CI run
 //	docsp related -base REF [repo]      doc sections a change is about (no ledger, no model)
-//	docsp judge-tools-mcp -spec FILE   (internal) serve the read-only judge-tools over MCP stdio
+//	docsp outcome diff|ticks|sample|label|report [flags]
+//	                                    precision of its own problem reports (outcome/v1; no model)
+//	docsp judge-tools-mcp -spec FILE    (internal) serve the read-only judge-tools over MCP stdio
 //	docsp version
 package main
 
@@ -67,6 +69,7 @@ var commands = map[string]command{
 	"related":          cmdRelated,
 	"init":             cmdInit,
 	"doctor":           cmdDoctor,
+	"outcome":          cmdOutcome,
 	"import-findings": func(_ context.Context, a []string, out, errw io.Writer) (int, error) {
 		return cmdImportFindings(a, out, errw)
 	},
@@ -121,6 +124,7 @@ commands:
   report     validated problems for people: contradicted/dangling at once, the rest in batches; never fails
   draft      minimal-diff fix proposals for the ledger's problems (checked, logged, never applied)
   drafts     what became of the drafts: acceptance, revert rate, diff size; docs to generate or link instead
+  outcome    precision of docs-platform's own problem reports: diff, ticks, sample, label, report (no model)
   group      repository groups: plan (doc sets, declared targets, shared drift scans), stale, judge
   contract   design-first specs vs the code: interface diff + which side moved (git history; no model)
   factory-rules

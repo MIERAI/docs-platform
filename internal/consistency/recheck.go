@@ -4,6 +4,7 @@ import (
 	"context"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/MIERAI/docs-platform/internal/agentic"
 	"github.com/MIERAI/docs-platform/internal/ledger"
@@ -18,6 +19,9 @@ type RecheckResult struct {
 	// Done lists documents all of whose picked claims were judged (a pending full re-audit
 	// of them is complete when every claim of the document was picked).
 	Done []string `json:"documents_done"`
+	// Reanchored counts quotes re-anchored without judging (their files changed outside the
+	// claims' scopes).
+	Reanchored int `json:"reanchored,omitempty"`
 }
 
 // Recheck judges the picked claims again (grouped by document), merges the new claims
@@ -67,4 +71,15 @@ func Recheck(ctx context.Context, run *agentic.Runner, b *ledger.Builder, l *led
 		}
 	}
 	return res
+}
+
+// Reanchor re-anchors, in the ledger, the quotes of fresh claims whose files changed outside
+// the claims' scopes (new line, blob and scope at ref; the verdicts are carried forward) and
+// returns how many moved. Nothing is judged; a failed check re-anchors nothing.
+func Reanchor(ctx context.Context, l *ledger.Ledger, dir, repoName, ref string) int {
+	rep, err := ledger.Check(ctx, l, dir, repoName, ref, time.Now())
+	if err != nil {
+		return 0
+	}
+	return l.Reanchor(rep)
 }

@@ -10,8 +10,8 @@ import (
 	"github.com/MIERAI/docs-platform/internal/judge"
 )
 
-// StaleSchemaVersion of docs-platform/stale/v1.
-const StaleSchemaVersion = "1.0"
+// StaleSchemaVersion of docs-platform/stale/v1 (1.1: carried_forward).
+const StaleSchemaVersion = "1.1"
 
 // Statuses of a claim against a newer revision.
 const (
@@ -56,6 +56,9 @@ type ClaimStatus struct {
 	NewLine     int     `json:"new_line,omitempty"`
 	VerifiedRef string  `json:"verified_ref"`
 	Target      *Target `json:"target,omitempty"`
+	// Carried (1.1) are the quotes of a fresh claim whose files changed outside the claim's
+	// scope: the verdict is carried forward, the quotes re-anchored (Ledger.Reanchor).
+	Carried []Carry `json:"carried_forward,omitempty"`
 }
 
 // Invalidate decides one claim from the paths changed since its verified revision (one
@@ -77,8 +80,14 @@ func InvalidateWith(c *Claim, docCh, ch *Changes, doc func(string) (string, bool
 	s := ClaimStatus{ID: c.ID, Repo: c.Repo, Path: c.Path, Line: c.Line, Category: c.Category, VerifiedRef: c.VerifiedRef, Target: c.Target}
 	var rs []Reason
 	rs = append(rs, docReasons(c, docCh, doc, &s)...)
+	var carried []Carry
+	enum := Enumerating(c)
 	for _, q := range c.Evidence.Quotes {
-		rs = append(rs, fileReason(ch, q.Path, ReasonEvidenceChanged)...)
+		qr, cr := quoteReasons(ch, q, enum)
+		rs = append(rs, qr...)
+		if cr != nil {
+			carried = append(carried, *cr)
+		}
 	}
 	for _, d := range c.Evidence.Drift {
 		for _, f := range d.Files {
@@ -109,7 +118,7 @@ func InvalidateWith(c *Claim, docCh, ch *Changes, doc func(string) (string, bool
 	case c.Evidence.Empty():
 		s.Status, s.Reasons = Recheck, []Reason{{Kind: ReasonNoEvidence, Detail: c.Category}}
 	default:
-		s.Status = Fresh
+		s.Status, s.Carried = Fresh, carried
 	}
 	return s
 }
@@ -150,6 +159,10 @@ func findLine(text, want string, hint int) int {
 	}
 	return best
 }
+
+// FindLine is findLine for other packages: whether (and where) a claim's line is still in a
+// document - the same test that retires a claim, so an outcome agrees with the recheck.
+func FindLine(text, want string, hint int) int { return findLine(text, want, hint) }
 
 func abs(x int) int {
 	if x < 0 {

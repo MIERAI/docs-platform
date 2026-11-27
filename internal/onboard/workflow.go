@@ -112,7 +112,7 @@ var needed = []struct {
 }{
 	{"contents", "read", "the checkout"},
 	{"pull-requests", "write", "the PR comment"},
-	{"actions", "read", "the monthly budget (summed from this month's spend artifacts)"},
+	{"actions", "read", "the monthly budget (summed from this month's spend artifacts) and the outcome stream (downloaded from the docsp-outcomes artifact)"},
 }
 
 func checkPermissions(rep *Report, where string, perms any) {

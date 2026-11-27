@@ -21,8 +21,9 @@ import (
 	"strings"
 )
 
-// SchemaVersion of docs-platform/ledger/v1.
-const SchemaVersion = "1.0"
+// SchemaVersion of docs-platform/ledger/v1 (1.1 adds quote scopes and carried-forward
+// quotes; 1.0 ledgers are read as they are).
+const SchemaVersion = "1.1"
 
 // maxLedgerBytes bounds a ledger file.
 const maxLedgerBytes = 256 << 20
@@ -113,6 +114,15 @@ type Quote struct {
 	Path string `json:"path"`
 	Line int    `json:"line"`
 	Blob string `json:"blob"`
+	// Scope (1.1) is the part of the file the claim depends on, at Blob: a change of the file
+	// outside it carries the verdict forward. A quote without one (older ledgers) is stale
+	// whenever its file changes.
+	Scope *QuoteScope `json:"scope,omitempty"`
+	// Carried and CarriedRef (1.1) mark a quote re-anchored without judging: the kind of the
+	// change it survived (evidence_moved, evidence_reformatted, evidence_outside_scope) and
+	// the revision Blob and Line now refer to.
+	Carried    string `json:"carried,omitempty"`
+	CarriedRef string `json:"carried_ref,omitempty"`
 }
 
 // Drift is a validated drift entry the claim cites.

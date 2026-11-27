@@ -126,7 +126,8 @@ per check, levels `ok`, `info`, `warn` and `fail`:
   passes on are set and `budget.max_usd` is set.
 - **workflow** (every `.github/workflows/*.yml` running `MIERAI/docs-platform/ci`): token
   permissions `contents: read`, `pull-requests: write` and `actions: read` (the monthly budget
-  is summed from spend artifacts); `actions/checkout` with `fetch-depth: 0`; a valid `task`; the
+  is summed from spend artifacts, the outcome stream is downloaded from the `docsp-outcomes`
+  artifact); `actions/checkout` with `fetch-depth: 0`; a valid `task`; the
   `claude-oauth-token` input; budget inputs (`monthly-usd`, `run-usd`, `bootstrap-usd`) are
   non-negative numbers with `run-usd` and `bootstrap-usd` within `monthly-usd`; triggers
   (PR only = ledger-less mode; push without a weekly schedule lets the ledger's cache expire).
@@ -383,6 +384,40 @@ consistency:
 
 The continuous loop never gates on "code changed, docs untouched"; `docsp impact`'s explicit
 rules stay opt-in.
+
+### How often is a reported problem real? `docsp outcome`
+
+`docsp slo` measures the documentation; `docsp outcome` measures docs-platform itself: the
+**precision** of its problem reports (`contradicted`, `outdated_wording`, `incomplete_list`,
+`dangling_reference`). No model runs. Every run appends events to a private, append-only JSON
+Lines stream (outcome/v1, mode 0600):
+
+- `docsp outcome diff -before L -after L2 -repo-name N -stream S [repo]`: what one run did,
+  given the ledger at its start and after the recheck - `reported` (new, or a verdict that
+  changed), `resolved` (`code_changed`, `doc_removed`, `doc_edited`, `dropped`), and
+  `rejudged` (judged again on unchanged inputs, verdict held). A verdict that changes while the
+  line and every evidence blob it cites are unchanged is a **flip** (`how: flip`): one of the
+  two verdicts is wrong. A reported line someone edited afterwards is labelled a true positive
+  by proxy (`doc_edited`).
+- `docsp outcome ticks -github-repo R -pr N -ref SHA -repo-name N -stream S [-ledger L]`: the
+  boxes ticked in the PR review comment (`design_stale` / `code_wrong` = the report was right,
+  `not_a_problem` = a false positive); reading the same comment again appends nothing.
+- `docsp outcome sample -ledger L -stream S -n 20 -seed S -github-repo R -out audit.csv [repo]`:
+  a uniform, seeded sample of the open problem claims not audited yet, as a sheet a person
+  judges in about a minute per row (document link and line, category, facts, up to three code
+  lines with links, model); fill `human_verdict` with `tp`, `fp` or `skip`.
+- `docsp outcome label -csv audit.csv -stream S`: imports the filled sheet (idempotent).
+- `docsp outcome report -stream S [-target 0.8] [-format text|json|markdown]`: per repository
+  and in total. **Precision** is computed only from the random audit (unbiased; Wilson 95%
+  bounds); the error budget (`1 - target`) is judged once 10 claims are labelled and burned
+  when the estimate is below the target. PR ticks and edited lines are shown beside it as
+  supporting signals and marked biased: people tick the reports they act on. The **flip rate**
+  (flips over judgements again on unchanged inputs) needs no person at all and is held to at
+  most 10% (`-max-flip-rate`): a flip is pure judge noise, so it gets a tighter objective.
+
+The CI action (`task: main`) runs `diff` after every recheck, `ticks` for the pull request a
+push merged, and adds the report to the job summary; the stream is kept with the ledger's
+cache and as the artifact `docsp-outcomes` (90 days), restored from it when the cache is gone.
 
 ### Repository groups: `docsp group plan|judge|stale`
 
@@ -814,6 +849,11 @@ jobs:
   <new>` judges them within `run-usd`, and `pr-comment` compares that with an empty ledger
   (every problem in those sections is reported). See *Quick start*.
 - `task: factory-pr`: `factory export` at the head, then `docsp factory-pr` (see above).
+- **Outcomes** (`task: main`, no model): `docsp outcome diff` after the recheck and `docsp
+  outcome ticks` for the pull request(s) a push merged append to `outcomes.jsonl` next to the
+  ledger; the precision report goes to the job summary, and the stream is also uploaded as the
+  artifact `docsp-outcomes` (90 days) so it survives a cache eviction. An outcome step never
+  fails the job.
 - **Budget**: every judge appends its spend to `DOCSP_SPEND_LOG`; the run records it as an
   artifact `docsp-usd-<YYYY-MM>-<usd>-<task>-<run>-<attempt>`, and the next run adds this month's
   up. Past `monthly-usd` (default 20) no paid model runs until next month; one run is capped by
