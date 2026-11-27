@@ -104,7 +104,8 @@ func (v *claimVerifier) verify(cl *ledger.Claim, c Change) Item {
 		it.Line, it.Detail = c.Old, "the draft deletes the "+cl.Category+" line; nothing is left to verify"
 		return it
 	}
-	if st, d := v.fresh(cl); st != Pass {
+	st, d, carried := v.fresh(cl)
+	if st != Pass {
 		it.Status, it.Detail = st, d
 		return it
 	}
@@ -113,7 +114,7 @@ func (v *claimVerifier) verify(cl *ledger.Claim, c Change) Item {
 		it.Status, it.Detail = NeedsModel, "the draft rewords prose ("+strings.Join(p, " ")+"): judging the new wording needs a model"
 		return it
 	}
-	ev, paths := v.evidence(cl)
+	ev, paths := v.evidence(cl, carried)
 	var facts []string
 	for _, t := range added {
 		if !isFact(t) {
@@ -130,19 +131,24 @@ func (v *claimVerifier) verify(cl *ledger.Claim, c Change) Item {
 		if len(facts) > 0 {
 			it.Detail = "every new fact (" + strings.Join(facts, " ") + ") is quoted verbatim in the claim's evidence"
 		}
+		if len(carried) > 0 {
+			it.Detail += " (evidence carried forward: its files changed outside the claim's scope)"
+		}
 	}
 	return it
 }
 
-// fresh: the claim's evidence is unchanged from its verified revision to the head (the
-// document itself is what the draft changes, so its own reasons do not count).
-func (v *claimVerifier) fresh(cl *ledger.Claim) (Status, string) {
+// fresh: the claim's evidence still holds at the head - by the ledger's own invalidation,
+// so a quote whose file changed only outside the claim's scope is carried forward (its new
+// line returned) rather than stale. The document itself is what the draft changes, so its
+// own reasons do not count.
+func (v *claimVerifier) fresh(cl *ledger.Claim) (Status, string, []ledger.Carry) {
 	if cl.Target != nil {
-		return NeedsModel, "the claim was judged against another repository (" + cl.Target.Repo + "@" + cl.Target.Ref + "): not re-verified here"
+		return NeedsModel, "the claim was judged against another repository (" + cl.Target.Repo + "@" + cl.Target.Ref + "): not re-verified here", nil
 	}
 	ch, err := ledger.Diff(v.ctx, v.in.Root, cl.VerifiedRef, v.head)
 	if err != nil {
-		return Error, err.Error()
+		return Error, err.Error(), nil
 	}
 	st := ledger.Invalidate(cl, ch, func(p string) (string, bool) { return ledger.FileAt(v.ctx, v.in.Root, v.head, p) })
 	var why []string
@@ -153,15 +159,17 @@ func (v *claimVerifier) fresh(cl *ledger.Claim) (Status, string) {
 	}
 	switch {
 	case len(why) > 0:
-		return NeedsModel, "the claim's evidence changed since it was judged (" + strings.Join(why, ", ") + "): judging it again needs a model"
+		return NeedsModel, "the claim's evidence changed since it was judged (" + strings.Join(why, ", ") + "): judging it again needs a model", nil
 	case cl.Evidence.Empty():
-		return NeedsModel, "the claim rests on no evidence (" + cl.Category + "): judging it needs a model"
+		return NeedsModel, "the claim rests on no evidence (" + cl.Category + "): judging it needs a model", nil
 	}
-	return Pass, ""
+	return Pass, "", st.Carried
 }
 
-// evidence is the text of the claim's quoted lines (±2) and the quoted files.
-func (v *claimVerifier) evidence(cl *ledger.Claim) (string, map[string]bool) {
+// evidence is the text of the claim's quoted lines (±2) at the head and the quoted files. A
+// quote's line is where it is now: the carried-forward line when its file changed outside
+// the claim's scope, else the ledger's (valid at the quote's blob, which the head still has).
+func (v *claimVerifier) evidence(cl *ledger.Claim, carried []ledger.Carry) (string, map[string]bool) {
 	paths := map[string]bool{}
 	for _, q := range cl.Evidence.Quotes {
 		paths[q.Path] = true
@@ -172,8 +180,21 @@ func (v *claimVerifier) evidence(cl *ledger.Claim) (string, map[string]bool) {
 		}
 	}
 	var b strings.Builder
-	for _, e := range draft.Evidence(v.ctx, v.in.Root, cl) {
-		b.WriteString(e.Text + "\n")
+	for _, q := range cl.Evidence.Quotes {
+		line := q.Line
+		for _, c := range carried {
+			if c.Path == q.Path && c.Line == q.Line {
+				line = c.NewLine
+			}
+		}
+		text, ok := ledger.FileAt(v.ctx, v.in.Root, v.head, q.Path)
+		if !ok {
+			continue
+		}
+		ls := strings.Split(text, "\n")
+		if from, to := max(1, line-2), min(len(ls), line+2); from <= to {
+			b.WriteString(strings.Join(ls[from-1:to], "\n") + "\n")
+		}
 	}
 	return b.String(), paths
 }

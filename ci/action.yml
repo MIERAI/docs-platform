@@ -91,6 +91,16 @@ runs:
       with:
         path: ${{ runner.temp }}/docsp-ledger
         key: docsp-ledger-${{ github.run_id }}-${{ github.run_attempt }}
+    - name: keep the outcome stream
+      # hashFiles() only sees the workspace: a run without a stream is skipped by if-no-files-found
+      if: always() && inputs.task == 'main'
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: docsp-outcomes
+        path: ${{ runner.temp }}/docsp-ledger/outcomes.jsonl
+        retention-days: 90
+        if-no-files-found: ignore
+        overwrite: true
     - name: spend
       id: spend
       if: always()

@@ -77,11 +77,16 @@ func idHash(id string) string {
 	return hex.EncodeToString(h[:])[:16]
 }
 
-// Evidence reads the claim's quoted lines (±2) at its evidence revision from dir.
+// Evidence reads the claim's quoted lines (±2) at its evidence revision from dir (for a
+// quote carried forward, the revision it was re-anchored at: its line refers to that).
 func Evidence(ctx context.Context, dir string, c *ledger.Claim) []judgev1.Evidence {
 	var out []judgev1.Evidence
 	for _, q := range c.Evidence.Quotes {
-		text, ok := ledger.FileAt(ctx, dir, c.VerifiedRef, q.Path)
+		ref := c.VerifiedRef
+		if q.CarriedRef != "" {
+			ref = q.CarriedRef
+		}
+		text, ok := ledger.FileAt(ctx, dir, ref, q.Path)
 		if !ok {
 			continue
 		}

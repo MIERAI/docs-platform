@@ -93,3 +93,9 @@ var Contract []byte
 //
 //go:embed draft-verify-v1.schema.json
 var DraftVerify []byte
+
+// Outcome is docs-platform/outcome/v1: one event of the stream that measures the precision of
+// docs-platform's own problem reports.
+//
+//go:embed outcome-v1.schema.json
+var Outcome []byte

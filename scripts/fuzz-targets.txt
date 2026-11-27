@@ -36,3 +36,5 @@
 ./internal/contract FuzzFactoryDesign
 ./internal/draftverify FuzzCheckTOML
 ./internal/draftverify FuzzFormatMarkdown
+./internal/outcome FuzzRead
+./internal/outcome FuzzLabelsFromCSV

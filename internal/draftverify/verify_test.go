@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/MIERAI/docs-platform/contracts"
+	"github.com/MIERAI/docs-platform/internal/draft"
 	"github.com/MIERAI/docs-platform/internal/jsonschema"
 	"github.com/MIERAI/docs-platform/internal/ledger"
 	"github.com/MIERAI/docs-platform/internal/sandbox"
@@ -227,6 +228,40 @@ func TestClaimsGate(t *testing.T) {
 		git(t, g2.dir, "commit", "-qam", "port")
 		r := Verify(ctx, g2.input(t, strings.Replace(readme, "8080", "9090", 1)))
 		if g := gate(r, GateClaims); g.Status != NeedsModel || !strings.Contains(asJSON(t, g), "evidence changed") {
+			t.Fatalf("%+v", g)
+		}
+	})
+	// ledger 1.1: a scoped quote whose file changed only outside the scope is carried
+	// forward - the claim stays fresh and the evidence is read at the quote's new line
+	scoped := func(t *testing.T) *fixture {
+		g := newFixture(t)
+		q := &g.l.Claims[0].Evidence.Quotes[0]
+		q.Scope = ledger.ComputeScope("config.yaml", "# settings\nport: 9090\n", 2)
+		if q.Scope == nil {
+			t.Fatal("no scope")
+		}
+		return g
+	}
+	t.Run("evidence carried forward", func(t *testing.T) {
+		g3 := scoped(t)
+		write(t, g3.dir, map[string]string{"config.yaml": "# settings\nname: demo\nhost: a\nother: b\nmore: c\nport: 9090\n"})
+		git(t, g3.dir, "commit", "-qam", "unrelated keys")
+		r := Verify(ctx, g3.input(t, strings.Replace(readme, "8080", "9090", 1)))
+		if g := gate(r, GateClaims); g.Status != Pass || !strings.Contains(asJSON(t, g), "carried forward") {
+			t.Fatalf("%+v", g)
+		}
+		// draft.Evidence follows a re-anchored quote to the revision it now refers to
+		q := &g3.l.Claims[0].Evidence.Quotes[0]
+		q.Line, q.CarriedRef = 6, git(t, g3.dir, "rev-parse", "HEAD")
+		if ev := draft.Evidence(ctx, g3.dir, &g3.l.Claims[0]); len(ev) != 1 || !strings.Contains(ev[0].Text, "port: 9090") || ev[0].From != 4 {
+			t.Fatalf("re-anchored evidence: %+v", ev)
+		}
+	})
+	t.Run("scoped evidence changed in scope", func(t *testing.T) {
+		g4 := scoped(t)
+		write(t, g4.dir, map[string]string{"config.yaml": "# settings\nport: 9191\n"})
+		git(t, g4.dir, "commit", "-qam", "port")
+		if g := gate(Verify(ctx, g4.input(t, strings.Replace(readme, "8080", "9090", 1))), GateClaims); g.Status != NeedsModel {
 			t.Fatalf("%+v", g)
 		}
 	})

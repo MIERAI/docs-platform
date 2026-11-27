@@ -205,7 +205,36 @@ func observeLedgerReplay(got map[string]string, file, replayFile string) error {
 	got["ledger_replay.any_causing"] = fmt.Sprintf("%d/%d", anyc, scored)
 	got["impact_on_ledger_items.first_causing"] = fmt.Sprintf("%d/%d", iFirst, scored)
 	got["impact_on_ledger_items.any_causing"] = fmt.Sprintf("%d/%d", iAny, scored)
+	observeScoped(got, &lr)
 	return nil
+}
+
+// observeScoped scores the same replay with quote scopes (ledger/v1 1.1): re-judgements and
+// recall when a change outside a claim's scope carries its verdict forward.
+func observeScoped(got map[string]string, lr *ledgerReplay) {
+	var scored, first, anyc int
+	for _, rr := range lr.Repos {
+		stale, zero, carried := 0, 0, 0
+		for _, c := range rr.Commits {
+			stale += c.StaleScoped
+			zero += b2i(c.StaleScoped == 0)
+			for _, n := range c.Carried {
+				carried += n
+			}
+		}
+		got["ledger_replay.scoped."+rr.Repo+".stale_total"] = strconv.Itoa(stale)
+		got["ledger_replay.scoped."+rr.Repo+".commits_staling_nothing"] = strconv.Itoa(zero)
+		got["ledger_replay.scoped."+rr.Repo+".carried_quotes"] = strconv.Itoa(carried)
+		for _, it := range rr.Items {
+			if it.Status == "scored" {
+				scored++
+				first += b2i(it.FirstScoped)
+				anyc += b2i(it.AnyScoped)
+			}
+		}
+	}
+	got["ledger_replay.scoped.first_causing"] = fmt.Sprintf("%d/%d", first, scored)
+	got["ledger_replay.scoped.any_causing"] = fmt.Sprintf("%d/%d", anyc, scored)
 }
 
 // observeReplay reads the history replay per split.
