@@ -28,3 +28,6 @@ ignore:
   - kind: env_var
     text: CLAUDE_CODE_OAUTH_TOKEN
     reason: Claude Code's own CI token variable (external); docs-platform only passes it through by name
+  - kind: env_var
+    path: ci/run.sh
+    reason: internal plumbing between ci/action.yml and ci/run.sh; the action's inputs are documented

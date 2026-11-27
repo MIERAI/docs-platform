@@ -441,7 +441,8 @@ rule is a sample, not a proof: another run may pick a different mutant (reusing 
 the number stable while nothing changes). On api-factory (24 rules with hand-written code) a
 full run took 9 minutes and $1.00: 11 of 18 measurable rules covered (61%), 7 verified example
 proposals, 6 undetermined. Outcomes are reused while the rule, its design and its code
-are unchanged (`-previous`, default the `-out` file), so a rerun only pays for what changed.
+are unchanged (`-previous`, default the `-out` file), so a rerun only pays for what changed;
+`-api ID` (repeatable) limits a run to some APIs, `-workers N` runs rules in parallel.
 
 ### `docsp extract [--config FILE] [repo]`, `docsp validate FILE`, `docsp version`
 
@@ -652,6 +653,40 @@ with a minimal environment and a timeout; their output is schema-validated.
 
 The PR description reaches the tool only through an environment variable and a file, never
 through the shell script, so a crafted PR body cannot inject commands.
+
+### Event-driven consistency: `MIERAI/docs-platform/ci`
+
+```yaml
+on: {push: {branches: [main]}, pull_request: {}, schedule: [{cron: "23 2 * * 1"}]}
+permissions: {contents: read, pull-requests: write, issues: write, actions: read}
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@<sha>
+        with: {fetch-depth: 0, persist-credentials: false, ref: "${{ github.event.pull_request.head.sha || github.sha }}"}
+      - uses: MIERAI/docs-platform/ci@<sha>
+        with:
+          task: ${{ github.event_name == 'pull_request' && 'pr' || 'main' }}   # or factory-pr
+          claude-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+```
+
+- `task: main` (push, schedule): keeps the claim ledger in the **Actions cache**, never in the
+  repository (it is private data). The first run builds it (`audit -mode agentic`, up to
+  `bootstrap-usd`); later runs do `stale` → `schedule` → `recheck`. The weekly run also keeps the
+  cache from expiring.
+- `task: pr`: copies the default branch's ledger, rechecks at the PR's head only the claims the
+  change made stale (priority 0), and `docsp pr-comment -before <ledger> -after <rechecked copy>
+  -post-pr N -github-repo owner/name` posts the problems the change
+  *introduces* (not the backlog) as one comment - one sentence, "fix the doc or the code?"
+  answered by ticking a box, the evidence folded; updated only when the findings change.
+- `task: factory-pr`: `factory export` at the head, then `docsp factory-pr` (see above).
+- **Budget**: every judge appends its spend to `DOCSP_SPEND_LOG`; the run records it as an
+  artifact `docsp-usd-<YYYY-MM>-<usd>-<task>-<run>-<attempt>`, and the next run adds this month's
+  up. Past `monthly-usd` (default 20) no paid model runs until next month; one run is capped by
+  `run-usd` (main 3, PR 1). No token (a fork's pull request) or a private repository: no AI.
+- Inputs: `model` (claude-sonnet-5-5), `claude-code-version`, `monthly-usd`, `run-usd`,
+  `bootstrap-usd` (8), `factory` (factory-pr), `github-token`.
 
 ## Findings, ledger, SLOs
 
