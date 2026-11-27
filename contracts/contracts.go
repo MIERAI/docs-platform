@@ -88,6 +88,12 @@ var Report []byte
 //go:embed contract-v1.schema.json
 var Contract []byte
 
+// DraftVerify is docs-platform/draft-verify/v1: whether documentation drafts pass the machine
+// gates (blob guard, format, re-extracted claims vs evidence, sandboxed examples).
+//
+//go:embed draft-verify-v1.schema.json
+var DraftVerify []byte
+
 // Outcome is docs-platform/outcome/v1: one event of the stream that measures the precision of
 // docs-platform's own problem reports.
 //

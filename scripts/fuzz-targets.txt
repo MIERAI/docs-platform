@@ -36,5 +36,7 @@
 ./internal/contract FuzzParseKotlin
 ./internal/contract FuzzLogicOps
 ./internal/contract FuzzFactoryDesign
+./internal/draftverify FuzzCheckTOML
+./internal/draftverify FuzzFormatMarkdown
 ./internal/outcome FuzzRead
 ./internal/outcome FuzzLabelsFromCSV

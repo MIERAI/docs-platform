@@ -77,11 +77,16 @@ func idHash(id string) string {
 	return hex.EncodeToString(h[:])[:16]
 }
 
-// Evidence reads the claim's quoted lines (±2) at its evidence revision from dir.
+// Evidence reads the claim's quoted lines (±2) at its evidence revision from dir (for a
+// quote carried forward, the revision it was re-anchored at: its line refers to that).
 func Evidence(ctx context.Context, dir string, c *ledger.Claim) []judgev1.Evidence {
 	var out []judgev1.Evidence
 	for _, q := range c.Evidence.Quotes {
-		text, ok := ledger.FileAt(ctx, dir, c.VerifiedRef, q.Path)
+		ref := c.VerifiedRef
+		if q.CarriedRef != "" {
+			ref = q.CarriedRef
+		}
+		text, ok := ledger.FileAt(ctx, dir, ref, q.Path)
 		if !ok {
 			continue
 		}
@@ -142,6 +147,10 @@ func Constrain(original, draft string, evidence []string) Check {
 }
 
 func tokens(s string) []string { return reToken.FindAllString(s, -1) }
+
+// Tokens splits a line the way the minimal-diff rules count it: inline code spans and links
+// are one token each, then words (with ./:@-_) and single punctuation marks.
+func Tokens(s string) []string { return tokens(s) }
 
 // diffSize is the number of tokens removed plus added (via the longest common subsequence).
 func diffSize(a, b []string) int {

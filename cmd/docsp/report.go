@@ -73,6 +73,11 @@ func writeReport(w io.Writer, r *consistency.ConsistencyReport) {
 // cmdDraft proposes minimal fixes for the ledger's problems (the draft task's provider),
 // checks them against the minimal-diff rules and logs them. Nothing is applied.
 func cmdDraft(ctx context.Context, args []string, stdout, stderr io.Writer) (int, error) {
+	if len(args) > 0 {
+		if sub, ok := draftSubs[args[0]]; ok {
+			return sub(ctx, args[1:], stdout, stderr)
+		}
+	}
 	fs := flag.NewFlagSet("draft", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var c consFlags
@@ -111,19 +116,22 @@ func cmdDraft(ctx context.Context, args []string, stdout, stderr io.Writer) (int
 	if err := dl.Save(*logFile); err != nil {
 		return exitUsage, err //nolint:wrapcheck // already descriptive
 	}
-	return exitOK, c.emitReport(made, func(w io.Writer) {
-		for _, e := range made {
-			_, _ = fmt.Fprintf(w, "%-19s %s:%d [%s, %d tokens] %s\n", e.Status, e.Path, e.Line, e.Action, e.DiffTokens, e.Draft)
-			for _, p := range e.Problems {
-				_, _ = fmt.Fprintln(w, "    "+p)
-			}
+	return exitOK, c.emitReport(made, func(w io.Writer) { writeDrafts(w, made, g) }, stdout, stderr)
+}
+
+// writeDrafts is draft's text report: one line per draft, then the run's cost.
+func writeDrafts(w io.Writer, made []draft.Entry, g *judge.Guard) {
+	for _, e := range made {
+		_, _ = fmt.Fprintf(w, "%-19s %s:%d [%s, %d tokens] %s\n", e.Status, e.Path, e.Line, e.Action, e.DiffTokens, e.Draft)
+		for _, p := range e.Problems {
+			_, _ = fmt.Fprintln(w, "    "+p)
 		}
-		if g == nil {
-			_, _ = fmt.Fprintf(w, "docsp draft: %d drafts (proposals only, never applied); rules only, $0\n", len(made))
-			return
-		}
-		_, _ = fmt.Fprintf(w, "docsp draft: %d drafts (proposals only, never applied); %s, $%.4f\n", len(made), g.Name(), g.Stats().CostUSD)
-	}, stdout, stderr)
+	}
+	if g == nil {
+		_, _ = fmt.Fprintf(w, "docsp draft: %d drafts (proposals only, never applied); rules only, $0\n", len(made))
+		return
+	}
+	_, _ = fmt.Fprintf(w, "docsp draft: %d drafts (proposals only, never applied); %s, $%.4f\n", len(made), g.Name(), g.Stats().CostUSD)
 }
 
 // draftable are the repository's problem claims without an open draft, immediate first.
@@ -145,6 +153,7 @@ func proposeDraft(ctx context.Context, g *judge.Guard, root string, c *ledger.Cl
 	e := draft.Entry{
 		ClaimID: c.ID, Repo: c.Repo, Path: c.Path, Line: c.Line, Category: c.Category, Original: c.Text,
 		ProposedAt: now.UTC().Format(time.RFC3339), ProposedRef: c.VerifiedRef, Model: g.Name(), Status: draft.RejectedByHarness,
+		DocBlob: c.DocBlob,
 	}
 	out, err := g.Judge(ctx, draft.Request(c, ev))
 	switch {

@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/MIERAI/docs-platform/contracts/draft-verify-v1.schema.json",
+  "title": "docs-platform/draft-verify/v1",
+  "description": "Machine verification of documentation drafts (docsp draft verify). A draft is verified only when every gate is pass or not_applicable: guard (the document is the blob the draft was made against), format (the edited document and its fenced blocks still parse), claims (changed lines re-extracted, their references resolve, changed ledger claims re-verified against their evidence without a model; needs_model otherwise) and examples (changed runnable examples run in a sandbox; skipped without one). No model is called and nothing is applied.",
+  "type": "object",
+  "required": ["schema_version", "schema", "results"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"type": "string", "pattern": "^1\\.[0-9]+$"},
+    "schema": {"type": "string", "enum": ["docs-platform/draft-verify/v1"]},
+    "results": {"type": "array", "items": {"$ref": "#/$defs/result"}}
+  },
+  "$defs": {
+    "status": {"type": "string", "enum": ["pass", "fail", "needs_model", "skipped", "not_applicable", "error"]},
+    "result": {
+      "type": "object",
+      "required": ["schema_version", "schema", "repo", "path", "base_blob", "current_blob", "changed_lines", "verified", "sandbox", "gates"],
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {"type": "string", "pattern": "^1\\.[0-9]+$"},
+        "schema": {"type": "string", "enum": ["docs-platform/draft-verify/v1"]},
+        "repo": {"type": "string"},
+        "path": {"type": "string"},
+        "claim_id": {"type": "string"},
+        "base_blob": {"type": "string", "description": "the document's blob the draft was made against (empty: unknown, the guard fails)"},
+        "current_blob": {"type": "string", "description": "the document's blob in the checkout now"},
+        "changed_lines": {"type": "array", "items": {"type": "integer", "minimum": 1}, "description": "lines of the drafted document that differ"},
+        "verified": {"type": "boolean"},
+        "sandbox": {"type": "string", "description": "the example runner (docker) or none"},
+        "gates": {"type": "array", "items": {"$ref": "#/$defs/gate"}}
+      }
+    },
+    "gate": {
+      "type": "object",
+      "required": ["name", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {"type": "string", "enum": ["guard", "format", "claims", "examples"]},
+        "status": {"$ref": "#/$defs/status"},
+        "detail": {"type": "string"},
+        "items": {"type": "array", "items": {"$ref": "#/$defs/item"}}
+      }
+    },
+    "item": {
+      "type": "object",
+      "required": ["kind", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "line": {"type": "integer", "minimum": 0},
+        "kind": {"type": "string", "description": "a parse construct (format), reference or claim (claims), example (examples)"},
+        "subject": {"type": "string"},
+        "status": {"$ref": "#/$defs/status"},
+        "detail": {"type": "string"},
+        "exit_code": {"type": "integer"},
+        "output": {"type": "string", "description": "the tail of an example's output"}
+      }
+    }
+  }
+}
