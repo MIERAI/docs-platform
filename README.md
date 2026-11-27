@@ -118,6 +118,7 @@ role ("humans write `docs/`") - and checks them:
 | Sub-layer | Rule (`docs.semantic.<rule>`) | Evidence |
 |---|---|---|
 | value | `value_mismatch` | the configuration key named next to the value (YAML, HCL, Go constants and flag defaults, shell/Make defaults), unit-normalized |
+| value | `go_fact_mismatch` | rules stage (no model): a typed Go fact read with go/ast - a flag's default (flag, pflag, cobra), an exported constant, an environment variable's visible default, a config field's constructor default, an HTTP route's method - contradicts the one subject the line names |
 | value | `schedule_mismatch`, `schedule_disabled` | the cron of the workflow / CronJob the sentence names (time zones converted; a commented-out cron is a disabled schedule) |
 | value | `version_unreleased`, `version_mismatch` | git tags reachable from HEAD; image tags, chart versions |
 | value | `list_incomplete` | the code set the list enumerates: commands of a program, make targets, children of a directory, sibling keys, values of a key, generated paths |
@@ -142,6 +143,24 @@ back with validated evidence become `docs.semantic.agentic_contradicted`,
 `agentic_dangling_reference`, `agentic_incomplete_list` or `agentic_outdated_wording`
 (sub-layer `model`, confidence medium); lines it finds `unverifiable_in_repo` are counted,
 not reported.
+
+**Rules stage (deterministic first).** Before anything is put to the judge, every prose line
+of the Markdown documents is offered to `internal/rulejudge`: when the line names exactly one
+typed Go fact (go/ast over the repository's non-test Go files: flags with their defaults and
+usage, constants resolved across files and packages, `os.Getenv` defaults written as
+`if v == "" { v = ... }` or `cmp.Or`, `getenv("X", def)` helpers, net/http 1.22 / chi / gin /
+echo routes, struct literals in `New*`/`Default*` constructors) and states its value with a
+literal, the verdict comes from the code: `confirmed` when the values agree and every other
+word of the line is one of the fact's own (name, usage, doc comment), `contradicted` when they
+differ (finding `go_fact_mismatch`, with a draft that replaces only the value token). Unclear
+lines - several subjects, a word instead of a literal, a qualifier ("in CI", "previously"),
+facts that disagree, a zero default (usually a sentinel), routes under a router group or a
+mounted prefix, changelogs - go to the judge unchanged. In agentic mode a rules verdict is
+validated by the same quote validator as a model's and enters the ledger with model
+`rules/go-ast` and the rules' version hash as `prompt_hash`; `docsp recheck` re-decides such
+claims by rules, and `docsp draft` writes their drafts deterministically (no draft provider
+needed). The summary line `docsp audit (rules)` counts the lines decided and the questions
+this saved.
 
 | Flag | Meaning |
 |---|---|

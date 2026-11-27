@@ -220,6 +220,8 @@ on, kept across re-judging: the files a generator's manifest says the claim gove
 `docsp factory-rules`). Repository groups add `target {repo, ref}` (the
 declared revision the claim was judged against; `verified_ref` is then that target's
 commit) and `doc_ref` (the document repository's commit).
+A `model` such as `rules/go-ast` (the prefix "rules" and a slash) marks a verdict of the rules
+stage, not of a model; its `prompt_hash` identifies the rules' version.
 
 stale/v1 (`contracts/stale-v1.schema.json`): one repository at one revision - `counts` and
 `claims[{id, repo, path, line, category, status: fresh|stale|recheck, reasons[{kind, path,

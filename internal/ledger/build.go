@@ -87,7 +87,7 @@ func (b *Builder) Claim(ctx context.Context, lr *agentic.LineResult) (Claim, boo
 		VerifiedAt: b.Now().UTC().Format(time.RFC3339), VerifiedRef: b.Tree.Ref, Model: lr.Model, PromptHash: lr.PromptHash,
 		Private: b.Class.ClassOf(b.Repo, lr.Path) == instance.Private,
 	}
-	if b.Model != "" {
+	if b.Model != "" && !agentic.IsRules(lr.Model) { // a rules verdict keeps its marker ("rules/go-ast")
 		c.Model = b.Model
 	}
 	if b.Target != nil {

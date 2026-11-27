@@ -14,6 +14,7 @@ import (
 	"github.com/MIERAI/docs-platform/internal/draft"
 	"github.com/MIERAI/docs-platform/internal/judge"
 	"github.com/MIERAI/docs-platform/internal/ledger"
+	"github.com/MIERAI/docs-platform/internal/rulejudge"
 )
 
 // cmdReport reports the ledger's validated problems for people: contradicted and dangling
@@ -92,19 +93,21 @@ func cmdDraft(ctx context.Context, args []string, stdout, stderr io.Writer) (int
 	if err != nil {
 		return exitUsage, err //nolint:wrapcheck // already descriptive
 	}
-	g, err := check.NewJudge(c.instanceFile, "draft", false)
-	if err != nil || g == nil {
-		return exitUsage, errors.Join(errors.New("draft needs ai.draft in the instance configuration"), err)
-	}
-	defer func() { _ = g.Close() }()
 	claims := draftable(l, dl, name, *maxN)
-	now := time.Now()
-	var made []draft.Entry
-	for _, cl := range claims {
-		e := proposeDraft(ctx, g, root, cl, now)
-		dl.Entries = append(dl.Entries, e)
-		made = append(made, e)
+	var g *judge.Guard
+	if needsModel(claims) { // rules verdicts get deterministic drafts: no provider needed for them
+		g, err = check.NewJudge(c.instanceFile, "draft", false)
+		if err != nil || g == nil {
+			return exitUsage, errors.Join(errors.New("draft needs ai.draft in the instance configuration"), err)
+		}
+		defer func() { _ = g.Close() }()
 	}
+	rules, err := rulejudge.LoadDir(root, nil)
+	if err != nil {
+		return exitUsage, err //nolint:wrapcheck // already descriptive
+	}
+	made := makeDrafts(ctx, g, rules, root, claims)
+	dl.Entries = append(dl.Entries, made...)
 	if err := dl.Save(*logFile); err != nil {
 		return exitUsage, err //nolint:wrapcheck // already descriptive
 	}
@@ -114,6 +117,10 @@ func cmdDraft(ctx context.Context, args []string, stdout, stderr io.Writer) (int
 			for _, p := range e.Problems {
 				_, _ = fmt.Fprintln(w, "    "+p)
 			}
+		}
+		if g == nil {
+			_, _ = fmt.Fprintf(w, "docsp draft: %d drafts (proposals only, never applied); rules only, $0\n", len(made))
+			return
 		}
 		_, _ = fmt.Fprintf(w, "docsp draft: %d drafts (proposals only, never applied); %s, $%.4f\n", len(made), g.Name(), g.Stats().CostUSD)
 	}, stdout, stderr)
