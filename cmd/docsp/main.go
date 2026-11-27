@@ -13,6 +13,8 @@
 //	                                    design-first spec vs code (contract/v1; no model)
 //	docsp stale -ledger FILE [-ref REV] [repo]
 //	                                    claims whose evidence changed (no model)
+//	docsp draft verify -log FILE [-ledger FILE] [-claim ID] [repo]
+//	                                    machine-verify drafts (draft-verify/v1; no model)
 //	docsp judge-tools-mcp -spec FILE    (internal) serve the read-only judge-tools over MCP stdio
 //	docsp version
 package main
@@ -111,6 +113,10 @@ commands:
   slo        documentation consistency SLIs (accuracy, freshness, phantom rate), error budget, cost
   report     validated problems for people: contradicted/dangling at once, the rest in batches; never fails
   draft      minimal-diff fix proposals for the ledger's problems (checked, logged, never applied)
+  draft verify
+             machine-verify drafts: format, re-extracted claims vs evidence, examples in a sandbox, blob guard
+  draft apply
+             write one draft into the checkout, refused when the document's blob moved
   drafts     what became of the drafts: acceptance, revert rate, diff size; docs to generate or link instead
   group      repository groups: plan (doc sets, declared targets, shared drift scans), stale, judge
   contract   design-first specs vs the code: interface diff + which side moved (git history; no model)

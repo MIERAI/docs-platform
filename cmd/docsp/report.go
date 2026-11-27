@@ -72,6 +72,11 @@ func writeReport(w io.Writer, r *consistency.ConsistencyReport) {
 // cmdDraft proposes minimal fixes for the ledger's problems (the draft task's provider),
 // checks them against the minimal-diff rules and logs them. Nothing is applied.
 func cmdDraft(ctx context.Context, args []string, stdout, stderr io.Writer) (int, error) {
+	if len(args) > 0 {
+		if sub, ok := draftSubs[args[0]]; ok {
+			return sub(ctx, args[1:], stdout, stderr)
+		}
+	}
 	fs := flag.NewFlagSet("draft", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var c consFlags
@@ -138,6 +143,7 @@ func proposeDraft(ctx context.Context, g *judge.Guard, root string, c *ledger.Cl
 	e := draft.Entry{
 		ClaimID: c.ID, Repo: c.Repo, Path: c.Path, Line: c.Line, Category: c.Category, Original: c.Text,
 		ProposedAt: now.UTC().Format(time.RFC3339), ProposedRef: c.VerifiedRef, Model: g.Name(), Status: draft.RejectedByHarness,
+		DocBlob: c.DocBlob,
 	}
 	out, err := g.Judge(ctx, draft.Request(c, ev))
 	switch {

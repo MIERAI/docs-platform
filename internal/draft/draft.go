@@ -143,6 +143,10 @@ func Constrain(original, draft string, evidence []string) Check {
 
 func tokens(s string) []string { return reToken.FindAllString(s, -1) }
 
+// Tokens splits a line the way the minimal-diff rules count it: inline code spans and links
+// are one token each, then words (with ./:@-_) and single punctuation marks.
+func Tokens(s string) []string { return tokens(s) }
+
 // diffSize is the number of tokens removed plus added (via the longest common subsequence).
 func diffSize(a, b []string) int {
 	if len(a)*len(b) > 1<<20 {

@@ -12,6 +12,14 @@ Design: docs/design.md §12; plan: docs/backlog.md.
   and passes the configured linters (behaviour unchanged).
 
 ### Added
+- **Machine-verified documentation drafts** (`docsp draft verify` / `docsp draft apply`,
+  draft-verify/v1): a draft counts as verified only when the document is still the blob it
+  was made against, still parses (with its fenced Go/YAML/JSON/TOML/shell blocks), its
+  changed lines re-extract to resolving references and changed ledger claims are backed
+  verbatim by their evidence (`needs_model` instead of a pass where only a model could
+  judge), and its changed runnable examples pass in a docker sandbox (no network, read-only
+  root, no capabilities, non-root, limits, timeout; skipped, never run on the host, without
+  docker). Drafts log entries record `doc_blob`; `draft apply` refuses a moved document.
 - **Contract layer** (`docsp contract`, contract/v1, docs/design.md §13): design-first specs
   vs the code that implements them, without a model. Adapters: `factory-design` /
   `factory-code` (a design-first generator's design language vs its escape hatches: SQL

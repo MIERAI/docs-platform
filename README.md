@@ -250,6 +250,19 @@ consistency:
   rejects drafts that change nothing, rewrite more than the wrong facts, or add volatile detail
   (numbers, versions) the evidence does not show; deleting the line (`DELETE`) or linking to the
   source is preferred. Logged, never applied.
+- `docsp draft verify -log LOG [-ledger L] [-claim ID] [-no-sandbox] [-timeout D] [-image REF] [repo]`
+  (or `-path P -new FILE -base-blob B` for a whole-file draft): machine-verifies drafts of
+  ordinary documentation (Markdown, YAML, JSON, TOML) through four gates and prints
+  draft-verify/v1 (exit code 1 when one is not verified): the document is still the blob the
+  draft was made against; it still parses (with its Go, YAML, JSON, TOML and shell blocks);
+  the changed lines, extracted again, resolve and the changed claims are backed verbatim by
+  the ledger's evidence - anything only a model could judge is `needs_model`, never a pass;
+  changed runnable examples run in a docker sandbox (no network, read-only root, no
+  capabilities, non-root, pid/memory/CPU limits, timeout) - without docker they are skipped,
+  never run on the host. See [docs/contracts.md](docs/contracts.md#draft-verifyv1-docsp-draft-verify).
+- `docsp draft apply -log LOG -claim ID [repo]`: writes one draft into the checkout (not
+  committed), refused when the document's blob is not the one the draft was made against or
+  the result does not parse.
 - `docsp drafts -log LOG [-recommend-after N] [repo]`: what became of the drafts at the current revision (accepted,
   superseded, reverted): acceptance rate, revert rate, mean diff size, and documents to generate
   or link instead.
