@@ -158,9 +158,9 @@ func TestReviewDraftsAVerifiedDesignEdit(t *testing.T) {
 	rep.GitHub = "o/af"
 	md := rep.Markdown()
 	for _, s := range []string{
-		Marker, "❌ 代码和规则矛盾", "✅ 工厂验证通过", "**一句话**:设计书写 300 秒,代码是 600 秒", "**只需要回答**:改成 600 秒是有意的吗?",
+		Marker, "这个 PR 让 **1 条设计书规则**和代码不一致了", "✅ 工厂验证通过", "设计书写 300 秒,代码是 600 秒", "**改成 600 秒是有意的吗?**", "<details><summary>证据和改稿</summary>", "另外 1 条规则也核对过",
 		"`response.sla` 设计书预期 **1**,代码实际是 **没有这个值(0 / 空)**", "https://github.com/o/af/blob/" + rep.Head + "/logic.go#L3", "+    结果: 超过 600 秒算违约",
-		"- [ ] 代码改错了",
+		"- [ ] 不是:代码改错了",
 	} {
 		if !strings.Contains(md, s) {
 			t.Errorf("comment lacks %q:\n%s", s, md)
@@ -170,12 +170,12 @@ func TestReviewDraftsAVerifiedDesignEdit(t *testing.T) {
 		t.Error("an executed counterexample offers no 'not a problem'")
 	}
 	// A ticked box is read back and kept; a tick on another verdict is not.
-	body := strings.Replace(md, "- [ ] 代码改错了", "- [x] 代码改错了", 1)
+	body := strings.Replace(md, "- [ ] 不是:代码改错了", "- [x] 不是:代码改错了", 1)
 	fb := Ticked(body)
 	if len(fb) != 1 || fb[0] != (Feedback{Rule: "design.yaml:3", Option: OptionCodeWrong, Category: agentic.Contradicted, Evidence: EvidenceExecuted}) {
 		t.Fatalf("ticked %+v", fb)
 	}
-	if !strings.Contains(rep.MarkdownWith(TickedKeys(fb)), "- [x] 代码改错了") {
+	if !strings.Contains(rep.MarkdownWith(TickedKeys(fb)), "- [x] 不是:代码改错了") {
 		t.Error("the tick is lost on update")
 	}
 	rep.Rules[0].Category = agentic.OutdatedWording
@@ -204,7 +204,7 @@ func TestExecutedOnlyForTheRuleTheDraftRewrites(t *testing.T) {
 		{API: "a", Path: "design.yaml", Line: 5, Text: "  - 情况: 健康度", Block: health, Category: agentic.Contradicted, Evidence: EvidenceRead, Draft: d},
 	}}
 	md := rep.Markdown()
-	if strings.Count(md, "--- a/design.yaml") != 1 || !strings.Contains(md, "和上面 `design.yaml:3` 的改稿相同") {
+	if strings.Count(md, "--- a/design.yaml") != 1 || !strings.Contains(md, "改稿:和 `design.yaml:3` 的相同") {
 		t.Errorf("the same draft is shown twice:\n%s", md)
 	}
 	if !strings.Contains(md, "design.yaml:5 not_a_problem") || strings.Contains(md, "design.yaml:3 not_a_problem") {

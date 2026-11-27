@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"path"
 	"regexp"
-	"sort"
 	"strings"
 
 	"github.com/MIERAI/docs-platform/internal/factorytry"
@@ -20,17 +19,11 @@ var categoryLabel = map[string]string{
 	"unknown":              "❔ 未判定",
 }
 
-var evidenceLabel = map[string]string{
-	EvidenceExecuted: "🔬 工厂实际跑过",
-	EvidenceRead:     "📖 AI 读代码得出",
-}
-
 // Feedback options a person ticks in the comment.
 const (
 	OptionDesignStale  = "design_stale"  // the design is out of date: the draft is (or will be) applied
 	OptionCodeWrong    = "code_wrong"    // the code is wrong: it will be fixed
 	OptionNotAProblem  = "not_a_problem" // the design still says what the code does (a false positive)
-	OptionNotThisRule  = "unrelated"     // the rule is not what this change is about (a false positive)
 	feedbackMarkPrefix = "<!-- docsp:fb "
 )
 
@@ -39,82 +32,95 @@ const (
 func (r *Report) Markdown() string { return r.MarkdownWith(nil) }
 
 // MarkdownWith renders the comment keeping the boxes people ticked in the previous version
-// (by Feedback.key: a tick on a verdict that changed is not carried over).
+// (by Feedback.key: a tick on a verdict that changed is not carried over). Only what deciding
+// takes is shown: per problem one sentence, one question answered by ticking; the evidence
+// and the draft are folded.
 func (r *Report) MarkdownWith(ticked map[string]bool) string {
 	if len(r.Rules) == 0 {
 		return ""
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s\n### 设计书 ↔ 手写代码 · docs-platform\n\n", Marker)
 	n := r.Problems()
-	fmt.Fprintf(&b, "这个 PR 改到了 %d 条业务规则背后的手写代码。在 %s 上重新核对:", len(r.Rules), r.commitLink())
-	if n > 0 {
-		fmt.Fprintf(&b, "**%d 条需要你决定**,其余仍然成立。\n\n", n)
-	} else {
-		b.WriteString("全部仍然成立,不需要做什么。\n\n")
+	if n == 0 {
+		fmt.Fprintf(&b, "%s\n**docs-platform**:这个 PR 改到的 %d 条设计书规则都和代码一致,不需要做什么。\n", Marker, len(r.Rules))
+		return b.String()
 	}
-	b.WriteString("| 规则 | 结论 | 证据 |\n|---|---|---|\n")
-	for _, x := range r.Rules {
-		label := categoryLabel[x.Category]
-		if label == "" {
-			label = x.Category
-		}
-		if x.Error != "" && x.Category == "unknown" {
-			label += " (判定失败)"
-		}
-		fmt.Fprintf(&b, "| %s %s | %s | %s |\n", r.lineLink(x.Path, x.Line), cell(firstLine(x.Text)), label, evidenceLabel[x.Evidence])
-	}
+	fmt.Fprintf(&b, "%s\n**docs-platform**:这个 PR 让 **%d 条设计书规则**和代码不一致了。\n", Marker, n)
 	shown := map[string]string{} // patch -> the rule it was shown under
 	for _, x := range r.Rules {
 		if problem[x.Category] {
 			r.writeProblem(&b, x, ticked, shown)
 		}
 	}
-	r.writeAcceptance(&b)
-	b.WriteString("\n<sub>🔬 = 设计书的例子在这个 PR 上由工厂实际跑过并失败:两边确实不一致。📖 = 只是 AI 读代码的判断,可能是误报。" +
-		"改稿只有在工厂重新生成、编译并通过设计书的全部用例时才标为已验证(手写测试属于代码,不算在内)。" +
-		"平台不会修改任何文件;勾选会被读回,只用来统计这个检查的误报率,不用来评价人。</sub>\n")
+	r.writeRest(&b)
+	b.WriteString("\n<sub>🔬 = 工厂在这个 PR 上实际跑了设计书的例子,确认不一致;📖 = AI 读代码的判断,可能是误报。勾选只用来统计这个检查的误报率。平台不会改任何文件。</sub>\n")
 	return b.String()
 }
 
 func (r *Report) writeProblem(b *strings.Builder, x Rule, ticked map[string]bool, shown map[string]string) {
-	fmt.Fprintf(b, "\n---\n\n#### %s %s — %s\n\n", categoryLabel[x.Category], r.lineLink(x.Path, x.Line), cell(strings.TrimPrefix(firstLine(x.Text), "- ")))
+	mark := map[string]string{EvidenceExecuted: "🔬", EvidenceRead: "📖"}[x.Evidence]
+	fmt.Fprintf(b, "\n#### %s %s · %s\n\n", r.lineLink(x.Path, x.Line), cell(strings.TrimPrefix(strings.TrimSpace(firstLine(x.Text)), "- ")), mark)
 	d := x.Draft
 	switch {
 	case d != nil && d.Summary != "":
-		fmt.Fprintf(b, "**一句话**:%s\n\n", d.Summary)
+		fmt.Fprintf(b, "%s\n\n", d.Summary)
 	default:
 		for _, f := range x.Facts {
 			if f.Status != "confirmed" {
-				fmt.Fprintf(b, "- %s — %s\n", f.Fact, f.Status)
+				fmt.Fprintf(b, "%s\n\n", f.Fact)
+				break
 			}
 		}
-		b.WriteString("\n")
 	}
+	q := "设计书该改,还是代码该改?"
 	if d != nil && d.Question != "" {
-		fmt.Fprintf(b, "**只需要回答**:%s\n\n", d.Question)
+		q = d.Question
 	}
+	fmt.Fprintf(b, "**%s**\n\n", q)
+	writeChoices(b, x, ticked)
+	b.WriteString("\n<details><summary>证据和改稿</summary>\n\n")
 	block := x.Block
 	if block == "" {
 		block = x.Text
 	}
-	fmt.Fprintf(b, "**设计书** %s\n\n```%s\n%s\n```\n\n", r.lineLink(x.Path, x.Line), fence(x.Path), strings.TrimRight(block, "\n"))
+	fmt.Fprintf(b, "设计书 %s\n\n```%s\n%s\n```\n\n", r.lineLink(x.Path, x.Line), fence(x.Path), strings.TrimRight(block, "\n"))
 	for _, c := range x.Code {
-		fmt.Fprintf(b, "**代码** %s\n\n```%s\n%s\n```\n\n", r.lineLink(c.Path, c.Line), fence(c.Path), strings.TrimRight(c.Text, "\n"))
+		fmt.Fprintf(b, "代码 %s\n\n```%s\n%s\n```\n\n", r.lineLink(c.Path, c.Line), fence(c.Path), strings.TrimRight(c.Text, "\n"))
 	}
 	r.writeCounterexample(b, x)
 	r.writeCause(b, x)
-	rule := fmt.Sprintf("%s:%d", x.Path, x.Line)
 	switch {
 	case d != nil && d.Patch != "" && shown[d.Patch] != "":
-		fmt.Fprintf(b, "**设计书改稿**:和上面 `%s` 的改稿相同。\n\n", shown[d.Patch])
+		fmt.Fprintf(b, "改稿:和 `%s` 的相同。\n\n", shown[d.Patch])
 	default:
 		writeDraft(b, d)
 		if d != nil && d.Patch != "" {
-			shown[d.Patch] = rule
+			shown[d.Patch] = fmt.Sprintf("%s:%d", x.Path, x.Line)
 		}
 	}
-	writeChoices(b, x, ticked)
+	b.WriteString("</details>\n")
+}
+
+// writeRest folds the rules that still hold.
+func (r *Report) writeRest(b *strings.Builder) {
+	var rest []Rule
+	for _, x := range r.Rules {
+		if !problem[x.Category] {
+			rest = append(rest, x)
+		}
+	}
+	if len(rest) == 0 {
+		return
+	}
+	fmt.Fprintf(b, "\n<details><summary>另外 %d 条规则也核对过</summary>\n\n", len(rest))
+	for _, x := range rest {
+		label := categoryLabel[x.Category]
+		if label == "" {
+			label = x.Category
+		}
+		fmt.Fprintf(b, "- %s %s — %s\n", r.lineLink(x.Path, x.Line), cell(strings.TrimPrefix(strings.TrimSpace(firstLine(x.Text)), "- ")), label)
+	}
+	b.WriteString("\n</details>\n")
 }
 
 // writeCounterexample: executed failures of the design's examples first; the drafter's
@@ -122,9 +128,9 @@ func (r *Report) writeProblem(b *strings.Builder, x Rule, ticked map[string]bool
 func (r *Report) writeCounterexample(b *strings.Builder, x Rule) {
 	if f := r.Failing[x.API]; len(f) > 0 {
 		if x.Evidence == EvidenceExecuted {
-			b.WriteString("**反例**(🔬 工厂在这个 PR 上实际跑的设计书例子):\n\n")
+			b.WriteString("反例(工厂在这个 PR 上实际跑的设计书例子):\n\n")
 		} else {
-			b.WriteString("**这个 API 失败的设计书例子**(🔬 实际跑过;但改稿没有改这条规则,所以不能证明是这条规则的问题):\n\n")
+			b.WriteString("这个 API 失败的设计书例子(实际跑过,但改稿没有改这条规则,不能证明是这条的问题):\n\n")
 		}
 		for _, c := range f[:min(4, len(f))] {
 			fmt.Fprintf(b, "- `%s`:%s\n", c.Name, caseDetail(c))
@@ -136,7 +142,7 @@ func (r *Report) writeCounterexample(b *strings.Builder, x Rule) {
 		return
 	}
 	if x.Draft != nil && x.Draft.Counterexample != "" {
-		fmt.Fprintf(b, "**反例**(📖 AI 推出来的,没有实际跑过):%s\n\n", x.Draft.Counterexample)
+		fmt.Fprintf(b, "反例(AI 推出来的,没有实际跑过):%s\n\n", x.Draft.Counterexample)
 	}
 }
 
@@ -168,11 +174,10 @@ func (r *Report) writeCause(b *strings.Builder, x Rule) {
 	if len(files) == 0 {
 		return
 	}
-	b.WriteString("<details><summary>引起它的改动(本 PR)</summary>\n\n")
+	b.WriteString("引起它的改动:\n\n")
 	for _, f := range files {
 		fmt.Fprintf(b, "`%s`\n\n```diff\n%s\n```\n\n", f, r.Diffs[f])
 	}
-	b.WriteString("</details>\n\n")
 }
 
 func writeDraft(b *strings.Builder, d *Draft) {
@@ -180,27 +185,24 @@ func writeDraft(b *strings.Builder, d *Draft) {
 	case d == nil:
 		return
 	case len(d.Edits) == 0:
-		fmt.Fprintf(b, "设计书改稿:没有提出(%s)\n\n", d.Problem)
+		fmt.Fprintf(b, "改稿:没有提出(%s)\n\n", d.Problem)
 		return
 	case d.Verified:
-		b.WriteString("**设计书改稿** — ✅ 工厂验证通过(重新生成 + 编译 + 设计书的全部用例):\n\n")
+		b.WriteString("改稿(✅ 工厂验证通过;在 PR 分支上存成 `design.patch` 后 `git apply design.patch`):\n\n")
 	default:
-		fmt.Fprintf(b, "**设计书改稿** — ⚠️ 未通过验证(%s),仅供参考:\n\n", d.Problem)
+		fmt.Fprintf(b, "改稿(⚠️ 未通过验证:%s,仅供参考):\n\n", d.Problem)
 	}
 	if d.Patch != "" {
 		fmt.Fprintf(b, "```diff\n%s```\n\n", d.Patch)
-		b.WriteString("<details><summary>怎么采用</summary>\n\n在这个 PR 的分支上,把上面的补丁存成 `design.patch`,然后 `git apply design.patch` 并提交。\n\n</details>\n\n")
-	}
-	if d.Rationale != "" {
-		fmt.Fprintf(b, "<details><summary>改稿说明(AI)</summary>\n\n%s\n\n</details>\n\n", d.Rationale)
 	}
 }
 
+// writeChoices: the answers to the question, as boxes. A 🔬 problem has no "not a problem":
+// the design's examples fail on this rule.
 func writeChoices(b *strings.Builder, x Rule, ticked map[string]bool) {
-	b.WriteString("**你的判断**(勾一项即可):\n\n")
-	opts := [][2]string{{OptionDesignStale, "设计书过时了:采用上面的改稿"}, {OptionCodeWrong, "代码改错了:我会修代码"}}
+	opts := [][2]string{{OptionDesignStale, "是:设计书过时了(采用折叠里的改稿)"}, {OptionCodeWrong, "不是:代码改错了"}}
 	if x.Evidence != EvidenceExecuted {
-		opts = append(opts, [2]string{OptionNotAProblem, "不是问题:设计书的意思其实没错"}, [2]string{OptionNotThisRule, "不是问题:这条规则和这次改动无关"})
+		opts = append(opts, [2]string{OptionNotAProblem, "都不是:这里没有不一致(误报)"})
 	}
 	for _, o := range opts {
 		f := Feedback{Rule: fmt.Sprintf("%s:%d", x.Path, x.Line), Option: o[0], Category: x.Category, Evidence: x.Evidence}
@@ -210,36 +212,6 @@ func writeChoices(b *strings.Builder, x Rule, ticked map[string]bool) {
 		}
 		fmt.Fprintf(b, "- [%s] %s %s%s %s %s %s -->\n", box, o[1], feedbackMarkPrefix, f.Rule, f.Option, f.Category, f.Evidence)
 	}
-	if x.Evidence == EvidenceExecuted {
-		b.WriteString("\n> 设计书的例子在这个 PR 上实际跑失败了,所以这里没有\"不是问题\"的选项:两边确实不一致,要决定的只是改哪一边。\n")
-	}
-}
-
-func (r *Report) writeAcceptance(b *strings.Builder) {
-	if len(r.Acceptance) == 0 {
-		return
-	}
-	apis := make([]string, 0, len(r.Acceptance))
-	for a := range r.Acceptance {
-		apis = append(apis, a)
-	}
-	sort.Strings(apis)
-	b.WriteString("\n<details><summary>工厂验收(这个 PR 的 head,不加改稿)</summary>\n\n")
-	for _, a := range apis {
-		p := r.Acceptance[a]
-		if p == "" {
-			p = "全部通过"
-		}
-		fmt.Fprintf(b, "- `%s`: %s\n", a, p)
-	}
-	b.WriteString("\n</details>\n")
-}
-
-func (r *Report) commitLink() string {
-	if r.GitHub == "" {
-		return fmt.Sprintf("`%.12s`", r.Head)
-	}
-	return fmt.Sprintf("[`%.12s`](https://github.com/%s/commit/%s)", r.Head, r.GitHub, r.Head)
 }
 
 // lineLink links a line at the head (a permalink: it keeps pointing at what was judged).

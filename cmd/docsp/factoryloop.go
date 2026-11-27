@@ -95,6 +95,7 @@ func cmdFactoryPR(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	commentOut := fs.String("comment-out", "", "write the PR comment (Markdown) here")
 	post := fs.Int("post-pr", 0, "post the comment to this pull request with gh (updated in place; needs -github-repo)")
 	ghRepo := fs.String("github-repo", "", "owner/name of the pull request's repository (for -post-pr)")
+	fromReport := fs.String("from-report", "", "render (and with -post-pr post) this factory-pr/v1 report instead of reviewing: no model, no factory")
 	feedbackOnly := fs.Bool("feedback-only", false, "only read the boxes ticked in the posted comment (-post-pr, -github-repo): JSON on stdout / -out, no review")
 	cache := fs.String("drift-cache", agentic.DefaultCacheDir(), "drift lists cached by HEAD SHA (\"\" = none)")
 	if err := fs.Parse(args); err != nil {
@@ -102,6 +103,9 @@ func cmdFactoryPR(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	}
 	if *feedbackOnly {
 		return readFeedback(ctx, *ghRepo, *post, f.out, stdout)
+	}
+	if *fromReport != "" {
+		return rerender(ctx, *fromReport, &f, *commentOut, *ghRepo, *post, stdout, stderr)
 	}
 	if *base == "" || (*post > 0 && *ghRepo == "") {
 		return exitUsage, errors.New("-base is required; -post-pr needs -github-repo")
@@ -124,6 +128,22 @@ func cmdFactoryPR(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	}
 	rep.GitHub = *ghRepo
 	return emitPR(ctx, rep, &f, *commentOut, *ghRepo, *post, stdout, stderr)
+}
+
+// rerender renders (and posts) a saved factory-pr/v1 report: no model, no factory.
+func rerender(ctx context.Context, file string, f *factoryFlags, commentOut, ghRepo string, post int, stdout, stderr io.Writer) (int, error) {
+	var rep factorypr.Report
+	b, err := os.ReadFile(file)
+	if err == nil {
+		err = json.Unmarshal(b, &rep)
+	}
+	if err != nil {
+		return exitUsage, fmt.Errorf("from-report: %w", err)
+	}
+	if ghRepo != "" {
+		rep.GitHub = ghRepo
+	}
+	return emitPR(ctx, &rep, f, commentOut, ghRepo, post, stdout, stderr)
 }
 
 // reviewPR sets up the judge, the drafter and the factory and reviews the change.
