@@ -182,9 +182,8 @@ func reviewPR(ctx context.Context, f *factoryFlags, m *factorymanifest.Manifest,
 
 // emitPR writes the review: the comment file, the PR comment, then stdout / -out.
 func emitPR(ctx context.Context, rep *factorypr.Report, f *factoryFlags, commentOut, ghRepo string, post int, stdout, stderr io.Writer) (int, error) {
-	var id string
+	var id, body string
 	if post > 0 { // what people ticked: read back, kept in the new version
-		var body string
 		var err error
 		if id, body, err = findComment(ctx, ghRepo, post); err != nil {
 			return exitUsage, err
@@ -197,7 +196,9 @@ func emitPR(ctx context.Context, rep *factorypr.Report, f *factoryFlags, comment
 			return exitUsage, fmt.Errorf("comment: %w", err)
 		}
 	}
-	if post > 0 {
+	if post > 0 && id != "" && rep.Unchanged(body) {
+		_, _ = fmt.Fprintln(stderr, "docsp factory-pr: the posted comment already says this: not updated")
+	} else if post > 0 {
 		if err := postComment(ctx, ghRepo, post, id, md); err != nil {
 			return exitUsage, err
 		}
@@ -278,7 +279,7 @@ func postComment(ctx context.Context, repo string, pr int, id, body string) erro
 		if id == "" {
 			return nil
 		}
-		body = factorypr.Marker + "\n这个 PR 目前没有动到有手写代码的业务规则。\n"
+		body = factorypr.NoRulesComment()
 	}
 	tmp, err := os.CreateTemp("", "docsp-comment-*.json")
 	if err != nil {

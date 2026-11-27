@@ -421,7 +421,9 @@ false positive. Ticks are read back on the next run (`-feedback-only` reads them
 review) and kept when the verdict is unchanged: they measure the check's false-positive rate,
 next to a neutral weekly sample, and are not used to rate people. `-comment-out FILE` writes
 the comment, `-post-pr N -github-repo owner/name` posts it with `gh` (one comment, updated in
-place), `-no-try` skips the factory.
+place only when the findings change - a rewrite while someone has the page open makes their
+tick fail), `-from-report FILE` re-renders a saved report without a review, `-no-try` skips
+the factory.
 
 **`docsp factory-coverage`** measures the **rule executable coverage**: for each rule with
 hand-written code the model proposes a mutant (the smallest code edit that breaks that rule

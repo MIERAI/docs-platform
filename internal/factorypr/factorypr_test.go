@@ -178,9 +178,24 @@ func TestReviewDraftsAVerifiedDesignEdit(t *testing.T) {
 	if !strings.Contains(rep.MarkdownWith(TickedKeys(fb)), "- [x] 不是:代码改错了") {
 		t.Error("the tick is lost on update")
 	}
+	// A new commit with the same findings (another head, another draft wording) leaves the
+	// posted comment alone; a changed verdict updates it.
+	again := *rep
+	again.Head = "another"
+	again.Rules = append([]Rule(nil), rep.Rules...)
+	again.Rules[0].Draft = &Draft{Patch: "other wording"}
+	if !again.Unchanged(body) {
+		t.Error("same findings: the comment must not be rewritten")
+	}
 	rep.Rules[0].Category = agentic.OutdatedWording
+	if rep.Unchanged(body) {
+		t.Error("a changed verdict must update the comment")
+	}
 	if strings.Contains(rep.MarkdownWith(TickedKeys(fb)), "- [x]") {
 		t.Error("a tick on a verdict that changed is carried over")
+	}
+	if !(&Report{}).Unchanged(NoRulesComment()) {
+		t.Error("no rules, already said so: unchanged")
 	}
 	if (&Report{}).Markdown() != "" {
 		t.Error("no touched rule: no comment")

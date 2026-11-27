@@ -1,6 +1,8 @@
 package factorypr
 
 import (
+	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"path"
 	"regexp"
@@ -42,10 +44,10 @@ func (r *Report) MarkdownWith(ticked map[string]bool) string {
 	var b strings.Builder
 	n := r.Problems()
 	if n == 0 {
-		fmt.Fprintf(&b, "%s\n**docs-platform**:这个 PR 改到的 %d 条设计书规则都和代码一致,不需要做什么。\n", Marker, len(r.Rules))
+		fmt.Fprintf(&b, "%s\n%s%s -->\n**docs-platform**:这个 PR 改到的 %d 条设计书规则都和代码一致,不需要做什么。\n", Marker, sigPrefix, r.Signature(), len(r.Rules))
 		return b.String()
 	}
-	fmt.Fprintf(&b, "%s\n**docs-platform**:这个 PR 让 **%d 条设计书规则**和代码不一致了。\n", Marker, n)
+	fmt.Fprintf(&b, "%s\n%s%s -->\n**docs-platform**:这个 PR 让 **%d 条设计书规则**和代码不一致了。\n", Marker, sigPrefix, r.Signature(), n)
 	shown := map[string]string{} // patch -> the rule it was shown under
 	for _, x := range r.Rules {
 		if problem[x.Category] {
@@ -237,6 +239,38 @@ func fence(p string) string {
 }
 
 func cell(s string) string { return strings.ReplaceAll(strings.TrimSpace(s), "|", "\\|") }
+
+const sigPrefix = "<!-- docsp:sig "
+
+// Signature identifies the findings - each rule's verdict and evidence - and not the commit
+// they were judged at or the wording of a draft (which varies from run to run): a new commit
+// with the same findings leaves the posted comment alone (an update while someone has the
+// page open makes their tick fail).
+func (r *Report) Signature() string {
+	type v struct {
+		Rule, Category, Evidence string
+	}
+	vs := make([]v, 0, len(r.Rules))
+	for _, x := range r.Rules {
+		vs = append(vs, v{fmt.Sprintf("%s:%d", x.Path, x.Line), x.Category, x.Evidence})
+	}
+	b, _ := json.Marshal(vs)
+	return fmt.Sprintf("%x", sha256.Sum256(b))[:16]
+}
+
+// Unchanged says whether a posted comment already says what this report would.
+func (r *Report) Unchanged(body string) bool {
+	if len(r.Rules) == 0 {
+		return strings.Contains(body, noRulesText)
+	}
+	return strings.Contains(body, sigPrefix+r.Signature()+" -->")
+}
+
+// noRulesText replaces a posted comment once the change touches no rule any more.
+const noRulesText = "这个 PR 目前没有动到有手写代码的业务规则。"
+
+// NoRulesComment is that replacement.
+func NoRulesComment() string { return Marker + "\n" + noRulesText + "\n" }
 
 // Feedback is one box ticked in a posted comment.
 type Feedback struct {
