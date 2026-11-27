@@ -245,6 +245,7 @@ role ("humans write `docs/`") - and checks them:
 | Sub-layer | Rule (`docs.semantic.<rule>`) | Evidence |
 |---|---|---|
 | value | `value_mismatch` | the configuration key named next to the value (YAML, HCL, Go constants and flag defaults, shell/Make defaults), unit-normalized |
+| value | `go_fact_mismatch` | rules stage (no model): a typed Go fact read with go/ast - a flag's default (flag, pflag, cobra), an exported constant, an environment variable's visible default, a config field's constructor default, an HTTP route's method - contradicts the one subject the line names |
 | value | `schedule_mismatch`, `schedule_disabled` | the cron of the workflow / CronJob the sentence names (time zones converted; a commented-out cron is a disabled schedule) |
 | value | `version_unreleased`, `version_mismatch` | git tags reachable from HEAD; image tags, chart versions |
 | value | `list_incomplete` | the code set the list enumerates: commands of a program, make targets, children of a directory, sibling keys, values of a key, generated paths |
@@ -269,6 +270,28 @@ back with validated evidence become `docs.semantic.agentic_contradicted`,
 `agentic_dangling_reference`, `agentic_incomplete_list` or `agentic_outdated_wording`
 (sub-layer `model`, confidence medium); lines it finds `unverifiable_in_repo` are counted,
 not reported.
+With the opt-in rubric (`ai.judge.agentic.rubric: true`, below), a line the code disagrees with
+itself about (two places set different defaults; validated quotes from both) becomes
+`docs.semantic.agentic_sources_conflict`: the document is not judged against either side, and
+it is not counted as a wrong document (nor in the precision of the outcome stream).
+
+**Rules stage (deterministic first).** Before anything is put to the judge, every prose line
+of the Markdown documents is offered to `internal/rulejudge`: when the line names exactly one
+typed Go fact (go/ast over the repository's non-test Go files: flags with their defaults and
+usage, constants resolved across files and packages, `os.Getenv` defaults written as
+`if v == "" { v = ... }` or `cmp.Or`, `getenv("X", def)` helpers, net/http 1.22 / chi / gin /
+echo routes, struct literals in `New*`/`Default*` constructors) and states its value with a
+literal, the verdict comes from the code: `confirmed` when the values agree and every other
+word of the line is one of the fact's own (name, usage, doc comment), `contradicted` when they
+differ (finding `go_fact_mismatch`, with a draft that replaces only the value token). Unclear
+lines - several subjects, a word instead of a literal, a qualifier ("in CI", "previously"),
+facts that disagree, a zero default (usually a sentinel), routes under a router group or a
+mounted prefix, changelogs - go to the judge unchanged. In agentic mode a rules verdict is
+validated by the same quote validator as a model's and enters the ledger with model
+`rules/go-ast` and the rules' version hash as `prompt_hash`; `docsp recheck` re-decides such
+claims by rules, and `docsp draft` writes their drafts deterministically (no draft provider
+needed). The summary line `docsp audit (rules)` counts the lines decided and the questions
+this saved.
 
 | Flag | Meaning |
 |---|---|
@@ -378,6 +401,19 @@ consistency:
   rejects drafts that change nothing, rewrite more than the wrong facts, or add volatile detail
   (numbers, versions) the evidence does not show; deleting the line (`DELETE`) or linking to the
   source is preferred. Logged, never applied.
+- `docsp draft verify -log LOG [-ledger L] [-claim ID] [-no-sandbox] [-timeout D] [-image REF] [repo]`
+  (or `-path P -new FILE -base-blob B` for a whole-file draft): machine-verifies drafts of
+  ordinary documentation (Markdown, YAML, JSON, TOML) through four gates and prints
+  draft-verify/v1 (exit code 1 when one is not verified): the document is still the blob the
+  draft was made against; it still parses (with its Go, YAML, JSON, TOML and shell blocks);
+  the changed lines, extracted again, resolve and the changed claims are backed verbatim by
+  the ledger's evidence - anything only a model could judge is `needs_model`, never a pass;
+  changed runnable examples run in a docker sandbox (no network, read-only root, no
+  capabilities, non-root, pid/memory/CPU limits, timeout) - without docker they are skipped,
+  never run on the host. See [docs/contracts.md](docs/contracts.md#draft-verifyv1-docsp-draft-verify).
+- `docsp draft apply -log LOG -claim ID [repo]`: writes one draft into the checkout (not
+  committed), refused when the document's blob is not the one the draft was made against or
+  the result does not parse.
 - `docsp drafts -log LOG [-recommend-after N] [repo]`: what became of the drafts at the current revision (accepted,
   superseded, reverted): acceptance rate, revert rate, mean diff size, and documents to generate
   or link instead.
@@ -639,6 +675,11 @@ reverse:
   kinds: [cli_flag, env_var, metric]   # which public symbols must be documented
 audit:                            # docsp audit (layer ④c)
   stale_commits: 2                # later commits to a claim's code that make it stale
+  skip:                           # claims never put to the judge (each skip counted by reason)
+    historical: true              # "previously", "used to", "before v2", 以前, 曾经, 已废弃, 以前は, 廃止された
+    changelogs: ["changelog*", "history*", "docs/**/changelog*"]  # default: also CHANGES.md, NEWS.md, release notes, docs/**/releases/**; [] = none
+    tests: true                   # comments in test files; claims naming only test files
+    private_symbols: true         # comments on unexported/private declarations; claims naming only `_x`, `#x`, `T.method`, `pkg.func()`
 extractors:
   disable: [terraform]
   external:
@@ -736,7 +777,17 @@ ai:
       drift_max_request_usd: 2.5
       group: line                # or doc
       # effort: high             # unset = the model's default (as evaluated); ai.judge.effort is snippet-only
+      # rubric: true             # opt in to prompt docsp-agentic/4 (unevaluated); default false = the evaluated docsp-agentic/3
 ```
+
+The opt-in prompt `docsp-agentic/4` (`rubric: true`) adds to the evaluated `docsp-agentic/3` a
+four-rule judging rubric (a documented default that changed is always a contradiction; code that
+starts enforcing what the document already states is not staleness; wording that is merely less
+precise is not a contradiction; a statement about the past is not contradicted by the present)
+and the status `sources_conflict`. It was not evaluated with a paid run, so the default stays
+the evaluated text byte for byte (template hash `5f6ad97cd5674d02`, which the offline replay
+pins). Claims keep the prompt hash they were judged with; the drift prompt is the same in both,
+so drift caches stay valid.
 
 1. **Drift scan**, once per repository and HEAD: the model reads the history (`git_log`,
    `git_show`, `git_changes`) and lists the changes that make older documentation wrong. The
@@ -860,6 +911,18 @@ jobs:
   `run-usd` (main 3, PR 1). No token (a fork's pull request) or a private repository: no AI.
 - Inputs: `model` (claude-sonnet-5-5), `claude-code-version`, `monthly-usd`, `run-usd`,
   `bootstrap-usd` (8), `factory` (factory-pr), `github-token`.
+- Noise control (`pr`, `factory-pr`): a PR labelled `skip-label` (default `docsp:skip`) is not
+  checked; a comment shows at most `max-problems` (10) problems and counts the rest with a link
+  to the job summary, which lists them all; every problem line also gets a warning annotation;
+  `conclusion` is `neutral` by default (the step passes; an Actions job cannot be "neutral", so
+  neutral means warnings only) or `failure`; `language` is `zh` (default), `en` or `ja` - the
+  tick-box markers are the same in every language. A run that did not finish (budget cap, judge
+  failures, a failed step) says "incomplete: this does not mean everything is fine" in the
+  comment and the summary. The matching `docsp pr-comment` / `factory-pr` flags: `-language`,
+  `-max-problems`, `-summary-url`, `-summary-out`, `-annotations-out`; `pr-comment` also reads
+  `-schedule` (a budget shortfall), `-recheck` (failed or missing judgments) and `-incomplete`
+  (reasons the caller states); `-ledgerless` (the zero-config mode had no ledger to compare
+  with) makes the comment say a problem listed may predate the PR.
 
 ## Findings, ledger, SLOs
 

@@ -2,7 +2,9 @@
 // The ledger of the default branch is copied, the claims the change made stale are judged
 // again at the PR's head (docsp stale, schedule, recheck on the copy), and the two ledgers are
 // compared: a claim is reported when it was judged at the head and is now a problem while it
-// was not one before - the problems this change introduces, not the backlog.
+// was not one before - the problems this change introduces, not the backlog. A claim the
+// code disagrees with itself about (sources_conflict) is reported apart: the document was
+// not judged against either side.
 package prreview
 
 import (
@@ -17,13 +19,23 @@ import (
 	"github.com/MIERAI/docs-platform/internal/agentic"
 	"github.com/MIERAI/docs-platform/internal/factorypr"
 	"github.com/MIERAI/docs-platform/internal/ledger"
+	"github.com/MIERAI/docs-platform/internal/prtext"
 )
 
-// SchemaVersion of docs-platform/pr-review/v1.
-const SchemaVersion = "1.0"
+// SchemaVersion of docs-platform/pr-review/v1 (1.1: sources_conflict, incomplete).
+const SchemaVersion = "1.1"
 
 // Marker identifies the review's PR comment (updated in place, never duplicated).
 const Marker = "<!-- docsp:pr -->"
+
+// SourcesConflict is the category of a claim the repository disagrees with itself about.
+const SourcesConflict = agentic.SourcesConflict
+
+// reported: the document problems (agentic.IsProblem), and sources_conflict, which is shown
+// apart and is not a problem verdict (it does not count in the outcome stream's precision).
+func reported(category string) bool {
+	return agentic.IsProblem(category) || category == SourcesConflict
+}
 
 // Line is one line of a file at the head.
 type Line struct {
@@ -53,6 +65,17 @@ type Report struct {
 	Rechecked     int                  `json:"rechecked"` // claims judged at the head
 	Problems      []Problem            `json:"problems"`
 	Feedback      []factorypr.Feedback `json:"feedback,omitempty"`
+	// Incomplete lists why the run did not finish (prtext.Reason*); empty = it did. An
+	// incomplete run's comment says so: no problem listed is not "everything is fine".
+	Incomplete []string `json:"incomplete,omitempty"`
+	// Ledgerless: there was no ledger to compare with (the zero-config PR mode judged the doc
+	// sections the change is about), so a problem listed may predate the PR.
+	Ledgerless bool `json:"ledgerless,omitempty"`
+
+	// Rendering options (not part of the report).
+	Lang        prtext.Lang `json:"-"` // "" = zh
+	MaxProblems int         `json:"-"` // problems one comment shows (0 = prtext.DefaultMaxProblems)
+	SummaryURL  string      `json:"-"` // where the full list is (the job summary)
 }
 
 // Lines reads a line of a file at the head.
@@ -74,7 +97,7 @@ func Compare(ctx context.Context, before, after *ledger.Ledger, head string, lin
 		if o := before.Find(c.ID); o != nil {
 			was = o.Category
 		}
-		if !agentic.IsProblem(c.Category) || agentic.IsProblem(was) {
+		if !reported(c.Category) || reported(was) {
 			continue
 		}
 		p := Problem{ID: c.ID, Path: c.Path, Line: c.Line, Text: c.Text, Category: c.Category, Before: was, Facts: c.Facts}
@@ -87,6 +110,9 @@ func Compare(ctx context.Context, before, after *ledger.Ledger, head string, lin
 	}
 	sort.Slice(rep.Problems, func(i, j int) bool {
 		a, b := rep.Problems[i], rep.Problems[j]
+		if (a.Category == SourcesConflict) != (b.Category == SourcesConflict) {
+			return b.Category == SourcesConflict // document problems first
+		}
 		if a.Path != b.Path {
 			return a.Path < b.Path
 		}
@@ -95,38 +121,108 @@ func Compare(ctx context.Context, before, after *ledger.Ledger, head string, lin
 	return rep
 }
 
-var categoryLabel = map[string]string{
-	"contradicted":       "和代码矛盾",
-	"outdated_wording":   "写法已过时",
-	"incomplete_list":    "列举不完整",
-	"dangling_reference": "引用的东西不存在",
+// counts are the document problems and the source conflicts.
+func (r *Report) counts() (int, int) {
+	n, c := 0, 0
+	for _, p := range r.Problems {
+		if p.Category == SourcesConflict {
+			c++
+		} else {
+			n++
+		}
+	}
+	return n, c
 }
 
-// Markdown renders the comment ("" when the change introduces no problem), keeping the boxes
-// people ticked in the previous version.
+func categoryLabel(l prtext.Lang, cat string) string {
+	switch cat {
+	case "contradicted":
+		return l.T("和代码矛盾", "contradicts the code", "コードと矛盾")
+	case "outdated_wording":
+		return l.T("写法已过时", "outdated wording", "表現が古い")
+	case "incomplete_list":
+		return l.T("列举不完整", "incomplete list", "列挙が不完全")
+	case "dangling_reference":
+		return l.T("引用的东西不存在", "refers to something that does not exist", "参照先が存在しない")
+	case SourcesConflict:
+		return l.T("代码内部说法不一", "the code disagrees with itself", "コード内で食い違い")
+	}
+	return cat
+}
+
+// Markdown renders the comment ("" when the change introduces no problem and the run
+// finished), keeping the boxes people ticked in the previous version. At most MaxProblems
+// problems are shown; the rest are counted, with a link to the job summary.
 func (r *Report) Markdown(ticked map[string]bool) string {
-	if len(r.Problems) == 0 {
+	if len(r.Problems) == 0 && len(r.Incomplete) == 0 {
 		return ""
 	}
+	l := r.Lang
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s\n%s%s -->\n**docs-platform**:这个 PR 改了代码,让 **%d 处文档**和代码不一致了。\n", Marker, sigPrefix, r.Signature(), len(r.Problems))
-	for _, p := range r.Problems {
+	fmt.Fprintf(&b, "%s\n%s%s -->\n", Marker, sigPrefix, r.Signature())
+	n, c := r.counts()
+	switch {
+	case n > 0 && r.Ledgerless:
+		b.WriteString(l.T(fmt.Sprintf("**docs-platform**:这个 PR 相关的文档里有 **%d 处**和代码不一致。还没有台账可比,其中可能有 PR 之前就存在的问题。\n", n),
+			fmt.Sprintf("**docs-platform**: **%d documentation lines** related to this PR don't match the code. There is no ledger to compare with yet, so some may predate this PR.\n", n),
+			fmt.Sprintf("**docs-platform**:この PR に関係するドキュメントに、コードと合わない箇所が **%d 件**あります。比較できる台帳がまだないため、PR 以前からの問題も含まれる可能性があります。\n", n)))
+	case n > 0:
+		b.WriteString(l.T(fmt.Sprintf("**docs-platform**:这个 PR 改了代码,让 **%d 处文档**和代码不一致了。\n", n),
+			fmt.Sprintf("**docs-platform**: this PR changed the code so that **%d documentation lines** no longer match it.\n", n),
+			fmt.Sprintf("**docs-platform**:この PR のコード変更で **%d 箇所のドキュメント**がコードと合わなくなりました。\n", n)))
+	case c == 0:
+		b.WriteString(l.T("**docs-platform**:目前没有发现这个 PR 让文档和代码不一致。\n",
+			"**docs-platform**: no documentation line this PR makes inconsistent was found so far.\n",
+			"**docs-platform**:この PR でコードと合わなくなったドキュメントは今のところ見つかっていません。\n"))
+	}
+	if c > 0 {
+		b.WriteString(l.T(fmt.Sprintf("**docs-platform**:有 **%d 处文档**依据的代码自己说法不一(比如两处代码设了不同的默认值),没有拿文档去和其中一方比。\n", c),
+			fmt.Sprintf("**docs-platform**: for **%d documentation lines** the code disagrees with itself (e.g. two places set different defaults); they were not judged against either side.\n", c),
+			fmt.Sprintf("**docs-platform**:**%d 箇所のドキュメント**について、根拠となるコード同士が食い違っています(例:2 箇所で異なるデフォルト値)。どちらか一方とは比較していません。\n", c)))
+	}
+	if s := prtext.Incomplete(l, r.Incomplete); s != "" {
+		b.WriteString("\n" + s)
+	}
+	limit := r.MaxProblems
+	if limit <= 0 {
+		limit = prtext.DefaultMaxProblems
+	}
+	for i, p := range r.Problems {
+		if i == limit {
+			break
+		}
 		r.writeProblem(&b, p, ticked)
 	}
-	b.WriteString("\n<sub>📖 = AI 读代码的判断,可能是误报。勾选只用来统计这个检查的误报率。平台不会改任何文件。</sub>\n")
+	b.WriteString(prtext.More(l, len(r.Problems)-limit, r.SummaryURL))
+	b.WriteString("\n<sub>" + l.T("📖 = AI 读代码的判断,可能是误报。勾选只用来统计这个检查的误报率。平台不会改任何文件。",
+		"📖 = the AI's reading of the code; it can be wrong. Ticks are only used to measure this check's false-positive rate. The platform never changes a file.",
+		"📖 = AI がコードを読んだ判断で、誤検知の可能性があります。チェックは誤検知率の集計にだけ使います。プラットフォームはファイルを一切変更しません。") + "</sub>\n")
 	return b.String()
 }
 
 func (r *Report) writeProblem(b *strings.Builder, p Problem, ticked map[string]bool) {
-	fmt.Fprintf(b, "\n#### %s · %s · 📖\n\n", r.lineLink(p.Path, p.Line), categoryLabel[p.Category])
+	l := r.Lang
+	fmt.Fprintf(b, "\n#### %s · %s · 📖\n\n", r.lineLink(p.Path, p.Line), categoryLabel(l, p.Category))
 	for _, f := range p.Facts {
 		if f.Status != "confirmed" && f.Valid {
 			fmt.Fprintf(b, "%s\n\n", f.Fact)
 			break
 		}
 	}
-	b.WriteString("**文档该改,还是代码改错了?**\n\n")
-	opts := [][2]string{{factorypr.OptionDesignStale, "文档过时了:我会改文档"}, {factorypr.OptionCodeWrong, "代码改错了:我会修代码"}, {factorypr.OptionNotAProblem, "都不是:这里没有不一致(误报)"}}
+	q := l.T("文档该改,还是代码改错了?", "Should the document change, or is the code wrong?", "ドキュメントを直すべきですか、それともコードの誤りですか?")
+	opts := [][2]string{
+		{factorypr.OptionDesignStale, l.T("文档过时了:我会改文档", "The document is out of date: I will fix it", "ドキュメントが古い:ドキュメントを直します")},
+		{factorypr.OptionCodeWrong, l.T("代码改错了:我会修代码", "The code is wrong: I will fix it", "コードの誤り:コードを直します")},
+		{factorypr.OptionNotAProblem, l.T("都不是:这里没有不一致(误报)", "Neither: nothing is inconsistent here (false positive)", "どちらでもない:不一致はない(誤検知)")},
+	}
+	if p.Category == SourcesConflict {
+		q = l.T("代码里哪一处是对的?", "Which place in the code is right?", "コードのどちらが正しいですか?")
+		opts = [][2]string{
+			{factorypr.OptionCodeWrong, l.T("有一处代码错了:我会修代码(再看文档)", "One of them is wrong: I will fix the code (then the document)", "どちらかが誤り:コードを直します(その後ドキュメントも)")},
+			{factorypr.OptionNotAProblem, l.T("都不是:代码并不矛盾(误报)", "Neither: the code does not disagree (false positive)", "どちらでもない:コードは食い違っていない(誤検知)")},
+		}
+	}
+	fmt.Fprintf(b, "**%s**\n\n", q)
 	for _, o := range opts {
 		f := factorypr.Feedback{Rule: fmt.Sprintf("%s:%d", p.Path, p.Line), Option: o[0], Category: p.Category, Evidence: factorypr.EvidenceRead}
 		box := " "
@@ -135,10 +231,10 @@ func (r *Report) writeProblem(b *strings.Builder, p Problem, ticked map[string]b
 		}
 		fmt.Fprintf(b, "- [%s] %s <!-- docsp:fb %s %s %s %s -->\n", box, o[1], f.Rule, f.Option, f.Category, f.Evidence)
 	}
-	b.WriteString("\n<details><summary>证据</summary>\n\n")
-	fmt.Fprintf(b, "文档 %s\n\n```%s\n%s\n```\n\n", r.lineLink(p.Path, p.Line), fence(p.Path), strings.TrimSpace(p.Text))
+	fmt.Fprintf(b, "\n<details><summary>%s</summary>\n\n", l.T("证据", "Evidence", "根拠"))
+	fmt.Fprintf(b, "%s %s\n\n```%s\n%s\n```\n\n", l.T("文档", "Document", "ドキュメント"), r.lineLink(p.Path, p.Line), fence(p.Path), strings.TrimSpace(p.Text))
 	for _, c := range p.Code {
-		fmt.Fprintf(b, "代码 %s\n\n```%s\n%s\n```\n\n", r.lineLink(c.Path, c.Line), fence(c.Path), strings.TrimRight(c.Text, "\n"))
+		fmt.Fprintf(b, "%s %s\n\n```%s\n%s\n```\n\n", l.T("代码", "Code", "コード"), r.lineLink(c.Path, c.Line), fence(c.Path), strings.TrimRight(c.Text, "\n"))
 	}
 	for _, f := range p.Facts {
 		if f.Valid {
@@ -146,6 +242,44 @@ func (r *Report) writeProblem(b *strings.Builder, p Problem, ticked map[string]b
 		}
 	}
 	b.WriteString("\n</details>\n")
+}
+
+// Summary renders the job summary: every problem (the comment shows at most MaxProblems)
+// and, for an incomplete run, the same notice as the comment.
+func (r *Report) Summary() string {
+	l := r.Lang
+	var b strings.Builder
+	n, c := r.counts()
+	fmt.Fprintf(&b, "### docs-platform: %s\n\n", l.T(fmt.Sprintf("%d 处文档不一致,%d 处代码自相矛盾(判定了 %d 条)", n, c, r.Rechecked),
+		fmt.Sprintf("%d documentation problems, %d source conflicts (%d lines judged)", n, c, r.Rechecked),
+		fmt.Sprintf("ドキュメントの不一致 %d 件、コード内の食い違い %d 件(判定 %d 行)", n, c, r.Rechecked)))
+	if s := prtext.Incomplete(l, r.Incomplete); s != "" {
+		b.WriteString(s + "\n")
+	}
+	if len(r.Problems) == 0 {
+		return b.String()
+	}
+	fmt.Fprintf(&b, "| %s | %s | %s |\n|---|---|---|\n", l.T("位置", "Line", "位置"), l.T("类别", "Category", "分類"), l.T("文档", "Document", "ドキュメント"))
+	for _, p := range r.Problems {
+		fmt.Fprintf(&b, "| %s | %s | %s |\n", r.lineLink(p.Path, p.Line), categoryLabel(l, p.Category), prtext.Cell(p.Text, 160))
+	}
+	return b.String()
+}
+
+// Annotations are GitHub workflow commands that put a warning on each problem's line.
+func (r *Report) Annotations() []string {
+	out := make([]string, 0, len(r.Problems))
+	for _, p := range r.Problems {
+		msg := strings.TrimSpace(p.Text)
+		for _, f := range p.Facts {
+			if f.Status != "confirmed" && f.Valid {
+				msg = f.Fact
+				break
+			}
+		}
+		out = append(out, prtext.Annotation("warning", p.Path, p.Line, "docs-platform: "+categoryLabel(r.Lang, p.Category), msg))
+	}
+	return out
 }
 
 func (r *Report) lineLink(p string, line int) string {
@@ -176,11 +310,18 @@ func fence(p string) string {
 const sigPrefix = "<!-- docsp:sig "
 
 // Signature identifies the findings (claim, verdict), not the commit: a new commit with the
-// same findings leaves the posted comment alone.
+// same findings leaves the posted comment alone. An incomplete run and a language other
+// than the default are part of it (a complete zh run signs as before).
 func (r *Report) Signature() string {
-	keys := make([]string, 0, len(r.Problems))
+	keys := make([]string, 0, len(r.Problems)+len(r.Incomplete)+1)
 	for _, p := range r.Problems {
 		keys = append(keys, p.ID+" "+p.Category)
+	}
+	for _, x := range r.Incomplete {
+		keys = append(keys, "incomplete "+x)
+	}
+	if r.Lang != "" && r.Lang != prtext.ZH {
+		keys = append(keys, "lang "+string(r.Lang))
 	}
 	b, _ := json.Marshal(keys)
 	return fmt.Sprintf("%x", sha256.Sum256(b))[:16]
@@ -188,13 +329,18 @@ func (r *Report) Signature() string {
 
 // Unchanged says whether a posted comment already says what this report would.
 func (r *Report) Unchanged(body string) bool {
-	if len(r.Problems) == 0 {
-		return strings.Contains(body, noProblemsText)
+	if len(r.Problems) == 0 && len(r.Incomplete) == 0 {
+		return strings.Contains(body, noProblemsText(r.Lang))
 	}
 	return strings.Contains(body, sigPrefix+r.Signature()+" -->")
 }
 
-const noProblemsText = "这个 PR 目前没有让文档和代码不一致。"
+func noProblemsText(l prtext.Lang) string {
+	return l.T("这个 PR 目前没有让文档和代码不一致。", "This PR currently makes no documentation line inconsistent with the code.", "この PR で現在コードと合わないドキュメントはありません。")
+}
 
 // NoProblemsComment replaces a posted comment once the change introduces no problem any more.
-func NoProblemsComment() string { return Marker + "\n" + noProblemsText + "\n" }
+func (r *Report) NoProblemsComment() string { return Marker + "\n" + noProblemsText(r.Lang) + "\n" }
+
+// NoProblemsComment is the zh replacement (kept for callers of the first version).
+func NoProblemsComment() string { return (&Report{}).NoProblemsComment() }

@@ -1,0 +1,4 @@
+::warning file=README.md,line=3,title=docs-platform%3A contradicts the code::retention is 14d in cfg.yaml
+::warning file=README.md,line=9,title=docs-platform%3A incomplete list::Jobs: a, b%0A::error::injected
+::warning file=docs/run.md,line=4,title=docs-platform%3A refers to something that does not exist::See `old.md`.
+::warning file=docs/run.md,line=7,title=docs-platform%3A the code disagrees with itself::The default timeout is 30s.

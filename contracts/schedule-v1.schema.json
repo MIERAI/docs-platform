@@ -15,6 +15,13 @@
   ],
   "additionalProperties": false,
   "properties": {
+    "skipped": {
+      "type": "object",
+      "description": "the ledger's claims the repository's audit.skip filter kept out of the plan, by reason (historical, changelog, test_file, private_symbol)",
+      "additionalProperties": {
+        "type": "integer"
+      }
+    },
     "schema_version": {
       "type": "string",
       "pattern": "^1\\.[0-9]+$"

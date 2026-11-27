@@ -20,6 +20,7 @@ docs-platform parts are coupled only through versioned, language-neutral JSON Sc
 | instance/v1 | `contracts/instance-v1.schema.json` | the operator's instance configuration → `docsp` |
 | eval/v1 | `contracts/eval-v1.schema.json` | `docsp eval-model` → stored results, comparison over time |
 | contract/v1 | `contracts/contract-v1.schema.json` | `docsp contract` → reviewers, a findings importer, dashboards (design/code surfaces, mismatch items, direction from history) |
+| draft-verify/v1 | `contracts/draft-verify-v1.schema.json` | `docsp draft verify` → reviewers, CI (per-gate machine verification of documentation drafts) |
 | outcome/v1 | `contracts/outcome-v1.schema.json` | `docsp outcome diff/ticks/label` → `docsp outcome report` (precision of docs-platform's own problem reports) |
 
 ## findings/v1
@@ -220,6 +221,8 @@ on, kept across re-judging: the files a generator's manifest says the claim gove
 `docsp factory-rules`). Repository groups add `target {repo, ref}` (the
 declared revision the claim was judged against; `verified_ref` is then that target's
 commit) and `doc_ref` (the document repository's commit).
+A `model` such as `rules/go-ast` (the prefix "rules" and a slash) marks a verdict of the rules
+stage, not of a model; its `prompt_hash` identifies the rules' version.
 
 stale/v1 (`contracts/stale-v1.schema.json`): one repository at one revision - `counts` and
 `claims[{id, repo, path, line, category, status: fresh|stale|recheck, reasons[{kind, path,
@@ -249,6 +252,14 @@ ref}]` on fresh claims; `docsp recheck` writes them back to the ledger (verdict 
 the head that are problems now and were not in the default branch's ledger (`before`: their
 category there, "" = absent) - and `feedback[]` (as factory-pr/v1). Every judge also appends
 `<provider:model> <usd>` to the file `DOCSP_SPEND_LOG` names when it closes.
+1.1 (additive): `category` may be `sources_conflict` (the code disagrees with itself; not
+judged against either side) and `incomplete[]` lists why the run did not finish (`budget`,
+`judge_failures`, `partial`, `aborted`). factory-pr/v1 gains the same `incomplete[]`. The
+ledger/v1 and report/v1 category enums gain `sources_conflict`; schedule/v1 gains `skipped`
+(the ledger's claims the repository's `audit.skip` kept out of the plan, by reason); config/v1
+gains `audit.skip`; instance/v1 gains `ai.judge.agentic.rubric` (opt-in prompt
+`docsp-agentic/4`, default off; `sources_conflict` only occurs with it on). Ledgers written before stay
+readable: every addition is optional.
 
 ## factory-pr/v1 and rulecover/v1 (API factory projects)
 
@@ -321,6 +332,49 @@ log (`docsp draft -log`) is a private JSON Lines file of `{claim_id, repo, path,
 category, original, draft, action: replace|delete|link, diff_tokens, model, proposed_at,
 proposed_ref, status: proposed|rejected_by_harness|accepted|superseded|reverted, status_at,
 status_ref, problems}`.
+Entries written since draft-verify/v1 also carry `doc_blob`: the document's blob the draft
+was made against (the claim's), which `docsp draft apply` requires.
+
+## draft-verify/v1 (`docsp draft verify`)
+
+`{schema_version, schema: "docs-platform/draft-verify/v1", results[]}`; one result per draft:
+`{repo, path, claim_id, base_blob, current_blob, changed_lines[], verified, sandbox:
+docker|none, gates[{name, status, detail, items[{line, kind, subject, status, detail,
+exit_code, output}]}]}`. Statuses: `pass`, `fail`, `needs_model`, `skipped`,
+`not_applicable`, `error`; `verified` is true only when the draft changes something and
+every gate is `pass` or `not_applicable`. The gates, in order:
+
+- `guard`: the document in the checkout is `base_blob` (git's blob id of the file); `fail`
+  when it moved or the draft records none. `docsp draft apply` refuses on the same rule.
+- `format`: the edited document still parses - Markdown with the repository's own parser
+  (unclosed fences, front matter, unbalanced inline code or link on changed lines), YAML,
+  JSON (or JSON Lines), TOML (structural check, no TOML library), and fenced blocks of known
+  languages (`go` via go/parser, also as declarations or statements; yaml/json/toml; shell via
+  `sh -n`, console blocks by their `$ ` lines). Errors the old text already had are `pass`
+  items noted as pre-existing.
+- `claims`: the changed lines are extracted again with the configured extractors and matched
+  like `docsp check` (a new unresolved reference fails); each changed line with a ledger
+  claim is re-verified without a model: deleting it passes; otherwise its evidence must
+  still hold by the ledger's invalidation (a scoped quote whose file changed only outside the
+  scope is carried forward and read at its new line; else `needs_model`), only fact tokens
+  may change (inline
+  code, links, numbers, paths, identifiers, flags - a prose rewording is `needs_model`), and
+  each added fact must be quoted verbatim in the claim's evidence lines (±2) or, for a link,
+  name an existing evidence file (`fail` otherwise). A changed prose line without a claim is
+  `needs_model`.
+- `examples`: changed fenced blocks marked `runnable` (or `docsp:run`), shell blocks whose
+  every command is a binary the repository builds (`cmd/<name>`), and Go blocks marked
+  runnable run in the sandbox; `norun` opts out, `exit=N` expects another exit code. The
+  repository's binaries and Go examples are compiled on the host (`GOOS=linux`,
+  `CGO_ENABLED=0`, `GOPROXY=off`, the host's `GOTOOLCHAIN` or `local`; compiling runs no
+  example code) and mounted read-only. The
+  sandbox is `docker run` with `--network none`, `--read-only`, a tmpfs `/work`,
+  `--cap-drop ALL`, `--security-opt no-new-privileges`, `--pids-limit`, `--memory`/`--cpus`,
+  user 65534, a timeout (then `docker rm -f -v`), a digest-pinned busybox image and, mounted
+  read-only at `/repo` (the working directory of shell examples, which run with `set -e`),
+  the checkout's tracked files with the draft applied - no `.git` and no untracked files such
+  as a local `.env`, whose content an example could otherwise print into the result. Without
+  docker the gate is `skipped` ("no sandbox"): examples never run on the host.
 
 ## instance/v1
 

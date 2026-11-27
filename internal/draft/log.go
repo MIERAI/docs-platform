@@ -39,9 +39,12 @@ type Entry struct {
 	Model       string `json:"model,omitempty"`
 	ProposedAt  string `json:"proposed_at"`
 	ProposedRef string `json:"proposed_ref"`
-	Status      string `json:"status"`
-	StatusAt    string `json:"status_at,omitempty"`
-	StatusRef   string `json:"status_ref,omitempty"`
+	// DocBlob is the document's blob the draft was made against (the claim's): applying the
+	// draft refuses any other blob (docsp draft apply).
+	DocBlob   string `json:"doc_blob,omitempty"`
+	Status    string `json:"status"`
+	StatusAt  string `json:"status_at,omitempty"`
+	StatusRef string `json:"status_ref,omitempty"`
 	// Problems are the harness's objections (rejected_by_harness).
 	Problems []string `json:"problems,omitempty"`
 }

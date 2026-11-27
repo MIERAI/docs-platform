@@ -16,6 +16,8 @@
 //	docsp init [-dry-run] [repo]       propose a .docsp.yaml (every guess with its reason)
 //	docsp doctor [flags] [repo]         offline self-check of the first CI run
 //	docsp related -base REF [repo]      doc sections a change is about (no ledger, no model)
+//	docsp draft verify -log FILE [-ledger FILE] [-claim ID] [repo]
+//	                                    machine-verify drafts (draft-verify/v1; no model)
 //	docsp outcome diff|ticks|sample|label|report [flags]
 //	                                    precision of its own problem reports (outcome/v1; no model)
 //	docsp judge-tools-mcp -spec FILE    (internal) serve the read-only judge-tools over MCP stdio
@@ -123,6 +125,10 @@ commands:
   slo        documentation consistency SLIs (accuracy, freshness, phantom rate), error budget, cost
   report     validated problems for people: contradicted/dangling at once, the rest in batches; never fails
   draft      minimal-diff fix proposals for the ledger's problems (checked, logged, never applied)
+  draft verify
+             machine-verify drafts: format, re-extracted claims vs evidence, examples in a sandbox, blob guard
+  draft apply
+             write one draft into the checkout, refused when the document's blob moved
   drafts     what became of the drafts: acceptance, revert rate, diff size; docs to generate or link instead
   outcome    precision of docs-platform's own problem reports: diff, ticks, sample, label, report (no model)
   group      repository groups: plan (doc sets, declared targets, shared drift scans), stale, judge

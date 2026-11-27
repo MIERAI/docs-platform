@@ -49,6 +49,11 @@ type Options struct {
 	// Only, when set, keeps the claims on lines it accepts (the zero-config PR mode judges
 	// only the sections a change is about, docsp audit -sections).
 	Only func(path string, line int) bool
+	// Filter keeps claims away from the judge (.docsp.yaml audit.skip): changelog-type
+	// documents are not read for claims at all; historical sentences and claims about test
+	// files or private symbols get the deterministic checks but are never put to the judge.
+	// The zero value skips nothing.
+	Filter claim.Filter
 }
 
 // Stats describe one audit run.
@@ -74,6 +79,14 @@ type Stats struct {
 	DriftValidated    int
 	DriftCached       bool
 	ParseFailures     int
+	// Skipped counts the claims the filter kept from the judge, by reason (claim.Skip*).
+	Skipped map[string]int
+	// Rules stage (deterministic first): documentation lines decided from typed Go facts
+	// without a model, of them confirmed and contradicted, and the questions this saved.
+	RulesDecided      int
+	RulesConfirmed    int
+	RulesContradicted int
+	RulesSaved        int
 }
 
 // Result of one audit.
@@ -95,6 +108,10 @@ type checker struct {
 	tags     []semver
 	docIDs   map[string][]string
 	topDirs  map[string]bool
+	// decided holds the path:line keys the rules stage decided; ruled are their results
+	// (agentic mode, for the ledger).
+	decided map[string]bool
+	ruled   []agentic.LineResult
 }
 
 // Run audits a repository.
@@ -106,19 +123,24 @@ func Run(ctx context.Context, r *repo.Repo, inv *scan.Inventory, o Options) (*Re
 	if o.MaxQuestions <= 0 {
 		o.MaxQuestions = DefaultMaxQuestions
 	}
-	res := &Result{Stats: Stats{ByRule: map[string]int{}}}
+	res := &Result{Stats: Stats{ByRule: map[string]int{}, Skipped: map[string]int{}}}
 	c := &checker{
 		ctx: ctx, ix: evidence.Build(r, inv), hist: history.Open(ctx, r.Root), opt: o, inv: inv,
 		resolved: map[string][]target{}, stats: &res.Stats, docIDs: docIdents(inv), topDirs: topDirs(r),
 	}
 	c.tags = parseTags(c.hist.Tags(ctx))
 	claims := c.collect(r, inv)
+	if o.Agentic != nil && o.Judge == nil {
+		return nil, errAgenticWithoutJudge
+	}
+	c.decideRules(r, inv)
 	for i := range claims {
 		c.check(&claims[i])
 	}
+	c.dropDecided()
 	res.Stats.Candidates = len(c.pending)
-	if o.Agentic != nil && o.Judge == nil {
-		return nil, errAgenticWithoutJudge
+	if o.OnJudged != nil && len(c.ruled) > 0 {
+		o.OnJudged(c.ruled)
 	}
 	if o.Judge != nil {
 		if err := c.askAll(); err != nil {
@@ -149,7 +171,12 @@ func (c *checker) collect(r *repo.Repo, inv *scan.Inventory) []claim.Claim {
 			continue
 		}
 		c.stats.Docs++
-		out = append(out, claim.Markdown(d, b)...)
+		cls := claim.Markdown(d, b)
+		if r := c.opt.Filter.Doc(d); r != "" {
+			c.stats.Skipped[r] += len(cls)
+			continue
+		}
+		out = append(out, cls...)
 	}
 	for _, f := range inv.CodeFiles {
 		if !(comments.Extractor{}).Accepts(f) || c.ix.Generated[f] {
@@ -205,9 +232,30 @@ func (c *checker) check(cl *claim.Claim) {
 	if len(paths) == 0 {
 		paths = c.ix.Search(claimTokens(cl.Text), maxSnippets)
 	}
-	if len(paths) > 0 || c.opt.Agentic != nil { // the agentic judge finds its own evidence
-		c.addQuestion(cl, paths, stale)
+	if len(paths) == 0 && c.opt.Agentic == nil { // the agentic judge finds its own evidence
+		return
 	}
+	if r := c.opt.Filter.Skip(cl, c.declAfter(cl)); r != "" {
+		c.stats.Skipped[r]++
+		return
+	}
+	c.addQuestion(cl, paths, stale)
+}
+
+// declAfter is the first code line after a code-comment claim (the declaration it documents).
+func (c *checker) declAfter(cl *claim.Claim) string {
+	if !cl.Comment {
+		return ""
+	}
+	lines := c.ix.Lines(cl.Path)
+	for i := cl.Line; i < len(lines) && i < cl.Line+40; i++ {
+		t := strings.TrimSpace(lines[i])
+		if t == "" || strings.HasPrefix(t, "//") || strings.HasPrefix(t, "#") || strings.HasPrefix(t, "*") || strings.HasPrefix(t, "/*") || strings.HasPrefix(t, "@") {
+			continue
+		}
+		return lines[i]
+	}
+	return ""
 }
 
 var reClaimToken = regexp.MustCompile(`[A-Za-z_][A-Za-z0-9_]{3,40}`)

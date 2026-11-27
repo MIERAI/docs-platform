@@ -93,6 +93,33 @@ func fromLines(path string, lines []Line, comment bool) []Claim {
 	return out
 }
 
+// ProseLines are the non-blank lines of a Markdown document outside fenced code blocks (the
+// lines claims come from).
+func ProseLines(src []byte) []Line {
+	lines := strings.Split(strings.ReplaceAll(string(src), "\r\n", "\n"), "\n")
+	if len(lines) > MaxLines {
+		lines = lines[:MaxLines]
+	}
+	var out []Line
+	fence := ""
+	for i, l := range lines {
+		if fence != "" {
+			if strings.HasPrefix(strings.TrimSpace(l), fence) {
+				fence = ""
+			}
+			continue
+		}
+		if m := reFenceLine.FindStringSubmatch(l); m != nil {
+			fence = m[1][:3]
+			continue
+		}
+		if strings.TrimSpace(l) != "" {
+			out = append(out, Line{N: i + 1, Text: l})
+		}
+	}
+	return out
+}
+
 func spansOf(s string) []string {
 	var out []string
 	for _, m := range reSpan.FindAllString(s, -1) {

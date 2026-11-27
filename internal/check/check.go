@@ -294,7 +294,7 @@ func Audit(ctx context.Context, o AuditOptions) (*AuditResult, error) {
 	inv := scan.Run(r, exts, scan.Options{Docs: cfg.Docs})
 	so := semantic.Options{
 		StaleCommits: cfg.Audit.StaleCommits, Judge: g, MaxQuestions: o.MaxQuestions, Repo: repoName(o.Options),
-		Suppressed: suppressedLines(inv), Only: o.Only,
+		Suppressed: suppressedLines(inv), Only: o.Only, Filter: cfg.Audit.Skip.Filter(),
 	}
 	var judged []agentic.LineResult
 	if o.Agentic != nil && g != nil {
@@ -312,7 +312,7 @@ func Audit(ctx context.Context, o AuditOptions) (*AuditResult, error) {
 			return nil, err
 		}
 	}
-	tools, name := auditTools(exts, g, so.Agentic != nil)
+	tools, name := auditTools(exts, g, so.Agentic)
 	doc := findings.BuildSemantic(findings.Params{
 		Repo: repoName(o.Options), Version: o.Version, Tools: tools, Started: findings.Timestamp(started),
 		Finished: findings.Timestamp(now()), Instance: o.Instance, Owner: cfg.Owner, Gaps: gaps(inv.Gaps),
@@ -343,15 +343,15 @@ func recordClaims(ctx context.Context, file, root string, so semantic.Options, i
 }
 
 // auditTools are the collector tools of an audit and the judge's name ("none" without one).
-func auditTools(exts []plugin.Extractor, g *judge.Guard, agenticMode bool) (map[string]string, string) {
+func auditTools(exts []plugin.Extractor, g *judge.Guard, run *agentic.Runner) (map[string]string, string) {
 	tools := plugin.Versions(exts)
 	tools["semantic"] = semantic.Version
 	if g == nil {
 		return tools, "none"
 	}
 	tools["judge"] = g.Name() + " " + semantic.PromptHash()
-	if agenticMode {
-		tools["judge"] = g.Name() + " agentic " + agentic.TemplateHash()
+	if run != nil {
+		tools["judge"] = g.Name() + " agentic " + run.TemplateHash()
 	}
 	return tools, g.Name()
 }

@@ -14,17 +14,20 @@ import (
 )
 
 // Rules of the agentic judge: one per problem category the harness derived from validated
-// evidence (unverifiable_in_repo is counted, never reported).
+// evidence (unverifiable_in_repo is counted, never reported), and sources_conflict: the code
+// disagrees with itself about the line, which is then not judged against either side.
 const (
 	RuleAgenticContradicted      = "agentic_contradicted"
 	RuleAgenticDanglingReference = "agentic_dangling_reference"
 	RuleAgenticIncompleteList    = "agentic_incomplete_list"
 	RuleAgenticOutdatedWording   = "agentic_outdated_wording"
+	RuleAgenticSourcesConflict   = "agentic_sources_conflict"
 )
 
 var agenticRule = map[string]string{
 	agentic.Contradicted: RuleAgenticContradicted, agentic.DanglingReference: RuleAgenticDanglingReference,
 	agentic.IncompleteList: RuleAgenticIncompleteList, agentic.OutdatedWording: RuleAgenticOutdatedWording,
+	agentic.SourcesConflict: RuleAgenticSourcesConflict,
 }
 
 func init() {
@@ -146,6 +149,9 @@ func (c *checker) agenticIssue(rule string, cl *claim.Claim, r *agentic.LineResu
 		Suggestion: "Check the sentence against the validated evidence and fix whichever is wrong.",
 		Model:      c.opt.Judge.Name(), PromptHash: r.PromptHash,
 		Votes: fmt.Sprintf("agentic: %d/%d evidence validated", r.EvidenceOK, r.Evidence),
+	}
+	if rule == RuleAgenticSourcesConflict {
+		is.Suggestion = "The code disagrees with itself about this: decide which place is right, fix the other, then the document."
 	}
 	var why []string
 	for _, f := range r.Facts {
