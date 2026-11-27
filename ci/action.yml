@@ -69,6 +69,7 @@ runs:
         DOCSP_CLAUDE_VERSION: ${{ inputs.claude-code-version }}
       run: npm install --global --no-fund --no-audit "@anthropic-ai/claude-code@${DOCSP_CLAUDE_VERSION}"
     - name: run
+      id: run
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github-token }}
@@ -76,6 +77,7 @@ runs:
         DOCSP_TASK: ${{ inputs.task }}
         DOCSP_AI: ${{ steps.budget.outputs.ai }}
         DOCSP_RUN_CAP: ${{ steps.budget.outputs.run_cap }}
+        DOCSP_LEFT: ${{ steps.budget.outputs.left }}
         DOCSP_BOOTSTRAP_USD: ${{ inputs.bootstrap-usd }}
         DOCSP_MODEL: ${{ inputs.model }}
         DOCSP_FACTORY: ${{ inputs.factory }}
@@ -84,7 +86,7 @@ runs:
         DOCSP_FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
       run: bash "${{ github.action_path }}/run.sh" "$DOCSP_TASK"
     - name: save the ledger
-      if: inputs.task == 'main' && hashFiles(format('{0}/docsp-ledger/ledger.json', runner.temp)) != ''
+      if: always() && inputs.task == 'main' && steps.run.outputs.ledger == 'changed'
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ runner.temp }}/docsp-ledger
