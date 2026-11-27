@@ -181,8 +181,8 @@ pr_task() {
 		return 0
 	fi
 	if [[ ! -s "$L/ledger.json" ]]; then
-		summary "docs-platform: the default branch has no ledger yet (built by the first push run): nothing to compare"
-		return 0
+		ledgerless_pr
+		return
 	fi
 	instance "$DOCSP_RUN_CAP"
 	cp "$L/ledger.json" "$RUNNER_TEMP/after.json"
@@ -215,6 +215,37 @@ pr_task() {
 	if ! "$D" pr-comment -before "$L/ledger.json" -after "$RUNNER_TEMP/after.json" -repo-name "$NAME" \
 		-github-repo "$GITHUB_REPOSITORY" -post-pr "$DOCSP_PR" -incomplete "$incomplete" -out "$RUNNER_TEMP/pr-review.json" \
 		${args[@]+"${args[@]}"} "${PR_OUT[@]}" . | tee -a "$GITHUB_STEP_SUMMARY"; then
+		summary "docs-platform: $INCOMPLETE (the PR comment could not be made)"
+		return 1
+	fi
+	finish_pr "$(jq '.problems | length' "$RUNNER_TEMP/pr-review.json")"
+}
+
+# Zero-config PR mode: no ledger yet (no push run, or its cache expired). The sections the PR
+# edits or relates to (headings + identifier overlap with the diff, deterministic) are judged
+# at the head within the run's cap, and compared with an empty ledger: every problem found in
+# them is reported. A push run (task main) builds the ledger, the upgrade path.
+ledgerless_pr() {
+	instance "$DOCSP_RUN_CAP"
+	if ! "$D" related -base "$DOCSP_BASE" -out "$RUNNER_TEMP/related.json" -format text . >"$RUNNER_TEMP/related.txt"; then
+		summary "docs-platform: no diff against the PR's base (a shallow checkout? actions/checkout needs fetch-depth: 0): skipped ($INCOMPLETE)"
+		return 0
+	fi
+	tee -a "$GITHUB_STEP_SUMMARY" <"$RUNNER_TEMP/related.txt"
+	local n incomplete=""
+	n="$(jq '.sections | length' "$RUNNER_TEMP/related.json")"
+	summary "docs-platform: no ledger yet: judging the $n doc sections this PR is about (ledger-less mode, up to \$$DOCSP_RUN_CAP)"
+	if [[ "$n" -gt 0 ]]; then
+		if ! "$D" audit -mode agentic -group doc -no-drift -sections "$RUNNER_TEMP/related.json" -max-questions 40 \
+			-ledger "$RUNNER_TEMP/after.json" -instance-config "$INST" -repo-name "$NAME" -format none .; then
+			incomplete=aborted
+			summary "docs-platform: $INCOMPLETE (the ledger-less audit failed)"
+		fi
+	fi
+	pr_outputs
+	if ! "$D" pr-comment -before "$RUNNER_TEMP/no-ledger.json" -after "$RUNNER_TEMP/after.json" -repo-name "$NAME" \
+		-github-repo "$GITHUB_REPOSITORY" -post-pr "$DOCSP_PR" -ledgerless -incomplete "$incomplete" \
+		-out "$RUNNER_TEMP/pr-review.json" "${PR_OUT[@]}" . | tee -a "$GITHUB_STEP_SUMMARY"; then
 		summary "docs-platform: $INCOMPLETE (the PR comment could not be made)"
 		return 1
 	fi

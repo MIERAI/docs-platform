@@ -75,6 +75,7 @@ func cmdPRComment(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	ghRepo := fs.String("github-repo", "", "owner/name of the repository (links; -post-pr)")
 	schedFile := fs.String("schedule", "", "the PR's schedule/v1: a required claim the budget left out makes the run incomplete")
 	recheckFile := fs.String("recheck", "", "the recheck JSON: failed or missing judgments make the run incomplete")
+	ledgerless := fs.Bool("ledgerless", false, "there was no ledger before (zero-config mode): say that a problem listed may predate the PR")
 	incomplete := fs.String("incomplete", "", "comma-separated reasons the run did not finish (budget, judge_failures, partial, aborted)")
 	var po prOutputs
 	po.register(fs)
@@ -96,7 +97,7 @@ func cmdPRComment(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	if err != nil {
 		return exitUsage, err
 	}
-	rep.Repo, rep.GitHub, rep.Incomplete = name, *ghRepo, reasons
+	rep.Repo, rep.GitHub, rep.Incomplete, rep.Ledgerless = name, *ghRepo, reasons, *ledgerless
 	rep.Lang, rep.MaxProblems, rep.SummaryURL = lang, po.maxProblems, po.summaryURL
 	if err := emitPRReview(ctx, rep, *commentOut, *ghRepo, *post, stderr); err != nil {
 		return exitUsage, err

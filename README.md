@@ -10,6 +10,44 @@ emits findings in a shared, versioned contract; a ledger tracks each finding fro
 fixed; SLOs ("drift fixed within N days", "share of doc-impacting PRs that touch docs") make the
 state visible; AI may *propose* fixes, humans decide.
 
+## Quick start: a comment on your next pull request
+
+Add this workflow ([examples/docs-platform.yml](examples/docs-platform.yml)) as
+`.github/workflows/` of your repository and the repository secret `CLAUDE_CODE_OAUTH_TOKEN`
+(`claude setup-token`). Nothing else: no `.docsp.yaml`, no ledger, no first paid run.
+
+```yaml
+name: docs-platform
+on: pull_request
+permissions: {contents: read, pull-requests: write, actions: read}
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with: {fetch-depth: 0, persist-credentials: false, ref: "${{ github.event.pull_request.head.sha }}"}
+      - uses: MIERAI/docs-platform/ci@main   # pin to a commit SHA
+        with:
+          task: pr
+          claude-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+```
+
+On the first pull request there is no ledger yet, so the action runs the **ledger-less mode**:
+it splits the documentation (README, `docs/`, AGENTS.md, CLAUDE.md and other Markdown) into
+sections at their headings, keeps the sections the PR edits or relates to - they mention a
+changed file or identifier, or share enough identifiers and words with the changed code
+(`docsp related`, deterministic, free) - and judges only those, within the run's budget cap
+(`run-usd`, default $1). Problems found there are posted as one PR comment.
+
+Then, optionally:
+
+- `docsp init` proposes a `.docsp.yaml`, every guess commented with its reason
+  (`-dry-run` prints it); `docsp doctor` checks offline that the first run will be green.
+- **Upgrade path**: add `push: {branches: [main]}` and a weekly `schedule` with
+  `task: main` (see *Event-driven consistency* below). The push run builds the claim ledger;
+  from then on a PR is judged on exactly the claims it made stale and gets only the problems it
+  introduced, not those already in the sections it touches.
+
 `docsp` is the command-line tool. The direction is **detect drift at change time** (the moment a
 change makes a document stale), measured by **replaying history**; models are assistants behind
 a swappable contract. Implemented so far:
@@ -42,8 +80,97 @@ bin/docsp audit -format text /path/to/repo          # semantic audit (determinis
 `docsp` never writes into the repository it inspects, never runs code from it, and only calls
 the read-only git sub-commands `diff`, `log`, `rev-parse`, `ls-files`, `show`, `blame` and
 `merge-base`.
+The one exception is `docsp init`, which writes only `.docsp.yaml` and never over an existing one
+(unless `-force`).
 
 ## Commands
+
+### `docsp init [-dry-run] [-out FILE] [-force] [repo]`
+
+Inspects the repository (it only lists files) and writes a proposed `.docsp.yaml` to the
+repository root, or to `-out FILE`; `-dry-run` prints it instead. It never runs a model and never
+overwrites an existing file unless `-force`. Every guess carries a comment saying why it was made:
+
+```yaml
+docs:
+  - "/*.md" # 2 Markdown files at the root: CONTRIBUTING.md, README.md
+  - "docs/**/*.md" # docs/ contains 23 .md files
+  - "AGENTS.md" # found AGENTS.md: AI-assistant instructions describe the code too
+  - ".cursorrules" # AI-assistant instructions describe the code too; none yet, checked once added
+exclude:
+  - "testdata/" # test fixtures are not documentation (19 files)
+```
+
+The documentation globs always include the AI-assistant instruction files - `AGENTS.md`,
+`CLAUDE.md`, `GEMINI.md`, `.github/copilot-instructions.md`,
+`.github/instructions/*.instructions.md`, `.cursorrules`, `.cursor/rules/*.mdc`,
+`.windsurfrules`, `.clinerules` - besides the Markdown at the root and one `<dir>/**/*.md` per
+top-level directory that holds Markdown: they describe the code to an agent the way a README
+describes it to a person, and rot the same way. The audit reads them as Markdown. A `cmd/`
+directory next to a README becomes an impact rule.
+
+### `docsp doctor [flags] [repo]`
+
+An offline self-check that the first CI run will be green; nothing is sent anywhere. One line
+per check, levels `ok`, `info`, `warn` and `fail`:
+
+- **config**: `.docsp.yaml` (or `-config FILE`) parses; none = the defaults.
+- **docs** / **impact**: the docs globs match at least one file (globs matching nothing yet are
+  listed as info); impact rules whose globs match nothing are warnings.
+- **git**: on PATH (fail otherwise); a shallow clone is a warning (the PR mode needs the merge
+  base).
+- **token** / **judge**: the model token variable (`-token-env`, default
+  `CLAUDE_CODE_OAUTH_TOKEN`) is set - reported by name only, values are never read out or
+  printed; unset inside GitHub Actions (`GITHUB_ACTIONS=true`) is a warning (no AI). With
+  `-instance-config FILE`: the instance parses, its judge program exists, the variables it
+  passes on are set and `budget.max_usd` is set.
+- **workflow** (every `.github/workflows/*.yml` running `MIERAI/docs-platform/ci`): token
+  permissions `contents: read`, `pull-requests: write` and `actions: read` (the monthly budget
+  is summed from spend artifacts, the outcome stream is downloaded from the `docsp-outcomes`
+  artifact); `actions/checkout` with `fetch-depth: 0`; a valid `task`; the
+  `claude-oauth-token` input; budget inputs (`monthly-usd`, `run-usd`, `bootstrap-usd`) are
+  non-negative numbers with `run-usd` and `bootstrap-usd` within `monthly-usd`; triggers
+  (PR only = ledger-less mode; push without a weekly schedule lets the ledger's cache expire).
+
+| Flag | Meaning |
+|---|---|
+| `--config FILE` | configuration file (default `<repo>/.docsp.yaml`) |
+| `--instance-config FILE` | instance configuration to check (judge program, passed variables, budget) |
+| `--token-env NAME` | variable holding the model token in CI (default `CLAUDE_CODE_OAUTH_TOKEN`; only its presence is checked) |
+| `--strict` | warnings fail too |
+| `--format text\|json` | output (json: docs-platform/doctor/v1, `{schema_version, checks: [{name, level, message}]}`) |
+
+Exit codes: `0` no check failed (warnings allowed), `1` a check failed (or, with `--strict`, a
+warning), `2` usage error (bad flag, not a directory).
+
+### `docsp related -base REF [-head REF] [flags] [repo]`
+
+The deterministic half of the zero-config PR mode, used when no ledger exists: the
+documentation sections a change is about, without a model (docs-platform/related/v1). Each
+documentation file is split into sections at its headings (outside code fences). A section is
+selected, in this order, when
+
+1. **changed**: the change adds a line inside it;
+2. **reference**: it mentions a changed file or an identifier on a changed line (layer ③'s
+   reference graph, as in `docsp impact`), the sections mentioning the most changed things first;
+3. **overlap**: the terms of the changed code (lines added or removed outside documentation,
+   lock and generated files) found in the section score at least 3: a changed path counts 5,
+   an identifier-shaped token (`snake_case`, `kebab-case`, `camelCase`, all capitals, with
+   digits) or a changed file's name 3, a plain word of five letters or more 1 (stop words and
+   keywords count nothing). A term found in more than a fifth of all sections says nothing
+   about any of them and is ignored. Highest score first.
+
+At most `-max-sections` sections are kept (default 8; the rest are counted as `dropped`).
+`docsp audit -sections FILE` then judges only the claims inside them.
+
+| Flag | Meaning |
+|---|---|
+| `--base REF` | base revision of the change (required); merge-base semantics like a PR |
+| `--head REF` | head revision (default `HEAD`) |
+| `--config FILE` | configuration file (which files are documentation) |
+| `--max-sections N` | sections to select at most (default 8) |
+| `--out FILE` | write the related/v1 JSON here (mode 0600) |
+| `--format text\|json\|none` | what to print on stdout (default text) |
 
 ### `docsp check [flags] [repo]`
 
@@ -175,6 +302,7 @@ this saved.
 | `--mode snippet\|agentic` | judge mode (default snippet) |
 | `--group line\|doc` | agentic: one request per line (default) or per document, up to six lines (cheaper) |
 | `--drift-cache DIR`, `--no-drift-cache`, `--no-drift` | agentic: where drift lists are cached by HEAD SHA (default: the user cache directory), no cache, or no drift scan |
+| `--sections FILE` | related/v1 JSON from `docsp related`: audit only the claims inside these sections (the zero-config PR mode) |
 | `--out`, `--format`, `--repo-name`, `--instance` | as for `check` |
 
 ### `docsp eval-model --set FILE [flags]`
@@ -766,6 +894,11 @@ jobs:
   -post-pr N -github-repo owner/name` posts the problems the change
   *introduces* (not the backlog) as one comment - one sentence, "fix the doc or the code?"
   answered by ticking a box, the evidence folded; updated only when the findings change.
+  **Without a ledger** (no push run yet, or its cache expired) the PR task falls back to the
+  ledger-less mode: `docsp related -base <base>` picks the sections the PR is about,
+  `docsp audit -mode agentic -group doc -no-drift -sections <them> -max-questions 40 -ledger
+  <new>` judges them within `run-usd`, and `pr-comment` compares that with an empty ledger
+  (every problem in those sections is reported). See *Quick start*.
 - `task: factory-pr`: `factory export` at the head, then `docsp factory-pr` (see above).
 - **Outcomes** (`task: main`, no model): `docsp outcome diff` after the recheck and `docsp
   outcome ticks` for the pull request(s) a push merged append to `outcomes.jsonl` next to the
@@ -788,7 +921,8 @@ jobs:
   comment and the summary. The matching `docsp pr-comment` / `factory-pr` flags: `-language`,
   `-max-problems`, `-summary-url`, `-summary-out`, `-annotations-out`; `pr-comment` also reads
   `-schedule` (a budget shortfall), `-recheck` (failed or missing judgments) and `-incomplete`
-  (reasons the caller states).
+  (reasons the caller states); `-ledgerless` (the zero-config mode had no ledger to compare
+  with) makes the comment say a problem listed may predate the PR.
 
 ## Findings, ledger, SLOs
 

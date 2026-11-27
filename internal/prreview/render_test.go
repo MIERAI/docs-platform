@@ -125,3 +125,14 @@ func TestAnnotations(t *testing.T) {
 		t.Errorf("one escaped command per problem:\n%s", got)
 	}
 }
+
+func TestLedgerlessSaysProblemsMayPredateThePR(t *testing.T) {
+	for _, l := range []prtext.Lang{prtext.ZH, prtext.EN, prtext.JA} {
+		r := sample(l)
+		r.Ledgerless = true
+		md := r.Markdown(nil)
+		if !strings.Contains(md, l.T("PR 之前就存在", "may predate this PR", "PR 以前からの問題")) || strings.Contains(md, l.T("改了代码,让", "changed the code so that", "コード変更で")) {
+			t.Errorf("%s ledger-less comment:\n%s", l, md)
+		}
+	}
+}

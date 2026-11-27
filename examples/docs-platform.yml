@@ -1,0 +1,16 @@
+# Zero-config docs-platform: copy into .github/workflows/ of your repository. Every pull request gets
+# a comment on doc sections that disagree with the code (only the sections it edits or relates to).
+# No .docsp.yaml and no ledger needed; pin both `uses:` to a commit SHA in production.
+name: docs-platform
+on: pull_request
+permissions: {contents: read, pull-requests: write, actions: read}
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with: {fetch-depth: 0, persist-credentials: false, ref: "${{ github.event.pull_request.head.sha }}"}
+      - uses: MIERAI/docs-platform/ci@main
+        with:
+          task: pr
+          claude-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}

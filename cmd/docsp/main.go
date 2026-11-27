@@ -13,6 +13,9 @@
 //	                                    design-first spec vs code (contract/v1; no model)
 //	docsp stale -ledger FILE [-ref REV] [repo]
 //	                                    claims whose evidence changed (no model)
+//	docsp init [-dry-run] [repo]       propose a .docsp.yaml (every guess with its reason)
+//	docsp doctor [flags] [repo]         offline self-check of the first CI run
+//	docsp related -base REF [repo]      doc sections a change is about (no ledger, no model)
 //	docsp draft verify -log FILE [-ledger FILE] [-claim ID] [repo]
 //	                                    machine-verify drafts (draft-verify/v1; no model)
 //	docsp outcome diff|ticks|sample|label|report [flags]
@@ -65,6 +68,9 @@ var commands = map[string]command{
 	"report":           cmdReport,
 	"draft":            cmdDraft,
 	"drafts":           cmdDrafts,
+	"related":          cmdRelated,
+	"init":             cmdInit,
+	"doctor":           cmdDoctor,
 	"outcome":          cmdOutcome,
 	"import-findings": func(_ context.Context, a []string, out, errw io.Writer) (int, error) {
 		return cmdImportFindings(a, out, errw)
@@ -107,6 +113,9 @@ func usage(w io.Writer) {
 	_, _ = fmt.Fprint(w, `usage: docsp <command> [flags] [repo]
 
 commands:
+  init       propose a .docsp.yaml for a repository (every guess with its reason; -dry-run prints it)
+  doctor     offline self-check that the first CI run will be green (config, globs, tools, token, workflow)
+  related    doc sections a change is about, by headings and identifier overlap (no ledger, no model)
   check      that documentation references exist in code and public symbols are documented
   audit      semantic audit: claims in the docs vs the code (deterministic checks + optional judge model)
   impact     doc sections a change affects (derived from the reference graph) + explicit rules / waivers

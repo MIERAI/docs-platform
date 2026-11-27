@@ -68,6 +68,9 @@ type Report struct {
 	// Incomplete lists why the run did not finish (prtext.Reason*); empty = it did. An
 	// incomplete run's comment says so: no problem listed is not "everything is fine".
 	Incomplete []string `json:"incomplete,omitempty"`
+	// Ledgerless: there was no ledger to compare with (the zero-config PR mode judged the doc
+	// sections the change is about), so a problem listed may predate the PR.
+	Ledgerless bool `json:"ledgerless,omitempty"`
 
 	// Rendering options (not part of the report).
 	Lang        prtext.Lang `json:"-"` // "" = zh
@@ -159,6 +162,10 @@ func (r *Report) Markdown(ticked map[string]bool) string {
 	fmt.Fprintf(&b, "%s\n%s%s -->\n", Marker, sigPrefix, r.Signature())
 	n, c := r.counts()
 	switch {
+	case n > 0 && r.Ledgerless:
+		b.WriteString(l.T(fmt.Sprintf("**docs-platform**:这个 PR 相关的文档里有 **%d 处**和代码不一致。还没有台账可比,其中可能有 PR 之前就存在的问题。\n", n),
+			fmt.Sprintf("**docs-platform**: **%d documentation lines** related to this PR don't match the code. There is no ledger to compare with yet, so some may predate this PR.\n", n),
+			fmt.Sprintf("**docs-platform**:この PR に関係するドキュメントに、コードと合わない箇所が **%d 件**あります。比較できる台帳がまだないため、PR 以前からの問題も含まれる可能性があります。\n", n)))
 	case n > 0:
 		b.WriteString(l.T(fmt.Sprintf("**docs-platform**:这个 PR 改了代码,让 **%d 处文档**和代码不一致了。\n", n),
 			fmt.Sprintf("**docs-platform**: this PR changed the code so that **%d documentation lines** no longer match it.\n", n),

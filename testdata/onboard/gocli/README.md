@@ -1,0 +1,3 @@
+# tool
+
+Run `tool --verbose`.
