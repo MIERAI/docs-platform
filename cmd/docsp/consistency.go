@@ -17,6 +17,7 @@ import (
 	"github.com/MIERAI/docs-platform/internal/evalmodel"
 	"github.com/MIERAI/docs-platform/internal/instance"
 	"github.com/MIERAI/docs-platform/internal/ledger"
+	"github.com/MIERAI/docs-platform/internal/rulejudge"
 )
 
 // consFlags are the flags the continuous-consistency commands share.
@@ -145,6 +146,9 @@ func cmdRecheck(ctx context.Context, args []string, stdout, stderr io.Writer) (i
 	}
 	defer func() { _ = g.Close() }()
 	run := agentic.New(agentic.Options{Guard: g, Repo: name, Dir: root, Class: in.Classification, CacheDir: *cache, Settings: agentic.FromInstance(in.AI.Judge.Agentic)})
+	if rules, err := rulejudge.LoadDir(root, nil); err == nil {
+		run.SetRules(rules.Decider()) // deterministic first: lines a typed Go fact settles never reach the model
+	}
 	b, err := ledger.NewBuilder(ctx, root, name, "HEAD")
 	if err != nil {
 		return exitUsage, err //nolint:wrapcheck // already descriptive

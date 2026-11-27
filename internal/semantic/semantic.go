@@ -71,6 +71,12 @@ type Stats struct {
 	DriftValidated    int
 	DriftCached       bool
 	ParseFailures     int
+	// Rules stage (deterministic first): documentation lines decided from typed Go facts
+	// without a model, of them confirmed and contradicted, and the questions this saved.
+	RulesDecided      int
+	RulesConfirmed    int
+	RulesContradicted int
+	RulesSaved        int
 }
 
 // Result of one audit.
@@ -92,6 +98,10 @@ type checker struct {
 	tags     []semver
 	docIDs   map[string][]string
 	topDirs  map[string]bool
+	// decided holds the path:line keys the rules stage decided; ruled are their results
+	// (agentic mode, for the ledger).
+	decided map[string]bool
+	ruled   []agentic.LineResult
 }
 
 // Run audits a repository.
@@ -110,12 +120,17 @@ func Run(ctx context.Context, r *repo.Repo, inv *scan.Inventory, o Options) (*Re
 	}
 	c.tags = parseTags(c.hist.Tags(ctx))
 	claims := c.collect(r, inv)
+	if o.Agentic != nil && o.Judge == nil {
+		return nil, errAgenticWithoutJudge
+	}
+	c.decideRules(r, inv)
 	for i := range claims {
 		c.check(&claims[i])
 	}
+	c.dropDecided()
 	res.Stats.Candidates = len(c.pending)
-	if o.Agentic != nil && o.Judge == nil {
-		return nil, errAgenticWithoutJudge
+	if o.OnJudged != nil && len(c.ruled) > 0 {
+		o.OnJudged(c.ruled)
 	}
 	if o.Judge != nil {
 		if err := c.askAll(); err != nil {

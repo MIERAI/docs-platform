@@ -12,6 +12,13 @@ Design: docs/design.md §12; plan: docs/backlog.md.
   and passes the configured linters (behaviour unchanged).
 
 ### Added
+- **Rules stage before the model** (`internal/rulejudge`, "deterministic first"): typed Go
+  facts read with go/ast (flag defaults, exported constants, environment defaults, config
+  constructor defaults, HTTP routes) decide documentation lines that name exactly one of them
+  - `go_fact_mismatch` findings with a token-replacement draft, ledger claims with model
+  `rules/go-ast` - before any judge question; unclear lines go to the model unchanged.
+  `docsp recheck` and `docsp draft` use it too; `go test -v -run TestMeasureRulesShare
+  ./internal/rulejudge` measures the share it decides offline.
 - **Contract layer** (`docsp contract`, contract/v1, docs/design.md §13): design-first specs
   vs the code that implements them, without a model. Adapters: `factory-design` /
   `factory-code` (a design-first generator's design language vs its escape hatches: SQL

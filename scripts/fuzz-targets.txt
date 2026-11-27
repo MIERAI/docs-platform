@@ -5,6 +5,8 @@
 ./internal/config FuzzParse
 ./internal/refclass FuzzCommandLine
 ./internal/extract/golang FuzzExtract
+./internal/extract/golang FuzzExtractFacts
+./internal/rulejudge FuzzDecide
 ./internal/extract/comments FuzzSegments
 ./internal/plugin FuzzDecodeExternal
 ./internal/semantic/claim FuzzMarkdown
