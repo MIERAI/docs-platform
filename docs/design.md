@@ -502,6 +502,15 @@ Ground truth 质量抽查（15 条分歧：10 条工具漏掉的 GT + 5 条 GT �
 - 足迹规则（默认关闭，`-footprint`）：weak（判定时有路径/glob 限定的搜索范围内有文件变化）、siblings（文档或被引文件把一级目录换成通配后出现新增匹配）、members（列举型断言列过的目录/展开过的 glob 出现增删）。只把断言送回重判，从不决定判定。
 - TEST 上：+weak 12/16、+siblings 10/14、+members 8/12、全部 14/18，每提交 stale 0.62 → 1.14 条。规则是在 TEST 上分析出来的，采纳前在 DEV（api-factory）上验证。
 
+### 12.10 断言作用域与证据变化分类（2026-11-27，零模型调用）
+
+问题：§12.1 按文件 blob 失效，同一文件里**别的规则**改了也会把断言送回重判（api-factory PR #75 的情形），重判本身又可能误判。思路来自 Swimm 的"按被引片段分类代码变化"与 TruthLayer / custodex 的"按符号分组"。
+
+- **作用域（scope，台账 1.1，附加字段）**：每条 quote 记录断言依赖的那一段（在 quote 的 blob 上）：Go = 包含该行的顶层声明（func / type / 一个 value spec；value 是复合字面量时细化到包含该行的那个元素，即"规则表的一项"），用 go/ast；YAML = 最深的键（或列表项，按 `name` 识别）及其子树，名字是键路径，多文档时前缀 `kind:name`；其他文件 = 被引行 ±3 行。旧台账没有 scope，行为与以前完全相同。
+- **分类**（被引文件状态为 M 且 quote 有 scope 时）：只有空白变化 → `evidence_reformatted`；scope 的文本原样出现在别处且仍是同名声明/同一键路径、边界相同 → `evidence_moved`；在原处 → `evidence_outside_scope`。这三种不重判：断言保持 fresh，stale/v1 给出 `carried_forward`，`docsp recheck` 把 quote 重新锚定（新行号、新 blob、新 scope，记 `carried` / `carried_ref`；verdict 与 verified_ref 不变）。scope 的文本、边界或名字变了、找不到或不唯一、文件旧行存活不到一半 → 照旧 stale（`evidence_changed`，detail 说明原因）。行比较：Go 忽略行内空白（gofmt），其他文件只忽略行尾空白（YAML 缩进有意义）。
+- **保守的边界**：列举型断言（§12.9 的 Enumerating：一个列表，其完整性取决于文件其余部分）忽略 scope；drift、absence、path_missing、pinned 证据不变。已知局限：断言若依赖 scope 外的东西（被调用的函数、别处的常量）而判定时没有引用它，scope 外的改动不会重开该断言——这本应在判定时被引用。
+- **结果**（`bench ledger-replay`，同一历史、同一台账，scope 关/开；回放时把 quote 按其文本重新锚定到每个提交的父提交上再算 scope）：TEST 重判 257 → 230（gitops-manifests 217 → 194，infrastructure-live 40 → 36），ground truth 召回不变（首个致因 19/25、任一 23/25）；DEV api-factory 305 → 263，召回不变（16/27、19/27）。不排除列举型断言时可降到 TEST 186、DEV 170，但 DEV 丢了 2 条正例（都是"列表不完整"：新增的情形加在 scope 外），所以排除。TEST 剩下的重判原因里 drift 证据 132 次、quote 164 次：drift 是下一个可以收窄的地方。
+
 
 ## 13. 契约层：设计先行的式样书与代码（2026-11-26 实现，零模型调用）
 

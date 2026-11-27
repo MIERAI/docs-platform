@@ -228,6 +228,19 @@ detail}], new_line, verified_ref}]`; reason kinds `doc_removed`, `doc_line_chang
 footprint rules `weak_scope_changed`, `sibling_added`, `member_set_changed`; `pinned_changed`
 when a pinned file changed (a removed one is `evidence_removed`).
 
+ledger/v1 1.1 and stale/v1 1.1 (additive; 1.0 documents are read unchanged): each quote may
+carry `scope {kind: go_decl|yaml_key|lines, name, start, end}` - the part of the quoted file
+the claim depends on at the quote's blob (the enclosing Go declaration, value spec or literal
+table entry; the YAML key path with its subtree; otherwise the line ±3) - and, once
+re-anchored without judging, `carried` (`evidence_moved`, `evidence_reformatted`,
+`evidence_outside_scope`) and `carried_ref`. A quote with a scope is stale only when the change
+of its file touches the scope (its text, bounds or name), the file is largely rewritten (under
+half of its old lines survive) or it cannot be located; a quote without one is stale on any
+change, as in 1.0, and so is every quote of an enumerating claim (a list: its completeness
+depends on the rest of the file). stale/v1 adds `carried_forward[{kind, path, line, new_line, blob, scope,
+ref}]` on fresh claims; `docsp recheck` writes them back to the ledger (verdict and
+`verified_ref` unchanged). Drift, absence, path-missing and pinned evidence are unchanged.
+
 ## pr-review/v1 (`docsp pr-comment`)
 
 `schema_version`, `repo`, `head`, `github`, `rechecked` (claims judged at the head), `problems
